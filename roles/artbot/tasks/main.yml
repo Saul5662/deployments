@@ -79,7 +79,7 @@
     NEXT_PUBLIC_NO_BETA: "true"
     ARTBOT_STATUS_API: "{{ artbot_status_api }}"
   become_user: artbot
-  when: git.changed is true
+  when: git.changed is true or force_build
   tags: 
   - artbot_app
   - update
