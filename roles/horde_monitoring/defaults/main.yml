@@ -1,0 +1,48 @@
+---
+# Default variables for horde_monitoring role
+
+# Component installation flags
+monitoring_install_prometheus: true
+monitoring_install_grafana: true
+monitoring_install_influxdb: false
+monitoring_enable_prometheus_backup: true
+
+# Firewall configuration
+monitoring_configure_firewall: false
+
+# Prometheus configuration
+prometheus_version: "2.45.0"
+prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+prometheus_port: 9090
+prometheus_retention_time: "0"  # 0 = indefinite for horde API stats
+prometheus_retention_size: "0"  # 0 = no size limit
+prometheus_web_external_url: ""
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 30s
+
+# Grafana configuration
+grafana_port: 3000
+grafana_domain: localhost
+grafana_root_url: "http://{{ grafana_domain }}:{{ grafana_port }}"
+grafana_admin_password: "changeme"
+
+# InfluxDB configuration
+influxdb_port: 8086
+influxdb_org: "Cubox"
+influxdb_bucket: "horde-metrics"
+
+# Prometheus Backup configuration
+prometheus_backup_dir: "/var/backups/prometheus"
+prometheus_backup_url: "http://localhost:{{ prometheus_port }}"
+prometheus_backup_data_dir: "/var/lib/prometheus"
+prometheus_backup_log_file: "/var/log/prometheus-backup.log"
+prometheus_backup_metrics_file: "/var/lib/prometheus/textfile_collector/prometheus_backup.prom"
+prometheus_backup_schedule: "*-*-* 02:00:00"  # Daily at 2 AM
+prometheus_backup_schedule_hour: "02"
+prometheus_backup_schedule_minute: "00"
+prometheus_backup_random_delay: "300"  # 5 minutes randomized delay
+prometheus_backup_daily_retention: "7"  # Keep 7 days of daily backups
+prometheus_backup_monthly_retention: "12"  # Keep 12 months of monthly backups
+prometheus_backup_compression: "gzip"  # Options: gzip, zstd
+prometheus_backup_remote_enabled: false  # Enable remote backup sync
+prometheus_backup_remote_dest: ""  # Remote rsync destination (e.g., user@host:/path/)

@@ -28,12 +28,20 @@ Alternatively you can use the provided requir
 # Included Roles
 
 Each role within provides its own readme with instructions.
+Each role within provides its own readme with instructions.
 
 Typically you just need to adjust an inventory with your hostnames and addresses and then adjust one of the examples provided.
 
 Or you can make your own global `site.yml` with all your configuration for the various Haidra services.
 
-- [artbot](roles/artbot/README.md)
-- [artbot_revproxy](roles/artbot_revproxy/README.md)
-- [regen_worker](roles/regen_worker/README.md)
-- [amd_gpu_drivers](roles/amd_gpu_drivers/README.md)
+## Application Roles
+* [artbot](roles/artbot/README.md) - Web frontend for AI Horde
+* [artbot_revproxy](roles/artbot_revproxy/README.md) - HAProxy reverse proxy for Artbot
+* [regen_worker](roles/regen_worker/README.md) - AI Horde worker deployment (Dreamer, Scribe, Alchemist)
+* [amd_gpu_drivers](roles/amd_gpu_drivers/README.md) - AMD GPU driver setup for workers
+
+## Monitoring Roles (NEW)
+* [horde_stats_exporter](roles/horde_stats_exporter/) - AI Horde Prometheus metrics exporter
+* [horde_monitoring](roles/horde_monitoring/) - Complete monitoring stack (Prometheus, Grafana, InfluxDB)
+
+See [MONITORING.md](MONITORING.md) for detailed monitoring deployment guide.

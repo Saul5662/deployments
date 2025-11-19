@@ -1,0 +1,13 @@
+---
+# Handlers for horde_stats_exporter role
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: restart horde-exporter
+  systemd:
+    name: horde-exporter
+    state: restarted
+  become: yes

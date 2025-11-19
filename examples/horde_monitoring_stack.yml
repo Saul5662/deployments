@@ -1,0 +1,54 @@
+---
+# Example playbook for deploying complete monitoring stack
+# Usage: ansible-playbook -i inventory.yml horde_monitoring_stack.yml
+
+- name: Deploy AI Horde Monitoring Stack
+  hosts: monitoring
+  become: yes
+
+  vars:
+    # Prometheus configuration
+    prometheus_version: "2.45.0"
+    prometheus_port: 9090
+    prometheus_retention_time: "0"  # Indefinite retention for horde API stats
+    prometheus_web_external_url: "https://monitoring.example.com/prometheus"
+
+    # Grafana configuration
+    grafana_port: 3000
+    grafana_domain: "monitoring.example.com"
+    grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+    # InfluxDB (optional - set to true if migrating from old setup)
+    monitoring_install_influxdb: false
+
+    # Firewall (set to true if using ufw)
+    monitoring_configure_firewall: false
+
+  roles:
+    - haidra.deployments.horde_monitoring
+    - haidra.deployments.horde_stats_exporter
+
+  post_tasks:
+    - name: Verify Prometheus is running
+      uri:
+        url: "http://localhost:{{ prometheus_port }}/-/healthy"
+      register: prom_health
+      retries: 5
+      delay: 5
+      until: prom_health.status == 200
+
+    - name: Verify Grafana is running
+      uri:
+        url: "http://localhost:{{ grafana_port }}/api/health"
+      register: grafana_health
+      retries: 5
+      delay: 5
+      until: grafana_health.status == 200
+
+    - name: Display monitoring stack status
+      debug:
+        msg:
+          - "Monitoring stack deployed successfully!"
+          - "Prometheus: http://{{ ansible_host }}:{{ prometheus_port }}"
+          - "Grafana: http://{{ ansible_host }}:{{ grafana_port }}"
+          - "Stats Exporter: http://{{ ansible_host }}:9100/metrics"

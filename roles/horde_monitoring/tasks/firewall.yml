@@ -1,0 +1,26 @@
+---
+# Firewall configuration for monitoring stack
+
+- name: Allow Prometheus port
+  ufw:
+    rule: allow
+    port: "{{ prometheus_port }}"
+    proto: tcp
+  become: yes
+  when: monitoring_install_prometheus | bool
+
+- name: Allow Grafana port
+  ufw:
+    rule: allow
+    port: "{{ grafana_port }}"
+    proto: tcp
+  become: yes
+  when: monitoring_install_grafana | bool
+
+- name: Allow InfluxDB port
+  ufw:
+    rule: allow
+    port: "{{ influxdb_port }}"
+    proto: tcp
+  become: yes
+  when: monitoring_install_influxdb | bool

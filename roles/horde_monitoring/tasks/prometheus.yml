@@ -1,0 +1,71 @@
+---
+# Prometheus installation and configuration
+
+- name: Create Prometheus system user
+  user:
+    name: prometheus
+    system: yes
+    shell: /usr/sbin/nologin
+    createhome: no
+  become: yes
+
+- name: Create Prometheus directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: '0755'
+  become: yes
+  loop:
+    - /etc/prometheus
+    - /var/lib/prometheus
+    - /var/log/prometheus
+
+- name: Download and extract Prometheus
+  unarchive:
+    src: "{{ prometheus_download_url }}"
+    dest: /tmp
+    remote_src: yes
+    creates: /tmp/prometheus-{{ prometheus_version }}.linux-amd64
+  become: yes
+
+- name: Install Prometheus binaries
+  copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: /usr/local/bin/
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0755'
+  become: yes
+  loop:
+    - prometheus
+    - promtool
+  notify: restart prometheus
+
+- name: Template Prometheus configuration
+  template:
+    src: prometheus.yml.j2
+    dest: /etc/prometheus/prometheus.yml
+    owner: prometheus
+    group: prometheus
+    mode: '0644'
+  become: yes
+  notify: reload prometheus
+
+- name: Template Prometheus systemd service
+  template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: '0644'
+  become: yes
+  notify: reload systemd
+
+- name: Enable and start Prometheus
+  systemd:
+    name: prometheus
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
