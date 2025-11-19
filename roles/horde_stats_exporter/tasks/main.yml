@@ -1,0 +1,127 @@
+---
+# AI Horde Stats Exporter Deployment
+# Deploys horde_exporter.py as a systemd service
+
+- name: Install Python dependencies
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Create exporter user
+  user:
+    name: "{{ exporter_user }}"
+    system: yes
+    shell: /usr/sbin/nologin
+    createhome: no
+  become: yes
+
+- name: Create exporter directory
+  file:
+    path: "{{ exporter_install_dir }}"
+    state: directory
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0755'
+  become: yes
+
+- name: Create Python virtual environment
+  command: python3 -m venv {{ exporter_install_dir }}/venv
+  args:
+    creates: "{{ exporter_install_dir }}/venv"
+  become: yes
+  become_user: "{{ exporter_user }}"
+
+- name: Copy exporter script
+  copy:
+    src: "{{ exporter_source_dir }}/horde_exporter.py"
+    dest: "{{ exporter_install_dir }}/horde_exporter.py"
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0755'
+  become: yes
+  notify: restart horde-exporter
+
+- name: Copy requirements file
+  copy:
+    src: "{{ exporter_source_dir }}/requirements.txt"
+    dest: "{{ exporter_install_dir }}/requirements.txt"
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0644'
+  become: yes
+
+- name: Install Python requirements in venv
+  pip:
+    requirements: "{{ exporter_install_dir }}/requirements.txt"
+    virtualenv: "{{ exporter_install_dir }}/venv"
+  become: yes
+  become_user: "{{ exporter_user }}"
+
+- name: Template exporter configuration
+  template:
+    src: exporter_config.yaml.j2
+    dest: "{{ exporter_install_dir }}/exporter_config.yaml"
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0644'
+  become: yes
+  notify: restart horde-exporter
+
+- name: Copy health check script
+  copy:
+    src: "{{ exporter_source_dir }}/health-check.sh"
+    dest: "{{ exporter_install_dir }}/health-check.sh"
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0755'
+  become: yes
+
+- name: Install systemd service files
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  become: yes
+  loop:
+    - horde-exporter.service
+    - horde-downsample.service
+    - horde-downsample.timer
+  notify: reload systemd
+
+- name: Configure logrotate
+  template:
+    src: logrotate-horde-stats.j2
+    dest: /etc/logrotate.d/horde-stats
+    mode: '0644'
+  become: yes
+
+- name: Enable and start horde-exporter service
+  systemd:
+    name: horde-exporter
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+- name: Enable and start horde-downsample timer
+  systemd:
+    name: horde-downsample.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+  when: exporter_enable_downsampling
+
+- name: Create log directory
+  file:
+    path: /var/log/horde-stats
+    state: directory
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    mode: '0755'
+  become: yes

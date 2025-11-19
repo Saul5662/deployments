@@ -1,0 +1,13 @@
+{{ exporter_log_file }} {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 {{ exporter_user }} {{ exporter_user }}
+    sharedscripts
+    postrotate
+        systemctl reload horde-exporter > /dev/null 2>&1 || true
+    endscript
+}

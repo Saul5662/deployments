@@ -1,0 +1,35 @@
+---
+# InfluxDB installation and configuration
+
+- name: Add InfluxDB GPG key
+  apt_key:
+    url: https://repos.influxdata.com/influxdata-archive_compat.key
+    state: present
+  become: yes
+
+- name: Add InfluxDB APT repository
+  apt_repository:
+    repo: "deb https://repos.influxdata.com/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+    state: present
+    filename: influxdb
+  become: yes
+
+- name: Install InfluxDB
+  apt:
+    name: influxdb2
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Enable and start InfluxDB
+  systemd:
+    name: influxdb
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Wait for InfluxDB to be ready
+  wait_for:
+    port: 8086
+    timeout: 60
+  become: yes

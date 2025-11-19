@@ -1,0 +1,31 @@
+---
+# Handlers for horde_monitoring role
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  become: yes
+
+- name: restart prometheus
+  systemd:
+    name: prometheus
+    state: restarted
+  become: yes
+
+- name: reload prometheus
+  systemd:
+    name: prometheus
+    state: reloaded
+  become: yes
+
+- name: restart grafana
+  systemd:
+    name: grafana-server
+    state: restarted
+  become: yes
+
+- name: restart influxdb
+  systemd:
+    name: influxdb
+    state: restarted
+  become: yes

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily AI Horde Metrics Downsampling Timer
+Requires=horde-downsample.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=AI Horde Metrics Downsampling
+After=network.target prometheus.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ exporter_user }}
+Group={{ exporter_user }}
+WorkingDirectory={{ exporter_install_dir }}
+ExecStart=/bin/bash -c 'echo "Downsampling not yet implemented - placeholder service"'
+StandardOutput=append:{{ exporter_log_file }}
+StandardError=append:{{ exporter_log_file }}
+
+[Install]
+WantedBy=multi-user.target

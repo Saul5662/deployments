@@ -1,0 +1,25 @@
+---
+# AI Horde Monitoring Stack Deployment
+# Deploys Prometheus, Grafana, and optionally InfluxDB using native packages
+
+- name: Install Prometheus
+  include_tasks: prometheus.yml
+  when: monitoring_install_prometheus | bool
+
+- name: Configure Prometheus backups
+  include_tasks: prometheus_backup.yml
+  when:
+    - monitoring_install_prometheus | bool
+    - monitoring_enable_prometheus_backup | bool
+
+- name: Install Grafana
+  include_tasks: grafana.yml
+  when: monitoring_install_grafana | bool
+
+- name: Install InfluxDB
+  include_tasks: influxdb.yml
+  when: monitoring_install_influxdb | bool
+
+- name: Configure firewall rules
+  include_tasks: firewall.yml
+  when: monitoring_configure_firewall | bool

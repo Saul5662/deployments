@@ -1,0 +1,36 @@
+---
+# Example playbook for deploying AI Horde stats exporter
+# Usage: ansible-playbook -i inventory.yml horde_stats_exporter.yml
+
+- name: Deploy AI Horde Stats Exporter
+  hosts: monitoring
+  become: yes
+
+  vars:
+    # Path to directory containing horde_exporter.py and related files
+    exporter_source_dir: "../files/horde-exporter"
+
+    # Exporter configuration
+    exporter_port: 9100
+    exporter_api_base_url: "https://aihorde.net/api/v2"
+
+    # Enable downsampling
+    exporter_enable_downsampling: true
+    exporter_prometheus_url: "http://localhost:9090"
+
+  roles:
+    - haidra.deployments.horde_stats_exporter
+
+  post_tasks:
+    - name: Verify exporter is running
+      uri:
+        url: "http://localhost:{{ exporter_port }}/metrics"
+        return_content: yes
+      register: metrics
+      retries: 5
+      delay: 5
+      until: metrics.status == 200
+
+    - name: Display exporter status
+      debug:
+        msg: "AI Horde Stats Exporter is running on port {{ exporter_port }}"
