@@ -40,7 +40,7 @@ Or you can make your own global `site.yml` with all your configuration for the v
 * [regen_worker](roles/regen_worker/README.md) - AI Horde worker deployment (Dreamer, Scribe, Alchemist)
 * [amd_gpu_drivers](roles/amd_gpu_drivers/README.md) - AMD GPU driver setup for workers
 
-## Monitoring Roles (NEW)
+## Monitoring Roles
 * [horde_stats_exporter](roles/horde_stats_exporter/) - AI Horde Prometheus metrics exporter
 * [horde_monitoring](roles/horde_monitoring/) - Complete monitoring stack (Prometheus, Grafana, InfluxDB)
 
