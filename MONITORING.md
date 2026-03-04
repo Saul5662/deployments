@@ -166,7 +166,7 @@ all:
 # deploy_monitoring.yml
 - name: Deploy AI Horde Monitoring
   hosts: monitoring
-  become: yes
+  become: true
 
   roles:
     - haidra.deployments.horde_monitoring

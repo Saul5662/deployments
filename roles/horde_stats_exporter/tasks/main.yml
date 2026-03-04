@@ -10,7 +10,7 @@
       - python3-venv
     state: present
     update_cache: yes
-  become: yes
+  become: true
 
 - name: Create exporter user
   user:
@@ -18,7 +18,7 @@
     system: yes
     shell: /usr/sbin/nologin
     createhome: no
-  become: yes
+  become: true
 
 - name: Create exporter directory
   file:
@@ -27,13 +27,13 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Create Python virtual environment
   command: python3 -m venv {{ exporter_install_dir }}/venv
   args:
     creates: "{{ exporter_install_dir }}/venv"
-  become: yes
+  become: true
   become_user: "{{ exporter_user }}"
 
 - name: Copy exporter script
@@ -43,7 +43,7 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true
   notify: restart horde-exporter
 
 - name: Copy requirements file
@@ -53,13 +53,13 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0644'
-  become: yes
+  become: true
 
 - name: Install Python requirements in venv
   pip:
     requirements: "{{ exporter_install_dir }}/requirements.txt"
     virtualenv: "{{ exporter_install_dir }}/venv"
-  become: yes
+  become: true
   become_user: "{{ exporter_user }}"
 
 - name: Template exporter configuration
@@ -69,7 +69,7 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0644'
-  become: yes
+  become: true
   notify: restart horde-exporter
 
 - name: Copy health check script
@@ -79,14 +79,14 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true
 
 - name: Install systemd service files
   template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
     mode: '0644'
-  become: yes
+  become: true
   loop:
     - horde-exporter.service
     - horde-downsample.service
@@ -98,7 +98,7 @@
     src: logrotate-horde-stats.j2
     dest: /etc/logrotate.d/horde-stats
     mode: '0644'
-  become: yes
+  become: true
 
 - name: Enable and start horde-exporter service
   systemd:
@@ -106,7 +106,7 @@
     enabled: yes
     state: started
     daemon_reload: yes
-  become: yes
+  become: true
 
 - name: Enable and start horde-downsample timer
   systemd:
@@ -114,7 +114,7 @@
     enabled: yes
     state: started
     daemon_reload: yes
-  become: yes
+  become: true
   when: exporter_enable_downsampling
 
 - name: Create log directory
@@ -124,4 +124,4 @@
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0755'
-  become: yes
+  become: true

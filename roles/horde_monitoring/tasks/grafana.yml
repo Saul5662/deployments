@@ -9,27 +9,27 @@
       - wget
     state: present
     update_cache: yes
-  become: yes
+  become: true
 
 - name: Add Grafana GPG key
   apt_key:
     url: https://apt.grafana.com/gpg.key
     state: present
-  become: yes
+  become: true
 
 - name: Add Grafana APT repository
   apt_repository:
     repo: deb https://apt.grafana.com stable main
     state: present
     filename: grafana
-  become: yes
+  become: true
 
 - name: Install Grafana
   apt:
     name: grafana
     state: present
     update_cache: yes
-  become: yes
+  become: true
 
 - name: Template Grafana configuration
   template:
@@ -38,7 +38,7 @@
     owner: root
     group: grafana
     mode: '0640'
-  become: yes
+  become: true
   notify: restart grafana
 
 - name: Enable and start Grafana
@@ -46,4 +46,4 @@
     name: grafana-server
     enabled: yes
     state: started
-  become: yes
+  become: true

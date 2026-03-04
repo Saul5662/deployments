@@ -7,7 +7,7 @@
     system: yes
     shell: /usr/sbin/nologin
     createhome: no
-  become: yes
+  become: true
 
 - name: Create Prometheus directories
   file:
@@ -16,7 +16,7 @@
     owner: prometheus
     group: prometheus
     mode: '0755'
-  become: yes
+  become: true
   loop:
     - /etc/prometheus
     - /var/lib/prometheus
@@ -28,7 +28,7 @@
     dest: /tmp
     remote_src: yes
     creates: /usr/local/bin/prometheus
-  become: yes
+  become: true
 
 - name: Install Prometheus binaries
   copy:
@@ -38,7 +38,7 @@
     owner: root
     group: root
     mode: '0755'
-  become: yes
+  become: true
   loop:
     - prometheus
     - promtool
@@ -51,7 +51,7 @@
     owner: prometheus
     group: prometheus
     mode: '0644'
-  become: yes
+  become: true
   notify: restart prometheus
 
 - name: Template Prometheus systemd service
@@ -59,7 +59,7 @@
     src: prometheus.service.j2
     dest: /etc/systemd/system/prometheus.service
     mode: '0644'
-  become: yes
+  become: true
   notify: reload systemd
 
 - name: Enable and start Prometheus
@@ -68,4 +68,4 @@
     enabled: yes
     state: started
     daemon_reload: yes
-  become: yes
+  become: true

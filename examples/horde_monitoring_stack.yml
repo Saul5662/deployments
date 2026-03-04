@@ -4,7 +4,7 @@
 
 - name: Deploy AI Horde Monitoring Stack
   hosts: monitoring
-  become: yes
+  become: true
 
   vars:
     # Prometheus configuration
