@@ -4,7 +4,7 @@
 
 - name: Deploy AI Horde Stats Exporter
   hosts: monitoring
-  become: yes
+  become: true
 
   vars:
     # Path to directory containing horde_exporter.py and related files

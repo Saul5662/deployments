@@ -2,7 +2,7 @@
 # Test playbook: Backup with zstd compression
 - name: Test horde_monitoring - Backup with zstd
   hosts: testhost
-  become: yes
+  become: true
   gather_facts: yes
 
   vars:

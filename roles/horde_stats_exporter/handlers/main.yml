@@ -4,10 +4,10 @@
 - name: reload systemd
   systemd:
     daemon_reload: yes
-  become: yes
+  become: true
 
 - name: restart horde-exporter
   systemd:
     name: horde-exporter
     state: restarted
-  become: yes
+  become: true

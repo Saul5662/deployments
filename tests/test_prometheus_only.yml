@@ -2,7 +2,7 @@
 # Test playbook: Prometheus-only deployment
 - name: Test horde_monitoring - Prometheus only
   hosts: testhost
-  become: yes
+  become: true
   gather_facts: yes
 
   vars:

@@ -2,7 +2,7 @@
 # Test playbook: Full stack (Prometheus + Grafana + Backup)
 - name: Test horde_monitoring - Full stack
   hosts: testhost
-  become: yes
+  become: true
   gather_facts: yes
 
   vars:

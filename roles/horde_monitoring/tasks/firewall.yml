@@ -6,7 +6,7 @@
     rule: allow
     port: "{{ prometheus_port | string }}"
     proto: tcp
-  become: yes
+  become: true
   when: monitoring_install_prometheus | bool
 
 - name: Allow Grafana port
@@ -14,7 +14,7 @@
     rule: allow
     port: "{{ grafana_port | string }}"
     proto: tcp
-  become: yes
+  become: true
   when: monitoring_install_grafana | bool
 
 - name: Allow InfluxDB port
@@ -22,5 +22,5 @@
     rule: allow
     port: "{{ influxdb_port | string }}"
     proto: tcp
-  become: yes
+  become: true
   when: monitoring_install_influxdb | bool
