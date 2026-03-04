@@ -30,6 +30,6 @@
 
 - name: Wait for InfluxDB to be ready
   wait_for:
-    port: 8086
+    port: "{{ influxdb_port }}"
     timeout: 60
   become: yes

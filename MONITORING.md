@@ -120,7 +120,7 @@ Deploys a complete monitoring stack with Prometheus, Grafana, and optionally Inf
 | `monitoring_install_influxdb` | `false` | Install InfluxDB (for migration) |
 | `prometheus_version` | `2.45.0` | Prometheus version to install |
 | `prometheus_port` | `9090` | Prometheus web interface port |
-| `prometheus_retention_time` | `0` | Data retention (0 = indefinite) |
+| `prometheus_retention_time` | `100y` | Data retention time (e.g. `15d`, `90d`, `100y` for indefinite) |
 | `grafana_port` | `3000` | Grafana web interface port |
 | `grafana_admin_password` | `changeme` | Grafana admin password |
 
@@ -131,7 +131,7 @@ Deploys a complete monitoring stack with Prometheus, Grafana, and optionally Inf
   roles:
     - role: haidra.deployments.horde_monitoring
       vars:
-        prometheus_retention_time: "0"  # Indefinite for horde stats
+        prometheus_retention_time: "100y"  # Indefinite retention for horde stats
         grafana_admin_password: "{{ vault_grafana_password }}"
         monitoring_install_influxdb: false
 ```
@@ -152,7 +152,7 @@ all:
 
           # Monitoring stack configuration
           prometheus_version: "2.45.0"
-          prometheus_retention_time: "0"
+          prometheus_retention_time: "100y"
           grafana_admin_password: "secure_password_here"
 
           # Stats exporter configuration
@@ -189,14 +189,14 @@ ansible-playbook -i inventory.yml deploy_monitoring.yml -K
 
 ## Data Retention Policy
 
-- **AI Horde API metrics** (from horde_exporter): **Indefinite retention**
+- **AI Horde API metrics** (from horde_exporter): **Indefinite retention** (default: `100y`)
 - **System metrics** (postgres_exporter, node_exporter): Time-limited (15d raw, 90d downsampled)
 
 Configure retention in Prometheus:
 
 ```yaml
-prometheus_retention_time: "0"   # 0 = indefinite for horde stats
-prometheus_retention_size: "0"   # 0 = no size limit
+prometheus_retention_time: "100y"  # Effectively indefinite for horde stats
+prometheus_retention_size: "0"     # "0" = no size limit (flag omitted)
 ```
 
 ## Metrics Exposed

@@ -7,11 +7,16 @@ Wants=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
+ExecReload=/bin/kill -HUP $MAINPID
 ExecStart=/usr/local/bin/prometheus \
   --config.file=/etc/prometheus/prometheus.yml \
   --storage.tsdb.path=/var/lib/prometheus/ \
+{% if prometheus_retention_time | default('0') != '0' %}
   --storage.tsdb.retention.time={{ prometheus_retention_time }} \
+{% endif %}
+{% if prometheus_retention_size | default('0') != '0' %}
   --storage.tsdb.retention.size={{ prometheus_retention_size }} \
+{% endif %}
   --web.console.templates=/etc/prometheus/consoles \
   --web.console.libraries=/etc/prometheus/console_libraries \
 {% if prometheus_web_external_url %}

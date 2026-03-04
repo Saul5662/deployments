@@ -12,10 +12,13 @@ monitoring_configure_firewall: false
 
 # Prometheus configuration
 prometheus_version: "2.45.0"
-prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+prometheus_arch: "{{ ansible_architecture | regex_replace('x86_64', 'amd64') | regex_replace('aarch64', 'arm64') }}"
+prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-{{ prometheus_arch }}.tar.gz"
 prometheus_port: 9090
-prometheus_retention_time: "0"  # 0 = indefinite for horde API stats
-prometheus_retention_size: "0"  # 0 = no size limit
+# Retention: "0" omits the flag → Prometheus default (15d).
+# For indefinite retention, set a large value like "100y".
+prometheus_retention_time: "100y"
+prometheus_retention_size: "0"  # "0" omits the flag (no size limit). Set e.g. "50GB" to limit.
 prometheus_web_external_url: ""
 prometheus_scrape_interval: 15s
 prometheus_evaluation_interval: 30s

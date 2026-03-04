@@ -108,7 +108,7 @@ groups:
           summary: "Prometheus backup size anomaly on {{ $labels.instance }}"
           description: |
             Backup size differs by >50% from 7-day average.
-            Current: {{ $value | humanizeBytes }}
+            Current: {{ $value | humanize1024 }}B
             This could indicate data loss or corruption.
 
       # INFO: Low backup count
@@ -139,5 +139,5 @@ groups:
           summary: "Prometheus backup storage growing rapidly on {{ $labels.instance }}"
           description: |
             Backup storage is projected to double in the next 30 days.
-            Current: {{ $value | humanizeBytes }}
+            Current: {{ $value | humanize1024 }}B
             Consider adjusting retention or storage capacity.

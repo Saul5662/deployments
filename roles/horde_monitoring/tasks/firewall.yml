@@ -4,7 +4,7 @@
 - name: Allow Prometheus port
   ufw:
     rule: allow
-    port: "{{ prometheus_port }}"
+    port: "{{ prometheus_port | string }}"
     proto: tcp
   become: yes
   when: monitoring_install_prometheus | bool
@@ -12,7 +12,7 @@
 - name: Allow Grafana port
   ufw:
     rule: allow
-    port: "{{ grafana_port }}"
+    port: "{{ grafana_port | string }}"
     proto: tcp
   become: yes
   when: monitoring_install_grafana | bool
@@ -20,7 +20,7 @@
 - name: Allow InfluxDB port
   ufw:
     rule: allow
-    port: "{{ influxdb_port }}"
+    port: "{{ influxdb_port | string }}"
     proto: tcp
   become: yes
   when: monitoring_install_influxdb | bool

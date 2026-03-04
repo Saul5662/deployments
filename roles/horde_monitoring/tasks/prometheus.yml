@@ -27,12 +27,12 @@
     src: "{{ prometheus_download_url }}"
     dest: /tmp
     remote_src: yes
-    creates: /tmp/prometheus-{{ prometheus_version }}.linux-amd64
+    creates: /usr/local/bin/prometheus
   become: yes
 
 - name: Install Prometheus binaries
   copy:
-    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-{{ prometheus_arch }}/{{ item }}"
     dest: /usr/local/bin/
     remote_src: yes
     owner: root
@@ -52,7 +52,7 @@
     group: prometheus
     mode: '0644'
   become: yes
-  notify: reload prometheus
+  notify: restart prometheus
 
 - name: Template Prometheus systemd service
   template:

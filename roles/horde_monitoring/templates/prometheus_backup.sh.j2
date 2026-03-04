@@ -107,19 +107,26 @@ validate_backup() {
     esac
 
     # Check file count in archive
-    local file_count=$(tar -tzf "${backup_file}" 2>/dev/null | wc -l)
-    if [ "${file_count}" -lt 10 ]; then
+    local file_count
+    case "${COMPRESSION}" in
+        gzip) file_count=$(tar -tzf "${backup_file}" 2>/dev/null | wc -l) ;;
+        zstd)  file_count=$(tar -tf "${backup_file}" --zstd 2>/dev/null | wc -l) ;;
+    esac
+    if [ "${file_count}" -lt 5 ]; then
         log "WARNING: Backup contains only ${file_count} files - may be incomplete"
         return 1
     fi
 
-    # Verify critical TSDB files exist in archive
-    for required_file in chunks_head head.db lock wal; do
-        if ! tar -tzf "${backup_file}" 2>/dev/null | grep -q "${required_file}"; then
-            log "WARNING: Required file '${required_file}' not found in backup"
-            # Don't fail - some files may not exist in all TSDB versions
-        fi
-    done
+    # Verify snapshot directory structure exists in archive
+    # Prometheus snapshots contain block directories with meta.json and chunks/
+    local list_cmd
+    case "${COMPRESSION}" in
+        gzip) list_cmd="tar -tzf ${backup_file}" ;;
+        zstd)  list_cmd="tar -tf ${backup_file} --zstd" ;;
+    esac
+    if ! ${list_cmd} 2>/dev/null | grep -q "meta.json"; then
+        log "WARNING: No meta.json found in backup - snapshot may be incomplete"
+    fi
 
     log "Backup validation passed"
     return 0

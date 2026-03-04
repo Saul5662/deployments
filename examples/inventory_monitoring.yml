@@ -13,7 +13,7 @@ all:
           # Prometheus configuration
           prometheus_version: "2.45.0"
           prometheus_port: 9090
-          prometheus_retention_time: "0"  # Indefinite for horde stats
+          prometheus_retention_time: "100y"  # Effectively indefinite for horde stats
           prometheus_web_external_url: "https://grafana.example.com/prometheus"
 
           # Grafana configuration
