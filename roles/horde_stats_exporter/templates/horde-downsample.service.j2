@@ -8,7 +8,11 @@ Type=oneshot
 User={{ exporter_user }}
 Group={{ exporter_user }}
 WorkingDirectory={{ exporter_install_dir }}
-ExecStart=/bin/bash -c 'echo "Downsampling not yet implemented - placeholder service"'
+ExecStart={{ exporter_install_dir }}/.venv/bin/ai-horde-downsample \
+  --source-tenant {{ exporter_downsample_source_tenant }} \
+  --target-tenant {{ exporter_downsample_target_tenant }} \
+  --mimir-url {{ exporter_downsample_mimir_url }} \
+  --resolution {{ exporter_downsample_resolution }}
 StandardOutput=append:{{ exporter_log_file }}
 StandardError=append:{{ exporter_log_file }}
 

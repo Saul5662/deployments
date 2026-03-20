@@ -1,45 +1,237 @@
 ---
-# Example playbook for deploying complete monitoring stack
+# Example playbook for deploying the AI Horde monitoring infrastructure
 # Usage: ansible-playbook -i inventory.yml horde_monitoring_stack.yml
+#
+# Architecture:
+#   Play 1: Deploy node_exporter on ALL scraped hosts (TLS + basic_auth)
+#   Play 2: Deploy Mimir + Grafana + Prometheus + stats exporter on the monitoring host
+#
+#   Prometheus (native) --remote_write--> Mimir (Docker) <-- Grafana (Docker)
+#   All services bind to 127.0.0.1. HAProxy fronts Mimir externally with basic_auth.
+#
+# Prerequisites:
+#   ansible-galaxy collection install -r requirements.yml
+#   Generate a self-signed CA and per-host TLS certs (see community.crypto)
 
-- name: Deploy AI Horde Monitoring Stack
-  hosts: monitoring
+# ---------------------------------------------------------------------------
+# Play 1: node_exporter on every scraped host
+# ---------------------------------------------------------------------------
+- name: Deploy node_exporter on all hosts
+  hosts: all
   become: true
 
   vars:
-    # Prometheus configuration
-    prometheus_version: "2.45.0"
-    prometheus_port: 9090
-    prometheus_retention_time: "100y"  # Effectively indefinite for horde API stats
-    prometheus_web_external_url: "https://monitoring.example.com/prometheus"
+    # TLS: expects CA-signed per-host certs in files/tls/
+    node_exporter_tls_server_config:
+      cert_file: /etc/node_exporter/tls.crt
+      key_file: /etc/node_exporter/tls.key
+    node_exporter_web_listen_address: "0.0.0.0:9100"
+    node_exporter_basic_auth_users:
+      prometheus: "{{ vault_node_exporter_bcrypt_password }}"
 
-    # Grafana configuration
-    grafana_port: 3000
-    grafana_domain: "monitoring.example.com"
+  pre_tasks:
+    - name: Push TLS cert for node_exporter
+      copy:
+        src: "tls/{{ inventory_hostname }}.crt"
+        dest: /etc/node_exporter/tls.crt
+        mode: '0644'
+
+    - name: Push TLS key for node_exporter
+      copy:
+        src: "tls/{{ inventory_hostname }}.key"
+        dest: /etc/node_exporter/tls.key
+        mode: '0600'
+
+  roles:
+    - prometheus.prometheus.node_exporter
+
+# ---------------------------------------------------------------------------
+# Play 2: Mimir + Grafana stack, Prometheus, stats exporter on monitoring host
+# ---------------------------------------------------------------------------
+- name: Deploy monitoring stack
+  hosts: mimir
+  become: true
+
+  vars:
+    # -- Mimir + Grafana (horde_monitoring role) --
+    monitoring_install_mimir: true
+    monitoring_install_grafana: true
+    monitoring_configure_haproxy: true
     grafana_admin_password: "{{ vault_grafana_admin_password }}"
+    monitoring_application_tenant_id: "ai-horde-app"
+    monitoring_application_retention: "0"
+    monitoring_infrastructure_tenant_id: "infrastructure"
+    monitoring_infrastructure_retention: "30d"
+    monitoring_public_tenant_id: "ai-horde-public"
+    monitoring_public_retention: "90d"
+    grafana_anonymous_enabled: true
+    grafana_provision_dashboards: true
+    # grafana_root_url: "https://grafana.example.com"
 
-    # InfluxDB (optional - set to true if migrating from old setup)
-    monitoring_install_influxdb: false
+    # -- Alertmanager datasource in Grafana --
+    # Lets Grafana query alert state from Alertmanager (Alerting UI).
+    # Uses host.docker.internal because Alertmanager is native on the host
+    # while Grafana runs inside Docker.
+    monitoring_alertmanager_url: "http://host.docker.internal:9093"
 
-    # Firewall (set to true if using ufw)
-    monitoring_configure_firewall: false
+    # -- Alertmanager (community role, applied directly) --
+    # Receives alerts from Prometheus, deduplicates, groups, and routes to
+    # notification channels. See docs/plans/011-alertmanager.md for details.
+    alertmanager_version: "0.28.0"
+    alertmanager_web_listen_address: "127.0.0.1:9093"
+    alertmanager_resolve_timeout: "5m"
+    alertmanager_receivers:
+      - name: "default"
+        # Configure your notification channel here. Uncomment ONE of:
+        #
+        # Slack:
+        # slack_configs:
+        #   - api_url: "{{ vault_alertmanager_slack_webhook }}"
+        #     channel: '#monitoring-alerts'
+        #     send_resolved: true
+        #     title: '{% raw %}[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}{% endraw %}'
+        #     text: >-
+        #       {% raw %}{{ range .Alerts }}{{ .Annotations.description }}
+        #       {{ end }}{% endraw %}
+        #
+        # Email:
+        # email_configs:
+        #   - to: 'oncall@example.com'
+        #     send_resolved: true
+        #
+        # Webhook (generic):
+        # webhook_configs:
+        #   - url: 'http://your-webhook-endpoint:8080/alerts'
+        #     send_resolved: true
+      - name: "null"
+        # Silently drops alerts. Used for Watchdog during initial setup.
+        # In production, replace with a dead man's switch endpoint.
+    alertmanager_route:
+      group_by: ['alertname', 'job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: "default"
+      routes:
+        - matchers:
+            - alertname="Watchdog"
+          receiver: "null"
+          repeat_interval: 5m
+    alertmanager_inhibit_rules:
+      - source_matchers:
+          - severity="critical"
+        target_matchers:
+          - severity="warning"
+        equal: ['alertname', 'job']
+
+    # -- Prometheus (community role, applied directly) --
+    prometheus_web_listen_address: "127.0.0.1:9090"
+    prometheus_storage_retention: "48h"
+    prometheus_global:
+      scrape_interval: 15s
+      evaluation_interval: 30s
+    prometheus_alertmanager_config:
+      - scheme: http
+        static_configs:
+          - targets:
+              - "localhost:9093"
+    prometheus_remote_write:
+      - url: "http://localhost:9009/api/v1/push"
+        headers:
+          X-Scope-OrgID: "{{ monitoring_application_tenant_id }}"
+        write_relabel_configs:
+          - source_labels: [job]
+            regex: horde-exporter
+            action: keep
+      - url: "http://localhost:9009/api/v1/push"
+        headers:
+          X-Scope-OrgID: "{{ monitoring_infrastructure_tenant_id }}"
+        write_relabel_configs:
+          - source_labels: [job]
+            regex: horde-exporter
+            action: drop
+      - url: "http://localhost:9009/api/v1/push"
+        headers:
+          X-Scope-OrgID: "{{ monitoring_public_tenant_id }}"
+        write_relabel_configs:
+          - source_labels: [job]
+            regex: horde-exporter
+            action: keep
+    prometheus_scrape_configs:
+      - job_name: mimir
+        static_configs:
+          - targets:
+              - "localhost:9009"
+      - job_name: node
+        scheme: https
+        basic_auth:
+          username: prometheus
+          password: "{{ vault_node_exporter_password }}"
+        tls_config:
+          ca_file: /etc/prometheus/ca.crt
+        file_sd_configs:
+          - files:
+              - /etc/prometheus/file_sd/*.yml
+      - job_name: horde-exporter
+        static_configs:
+          - targets:
+              - "localhost:9150"
+      - job_name: minio
+        metrics_path: /minio/v2/metrics/cluster
+        static_configs:
+          - targets:
+              - "localhost:9000"
+      # Uncomment if running postgres_exporter:
+      # - job_name: postgres
+      #   scheme: https
+      #   basic_auth:
+      #     username: prometheus
+      #     password: "{{ vault_postgres_exporter_password }}"
+      #   tls_config:
+      #     ca_file: /etc/prometheus/ca.crt
+      #   static_configs:
+      #     - targets:
+      #         - "localhost:9187"
+
+    # -- Stats exporter --
+    exporter_port: 9150
+    exporter_enable_downsampling: true
+
+  pre_tasks:
+    - name: Push CA certificate for Prometheus
+      copy:
+        src: tls/ca.crt
+        dest: /etc/prometheus/ca.crt
+        mode: '0644'
 
   roles:
     - haidra.deployments.horde_monitoring
+    - prometheus.prometheus.alertmanager
+    - prometheus.prometheus.prometheus
     - haidra.deployments.horde_stats_exporter
 
   post_tasks:
-    - name: Verify Prometheus is running
+    - name: Verify Mimir is ready
       uri:
-        url: "http://localhost:{{ prometheus_port }}/-/healthy"
-      register: prom_health
-      retries: 5
+        url: "http://localhost:9009/ready"
+        return_content: yes
+      register: mimir_health
+      retries: 10
       delay: 5
-      until: prom_health.status == 200
+      until: mimir_health.status == 200
+
+    - name: Verify Alertmanager is ready
+      uri:
+        url: "http://localhost:9093/-/ready"
+        return_content: yes
+      register: alertmanager_health
+      retries: 5
+      delay: 3
+      until: alertmanager_health.status == 200
 
     - name: Verify Grafana is running
       uri:
-        url: "http://localhost:{{ grafana_port }}/api/health"
+        url: "http://localhost:3000/api/health"
       register: grafana_health
       retries: 5
       delay: 5
@@ -49,6 +241,10 @@
       debug:
         msg:
           - "Monitoring stack deployed successfully!"
-          - "Prometheus: http://{{ ansible_host }}:{{ prometheus_port }}"
-          - "Grafana: http://{{ ansible_host }}:{{ grafana_port }}"
-          - "Stats Exporter: http://{{ ansible_host }}:9100/metrics"
+          - "Mimir: http://127.0.0.1:9009 (local only; HAProxy for external)"
+          - "Grafana: http://127.0.0.1:3000 (local only)"
+          - "Prometheus: http://127.0.0.1:9090 (local only)"
+          - "Alertmanager: http://127.0.0.1:9093 (local only)"
+          - "Application tenant: {{ monitoring_application_tenant_id }} (retention {{ monitoring_application_retention }})"
+          - "Infrastructure tenant: {{ monitoring_infrastructure_tenant_id }} (retention {{ monitoring_infrastructure_retention }})"
+          - "Stats Exporter: http://localhost:9150/metrics"

@@ -1,15 +1,37 @@
 ---
 # AI Horde Stats Exporter Deployment
-# Deploys horde_exporter.py as a systemd service
+# Installs ai-horde-stats-exporter from the horde-exporters monorepo via uv
 
-- name: Install Python dependencies
+- name: Install system dependencies for Ansible modules
   apt:
     name:
       - python3
-      - python3-pip
-      - python3-venv
     state: present
     update_cache: yes
+  become: true
+
+- name: Download uv installer
+  ansible.builtin.get_url:
+    url: https://astral.sh/uv/install.sh
+    dest: /tmp/uv-install.sh
+    mode: '0755'
+  become: true
+  when: not ansible_check_mode
+
+- name: Install uv
+  ansible.builtin.command: /tmp/uv-install.sh
+  args:
+    creates: /root/.local/bin/uv
+  environment:
+    INSTALLER_NO_MODIFY_PATH: "1"
+  become: true
+  when: not ansible_check_mode
+
+- name: Ensure uv is on PATH system-wide
+  copy:
+    content: 'export PATH="/root/.local/bin:$PATH"'
+    dest: /etc/profile.d/uv.sh
+    mode: '0644'
   become: true
 
 - name: Create exporter user
@@ -29,38 +51,64 @@
     mode: '0755'
   become: true
 
-- name: Create Python virtual environment
-  command: python3 -m venv {{ exporter_install_dir }}/venv
-  args:
-    creates: "{{ exporter_install_dir }}/venv"
-  become: true
-  become_user: "{{ exporter_user }}"
-
-- name: Copy exporter script
-  copy:
-    src: "{{ exporter_source_dir }}/horde_exporter.py"
-    dest: "{{ exporter_install_dir }}/horde_exporter.py"
+- name: Create log directory
+  file:
+    path: /var/log/horde-stats
+    state: directory
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0755'
   become: true
+
+- name: Create virtual environment with uv
+  command: /root/.local/bin/uv venv {{ exporter_install_dir }}/venv --python 3.12 --managed-python
+  args:
+    creates: "{{ exporter_install_dir }}/venv"
+  become: true
+
+- name: Set venv ownership
+  file:
+    path: "{{ exporter_install_dir }}/venv"
+    state: directory
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    recurse: yes
+  become: true
+
+- name: Read installed exporter ref marker
+  slurp:
+    src: "{{ exporter_install_dir }}/.exporter_ref"
+  register: _exporter_ref_marker
+  failed_when: false
+  changed_when: false
+  become: true
+
+- name: Compute installed exporter ref
+  set_fact:
+    _exporter_ref_current: "{{ (_exporter_ref_marker.content | default('') | b64decode | trim) if (_exporter_ref_marker is defined and _exporter_ref_marker.content is defined) else '' }}"
+
+- name: Install ai-horde-stats-exporter from GitHub
+  command: >
+    /root/.local/bin/uv pip install
+    --python {{ exporter_install_dir }}/venv/bin/python
+    "ai-horde-stats-exporter @ git+{{ exporter_repo_url }}@{{ exporter_repo_ref }}#subdirectory=packages/ai-horde-stats-exporter"
+  become: true
+  when:
+    - not ansible_check_mode
+    - _exporter_ref_current != exporter_repo_ref
   notify: restart horde-exporter
 
-- name: Copy requirements file
+- name: Record installed exporter ref
   copy:
-    src: "{{ exporter_source_dir }}/requirements.txt"
-    dest: "{{ exporter_install_dir }}/requirements.txt"
+    dest: "{{ exporter_install_dir }}/.exporter_ref"
+    content: "{{ exporter_repo_ref }}\n"
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
     mode: '0644'
   become: true
-
-- name: Install Python requirements in venv
-  pip:
-    requirements: "{{ exporter_install_dir }}/requirements.txt"
-    virtualenv: "{{ exporter_install_dir }}/venv"
-  become: true
-  become_user: "{{ exporter_user }}"
+  when:
+    - not ansible_check_mode
+    - _exporter_ref_current != exporter_repo_ref
 
 - name: Template exporter configuration
   template:
@@ -71,15 +119,6 @@
     mode: '0644'
   become: true
   notify: restart horde-exporter
-
-- name: Copy health check script
-  copy:
-    src: "{{ exporter_source_dir }}/health-check.sh"
-    dest: "{{ exporter_install_dir }}/health-check.sh"
-    owner: "{{ exporter_user }}"
-    group: "{{ exporter_user }}"
-    mode: '0755'
-  become: true
 
 - name: Install systemd service files
   template:
@@ -116,12 +155,3 @@
     daemon_reload: yes
   become: true
   when: exporter_enable_downsampling
-
-- name: Create log directory
-  file:
-    path: /var/log/horde-stats
-    state: directory
-    owner: "{{ exporter_user }}"
-    group: "{{ exporter_user }}"
-    mode: '0755'
-  become: true

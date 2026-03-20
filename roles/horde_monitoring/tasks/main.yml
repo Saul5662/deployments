@@ -1,24 +1,32 @@
 ---
 # AI Horde Monitoring Stack Deployment
-# Deploys Prometheus, Grafana, and optionally InfluxDB using native packages
+# Deploys Grafana Mimir + Grafana via Docker Compose (managed by systemd)
+# Prometheus is NOT part of this role — deploy it directly in your playbook
+# using the prometheus.prometheus.prometheus community role.
 
-- name: Install Prometheus
-  include_tasks: prometheus.yml
-  when: monitoring_install_prometheus | bool
+- name: Deploy Mimir + Grafana monitoring stack
+  include_tasks: mimir.yml
+  when: monitoring_install_mimir | bool
 
-- name: Configure Prometheus backups
-  include_tasks: prometheus_backup.yml
-  when:
-    - monitoring_install_prometheus | bool
-    - monitoring_enable_prometheus_backup | bool
-
-- name: Install Grafana
+- name: Configure Grafana provisioning
   include_tasks: grafana.yml
-  when: monitoring_install_grafana | bool
+  when:
+    - monitoring_install_mimir | bool
+    - monitoring_install_grafana | bool
 
-- name: Install InfluxDB
-  include_tasks: influxdb.yml
-  when: monitoring_install_influxdb | bool
+- name: Provision Grafana dashboards from horde-exporters
+  include_tasks: dashboards.yml
+  when:
+    - monitoring_install_grafana | bool
+    - grafana_provision_dashboards | bool
+
+- name: Deploy monitoring stack alerting rules
+  include_tasks: alerting.yml
+  when: monitoring_install_alerting_rules | bool
+
+- name: Configure HAProxy for monitoring
+  include_tasks: haproxy.yml
+  when: monitoring_configure_haproxy | bool
 
 - name: Configure firewall rules
   include_tasks: firewall.yml

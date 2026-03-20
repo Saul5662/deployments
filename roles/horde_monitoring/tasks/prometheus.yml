@@ -1,71 +1,52 @@
 ---
-# Prometheus installation and configuration
+# Deploy Prometheus via the prometheus.prometheus.prometheus community role
+# Prometheus scrapes local exporters and remote-writes to Mimir for long-term storage
 
-- name: Create Prometheus system user
-  user:
-    name: prometheus
-    system: yes
-    shell: /usr/sbin/nologin
-    createhome: no
-  become: true
+- name: Build default scrape configs
+  set_fact:
+    _monitoring_scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets:
+              - "localhost:{{ prometheus_port }}"
+      - job_name: 'mimir'
+        static_configs:
+          - targets:
+              - "localhost:{{ mimir_port }}"
+      - job_name: 'horde-exporter'
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+              - 'localhost:9100'
+      - job_name: 'node'
+        static_configs:
+          - targets:
+              - 'localhost:9300'
 
-- name: Create Prometheus directories
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: prometheus
-    group: prometheus
-    mode: '0755'
-  become: true
-  loop:
-    - /etc/prometheus
-    - /var/lib/prometheus
-    - /var/log/prometheus
+- name: Append extra scrape configs
+  set_fact:
+    _monitoring_scrape_configs: "{{ _monitoring_scrape_configs + monitoring_extra_scrape_configs }}"
+  when: monitoring_extra_scrape_configs | length > 0
 
-- name: Download and extract Prometheus
-  unarchive:
-    src: "{{ prometheus_download_url }}"
-    dest: /tmp
-    remote_src: yes
-    creates: /usr/local/bin/prometheus
-  become: true
-
-- name: Install Prometheus binaries
-  copy:
-    src: "/tmp/prometheus-{{ prometheus_version }}.linux-{{ prometheus_arch }}/{{ item }}"
-    dest: /usr/local/bin/
-    remote_src: yes
-    owner: root
-    group: root
-    mode: '0755'
-  become: true
-  loop:
-    - prometheus
-    - promtool
-  notify: restart prometheus
-
-- name: Template Prometheus configuration
-  template:
-    src: prometheus.yml.j2
-    dest: /etc/prometheus/prometheus.yml
-    owner: prometheus
-    group: prometheus
-    mode: '0644'
-  become: true
-  notify: restart prometheus
-
-- name: Template Prometheus systemd service
-  template:
-    src: prometheus.service.j2
-    dest: /etc/systemd/system/prometheus.service
-    mode: '0644'
-  become: true
-  notify: reload systemd
-
-- name: Enable and start Prometheus
-  systemd:
-    name: prometheus
-    enabled: yes
-    state: started
-    daemon_reload: yes
-  become: true
+- name: Deploy Prometheus via community role
+  include_role:
+    name: prometheus.prometheus.prometheus
+  vars:
+    prometheus_web_listen_address: "127.0.0.1:{{ prometheus_port }}"
+    prometheus_storage_retention: "{{ prometheus_retention_time }}"
+    prometheus_storage_retention_size: "{{ prometheus_retention_size | default(omit) }}"
+    prometheus_global:
+      scrape_interval: "{{ prometheus_scrape_interval }}"
+      evaluation_interval: "{{ prometheus_evaluation_interval }}"
+    prometheus_scrape_configs: "{{ _monitoring_scrape_configs }}"
+    prometheus_remote_write:
+      - url: "http://localhost:{{ mimir_port }}/api/v1/push"
+        headers:
+          X-Scope-OrgID: "{{ monitoring_application_tenant_id }}"
+      - url: "http://localhost:{{ mimir_port }}/api/v1/push"
+        headers:
+          X-Scope-OrgID: "{{ monitoring_public_tenant_id }}"
+        write_relabel_configs:
+          - source_labels: [job]
+            regex: horde-exporter
+            action: keep

@@ -1,18 +1,153 @@
 ---
-# Test playbook: Prometheus-only deployment
-- name: Test horde_monitoring - Prometheus only
+# Test playbook: Mimir-only deployment (no Grafana)
+- name: Test horde_monitoring - Mimir only (no Grafana)
   hosts: testhost
   become: true
   gather_facts: yes
 
   vars:
-    monitoring_install_prometheus: true
+    monitoring_install_mimir: true
     monitoring_install_grafana: false
-    monitoring_install_influxdb: false
-    monitoring_enable_prometheus_backup: false
     monitoring_configure_firewall: false
-    prometheus_version: "2.45.0"
-    prometheus_retention_time: "100y"
+    monitoring_configure_haproxy: false
+    monitoring_application_tenant_id: "app-metrics"
+    monitoring_application_retention: "0"
+    monitoring_infrastructure_tenant_id: "infra-metrics"
+    monitoring_infrastructure_retention: "14d"
+    monitoring_start_services: false
+    mimir_backup_enabled: false
 
   roles:
     - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir config
+      slurp:
+        path: /etc/mimir/mimir.yaml
+      register: mimir_config
+
+    - name: Read rendered Mimir runtime overrides
+      slurp:
+        path: /etc/mimir/runtime-overrides.yaml
+      register: mimir_runtime_overrides
+
+    - name: Check Grafana datasource provisioning is absent
+      stat:
+        path: /etc/grafana/provisioning/datasources/mimir.yml
+      register: grafana_datasource_file
+
+    - name: Read rendered Docker Compose
+      slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: compose_config
+
+    - name: Assert Mimir-only multitenant config
+      assert:
+        that:
+          - "'multitenancy_enabled: true' in (mimir_config.content | b64decode)"
+          - "'app-metrics:' in (mimir_runtime_overrides.content | b64decode)"
+          - "'infra-metrics:' in (mimir_runtime_overrides.content | b64decode)"
+          - not grafana_datasource_file.stat.exists
+
+    - name: Assert S3 object storage config
+      assert:
+        that:
+          - "'backend: s3' in (mimir_config.content | b64decode)"
+          - "'minio' in (compose_config.content | b64decode)"
+
+    - name: Assert performance and caching config
+      assert:
+        that:
+          - "'chunks_cache' in (mimir_config.content | b64decode)"
+          - "'metadata_cache' in (mimir_config.content | b64decode)"
+          - "'split_queries_by_interval' in (mimir_config.content | b64decode)"
+          - "'memcached' in (compose_config.content | b64decode)"
+
+    - name: Assert no floating or latest image tags in Compose
+      assert:
+        that:
+          - "'latest' not in (compose_config.content | b64decode)"
+        fail_msg: "No container image should use the 'latest' tag"
+
+    - name: Assert log rotation is configured in Compose
+      assert:
+        that:
+          - "'driver: local' in (compose_config.content | b64decode)"
+          - "'max-size' in (compose_config.content | b64decode)"
+          - "'max-file' in (compose_config.content | b64decode)"
+        fail_msg: "All Compose services must have logging driver with rotation configured"
+
+    - name: Stat Mimir config file permissions
+      stat:
+        path: /etc/mimir/mimir.yaml
+      register: _mimir_config_stat
+
+    - name: Stat Docker Compose file permissions
+      stat:
+        path: /opt/mimir/docker-compose.yml
+      register: _compose_config_stat
+
+    - name: Assert secret-containing files are mode 0600 owned by root:root
+      assert:
+        that:
+          - _mimir_config_stat.stat.mode == '0600'
+          - _mimir_config_stat.stat.pw_name == 'root'
+          - _mimir_config_stat.stat.gr_name == 'root'
+          - _compose_config_stat.stat.mode == '0600'
+          - _compose_config_stat.stat.pw_name == 'root'
+          - _compose_config_stat.stat.gr_name == 'root'
+        fail_msg: "Secret-containing files must be mode 0600, owned root:root"
+
+    - name: Stat Mimir config directory
+      stat:
+        path: /etc/mimir
+      register: _mimir_dir_stat
+
+    - name: Assert directories are owned by root:root
+      assert:
+        that:
+          - _mimir_dir_stat.stat.pw_name == 'root'
+          - _mimir_dir_stat.stat.gr_name == 'root'
+        fail_msg: "Service directories must be owned by root:root, not docker group"
+
+
+- name: Test backup skipped when MinIO is disabled
+  hosts: testhost
+  become: true
+  gather_facts: no
+
+  tasks:
+    - name: Run role with MinIO disabled but backup left at default (enabled)
+      include_role:
+        name: horde_monitoring
+      vars:
+        monitoring_install_mimir: true
+        monitoring_install_grafana: false
+        monitoring_configure_firewall: false
+        monitoring_configure_haproxy: false
+        monitoring_start_services: false
+        mimir_enable_minio: false
+        mimir_backup_enabled: true
+
+    - name: Check backup service was NOT rendered
+      stat:
+        path: /etc/systemd/system/mimir-backup.service
+      register: _backup_svc_stat
+
+    - name: Check backup timer was NOT rendered
+      stat:
+        path: /etc/systemd/system/mimir-backup.timer
+      register: _backup_timer_stat
+
+    - name: Check backup env was NOT rendered
+      stat:
+        path: /etc/mimir/mimir-backup.env
+      register: _backup_env_stat
+
+    - name: Assert no backup artifacts when MinIO is disabled (F-2D)
+      assert:
+        that:
+          - not _backup_svc_stat.stat.exists
+          - not _backup_timer_stat.stat.exists
+          - not _backup_env_stat.stat.exists
+        fail_msg: "Backup service/timer/env must not be rendered when mimir_enable_minio=false"

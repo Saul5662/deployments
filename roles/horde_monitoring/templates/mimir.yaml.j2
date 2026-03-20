@@ -1,0 +1,117 @@
+# Grafana Mimir configuration - monolithic mode with S3 object storage (MinIO)
+# Managed by Ansible - do not edit manually
+
+multitenancy_enabled: true
+
+server:
+  http_listen_port: 9009
+  log_level: {{ mimir_log_level }}
+  grpc_server_max_recv_msg_size: {{ mimir_grpc_max_msg_size }}
+  grpc_server_max_send_msg_size: {{ mimir_grpc_max_msg_size }}
+
+runtime_config:
+  file: /etc/mimir/runtime-overrides.yaml
+  period: {{ mimir_runtime_config_period }}
+
+activity_tracker:
+  filepath: /mimir/data/activity.log
+
+{% if mimir_enable_minio | bool %}
+common:
+  storage:
+    backend: s3
+    s3:
+      endpoint: minio:{{ minio_api_port }}
+      access_key_id: {{ minio_root_user }}
+      secret_access_key: {{ minio_root_password }}
+      insecure: true
+{% endif %}
+
+blocks_storage:
+{% if mimir_enable_minio | bool %}
+  s3:
+    bucket_name: {{ minio_blocks_bucket }}
+{% else %}
+  backend: filesystem
+  filesystem:
+    dir: /mimir/data/tsdb
+{% endif %}
+  bucket_store:
+    sync_dir: /mimir/data/tsdb-sync
+{% if mimir_enable_memcached | bool %}
+    chunks_cache:
+      backend: memcached
+      memcached:
+        addresses: dns+memcached:{{ mimir_memcached_port }}
+        timeout: {{ mimir_memcached_timeout }}
+        max_idle_connections: {{ mimir_memcached_max_idle }}
+    metadata_cache:
+      backend: memcached
+      memcached:
+        addresses: dns+memcached:{{ mimir_memcached_port }}
+        timeout: {{ mimir_memcached_timeout }}
+        max_idle_connections: {{ mimir_memcached_max_idle }}
+{% endif %}
+  tsdb:
+    dir: /mimir/tsdb
+{% if mimir_blocks_retention %}
+    retention_period: {{ mimir_blocks_retention }}
+{% endif %}
+
+limits:
+{% if mimir_blocks_retention %}
+  compactor_blocks_retention_period: {{ mimir_blocks_retention }}
+{% endif %}
+  max_global_series_per_user: {{ mimir_max_global_series_per_user }}
+  ingestion_rate: {{ mimir_ingestion_rate }}
+  ingestion_burst_size: {{ mimir_ingestion_burst_size }}
+
+compactor:
+  data_dir: /mimir/data/compactor
+  compaction_interval: {{ mimir_compaction_interval }}
+  deletion_delay: {{ mimir_compactor_deletion_delay }}
+  sharding_ring:
+    kvstore:
+      store: memberlist
+
+distributor:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+
+ingester:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+    replication_factor: 1
+
+frontend:
+  split_queries_by_interval: {{ mimir_split_queries_interval }}
+{% if mimir_enable_memcached | bool %}
+  cache_results: true
+  results_cache:
+    backend: memcached
+    memcached:
+      addresses: dns+memcached:{{ mimir_memcached_port }}
+      timeout: {{ mimir_memcached_timeout }}
+      max_idle_connections: {{ mimir_memcached_max_idle }}
+{% endif %}
+
+ruler_storage:
+{% if mimir_enable_minio | bool %}
+  s3:
+    bucket_name: {{ minio_ruler_bucket }}
+{% else %}
+  backend: filesystem
+  filesystem:
+    dir: /mimir/data/rules
+{% endif %}
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+
+usage_stats:
+  enabled: false

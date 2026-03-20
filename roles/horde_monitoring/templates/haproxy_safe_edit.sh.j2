@@ -1,0 +1,66 @@
+#!/bin/bash
+# HAProxy safe configuration editor
+# Managed by Ansible - do not edit manually
+#
+# Usage: haproxy_safe_edit.sh <new-config-file>
+#
+# This script safely updates the HAProxy configuration:
+#   1. Creates a permanent timestamped backup
+#   2. Creates a working copy for validation
+#   3. Validates the new configuration with haproxy -c
+#   4. Promotes to live config only if validation passes
+#   5. Reloads HAProxy
+
+set -euo pipefail
+
+HAPROXY_CONFIG="{{ haproxy_config_path }}"
+BACKUP_DIR="{{ haproxy_backup_dir }}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 <new-config-file>"
+    exit 1
+fi
+
+NEW_CONFIG="$1"
+
+if [[ ! -f "${NEW_CONFIG}" ]]; then
+    echo "ERROR: Source config not found: ${NEW_CONFIG}"
+    exit 1
+fi
+
+# Ensure backup directory exists
+mkdir -p "${BACKUP_DIR}"
+
+# Step 1: Permanent timestamped backup of current config
+if [[ -f "${HAPROXY_CONFIG}" ]]; then
+    cp "${HAPROXY_CONFIG}" "${BACKUP_DIR}/haproxy.cfg.${TIMESTAMP}"
+    echo "Permanent backup: ${BACKUP_DIR}/haproxy.cfg.${TIMESTAMP}"
+fi
+
+# Step 2: Working copy for validation
+WORKING_COPY=$(mktemp /tmp/haproxy_validate.XXXXXX)
+cp "${NEW_CONFIG}" "${WORKING_COPY}"
+
+# Step 3: Validate with HAProxy config checker
+echo "Validating HAProxy configuration..."
+if haproxy -c -f "${WORKING_COPY}" 2>&1; then
+    echo "Configuration is valid."
+else
+    echo "ERROR: Configuration validation FAILED. Live config is unchanged."
+    rm -f "${WORKING_COPY}"
+    exit 1
+fi
+
+# Step 4: Promote validated config to live
+cp "${WORKING_COPY}" "${HAPROXY_CONFIG}"
+rm -f "${WORKING_COPY}"
+echo "Configuration promoted to ${HAPROXY_CONFIG}"
+
+# Step 5: Reload HAProxy
+if systemctl is-active --quiet haproxy; then
+    systemctl reload haproxy
+    echo "HAProxy reloaded successfully."
+else
+    echo "WARNING: HAProxy is not running. Config updated but service not reloaded."
+fi

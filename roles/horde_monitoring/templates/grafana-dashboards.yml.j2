@@ -1,0 +1,51 @@
+# Grafana dashboard provider configuration
+# Managed by Ansible - do not edit manually
+
+apiVersion: 1
+
+providers:
+{% if grafana_provision_dashboards | default(false) | bool %}
+  - name: app
+    orgId: 1
+    folder: 'AI Horde'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards/app
+      foldersFromFilesStructure: false
+  - name: infra
+    orgId: 1
+    folder: 'Infrastructure'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards/infra
+      foldersFromFilesStructure: false
+{% if grafana_anonymous_enabled | default(false) | bool %}
+  - name: public
+    orgId: {{ grafana_public_org_id }}
+    folder: ''
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards/app-public
+      foldersFromFilesStructure: false
+{% endif %}
+{% else %}
+  - name: default
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
+{% endif %}

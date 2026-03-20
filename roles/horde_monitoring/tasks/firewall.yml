@@ -1,13 +1,12 @@
 ---
 # Firewall configuration for monitoring stack
-
-- name: Allow Prometheus port
-  ufw:
-    rule: allow
-    port: "{{ prometheus_port | string }}"
-    proto: tcp
-  become: true
-  when: monitoring_install_prometheus | bool
+# Note: Mimir and Grafana bind to 127.0.0.1 by default.
+# Only open ports if you need external access (not recommended without a reverse proxy).
+#
+# WARNING: These rules allow traffic from ANY source. If you change service
+# bind addresses from 127.0.0.1 to 0.0.0.0 (e.g. for multi-host access),
+# add source IP restrictions (ufw: from_addr) to avoid exposing unauthenticated
+# services to the internet.
 
 - name: Allow Grafana port
   ufw:
@@ -17,10 +16,10 @@
   become: true
   when: monitoring_install_grafana | bool
 
-- name: Allow InfluxDB port
+- name: Allow Mimir port
   ufw:
     rule: allow
-    port: "{{ influxdb_port | string }}"
+    port: "{{ mimir_port | string }}"
     proto: tcp
   become: true
-  when: monitoring_install_influxdb | bool
+  when: monitoring_install_mimir | bool

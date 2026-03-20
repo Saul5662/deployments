@@ -4,40 +4,33 @@
 # User and directories
 exporter_user: horde-exporter
 exporter_install_dir: /opt/horde-exporter
-exporter_source_dir: "{{ playbook_dir }}/files/horde-exporter"
+
+# Git repository (uv installs directly from GitHub)
+exporter_repo_url: "https://github.com/Haidra-Org/horde-exporters"
+exporter_repo_ref: main
 
 # Exporter configuration
-exporter_port: 9100
+exporter_port: 9150
 exporter_api_base_url: "https://aihorde.net/api/v2"
 exporter_user_agent: "horde_prometheus_exporter"
+exporter_api_timeout: 10
 
 # Scrape intervals (seconds)
 exporter_scrape_models: 8
 exporter_scrape_workers: 300
 exporter_scrape_performance: 2
-
-# Top-N limits (set to null for full coverage with zero-omission)
-exporter_top_n_models_image: null
-exporter_top_n_models_text: null
-exporter_top_n_workers_image: null
-exporter_top_n_workers_text: null
-
-# Zero-omission configuration
-exporter_zero_omission_models:
-  - queued
-  - jobs
-  - eta
-exporter_zero_omission_workers:
-  - uncompleted_jobs
-exporter_zero_omission_performance:
-  - queued_forms
-  - queued_requests
-  - queued_text_requests
+exporter_scrape_stats: 120
+exporter_scrape_modes: 30
+exporter_scrape_teams: 300
 
 # Downsampling configuration
 exporter_enable_downsampling: true
 exporter_downsample_schedule: daily
 exporter_prometheus_url: "http://localhost:9090"
+exporter_downsample_source_tenant: "ai-horde-app"
+exporter_downsample_target_tenant: "ai-horde-public"
+exporter_downsample_mimir_url: "http://localhost:9009"
+exporter_downsample_resolution: "5m"
 
 # Logging
 exporter_log_level: INFO

@@ -1,42 +1,19 @@
 # AI Horde Prometheus Exporter Configuration
 # Managed by Ansible - do not edit manually
 
-top_n:
-{% if exporter_top_n_models_image is not none %}
-  models_image: {{ exporter_top_n_models_image }}
-{% endif %}
-{% if exporter_top_n_models_text is not none %}
-  models_text: {{ exporter_top_n_models_text }}
-{% endif %}
-{% if exporter_top_n_workers_image is not none %}
-  workers_image: {{ exporter_top_n_workers_image }}
-{% endif %}
-{% if exporter_top_n_workers_text is not none %}
-  workers_text: {{ exporter_top_n_workers_text }}
-{% endif %}
-
 scrape_intervals:
   models: {{ exporter_scrape_models }}
   workers: {{ exporter_scrape_workers }}
   performance: {{ exporter_scrape_performance }}
+  stats: {{ exporter_scrape_stats }}
+  modes: {{ exporter_scrape_modes }}
+  teams: {{ exporter_scrape_teams }}
 
 api:
   base_url: "{{ exporter_api_base_url }}"
   user_agent: "{{ exporter_user_agent }}"
+  timeout: {{ exporter_api_timeout }}
 
 exporter:
   port: {{ exporter_port }}
-
-zero_omission:
-  models:
-{% for field in exporter_zero_omission_models %}
-    - {{ field }}
-{% endfor %}
-  workers:
-{% for field in exporter_zero_omission_workers %}
-    - {{ field }}
-{% endfor %}
-  performance:
-{% for field in exporter_zero_omission_performance %}
-    - {{ field }}
-{% endfor %}
+  log_level: {{ exporter_log_level }}

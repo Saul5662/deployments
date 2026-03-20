@@ -1,20 +1,316 @@
 ---
-# Test playbook: Full stack (Prometheus + Grafana + Backup)
+# Test playbook: Full stack (Mimir + Grafana + HAProxy)
 - name: Test horde_monitoring - Full stack
   hosts: testhost
   become: true
   gather_facts: yes
 
   vars:
-    monitoring_install_prometheus: true
+    monitoring_install_mimir: true
     monitoring_install_grafana: true
-    monitoring_install_influxdb: false
-    monitoring_enable_prometheus_backup: true
     monitoring_configure_firewall: false
-    prometheus_version: "2.45.0"
-    prometheus_retention_time: "100y"
+    monitoring_configure_haproxy: true
     grafana_admin_password: "testpass123"
-    prometheus_backup_compression: "gzip"
+    monitoring_application_tenant_id: "app-metrics"
+    monitoring_application_retention: "0"
+    monitoring_infrastructure_tenant_id: "infra-metrics"
+    monitoring_infrastructure_retention: "14d"
+    monitoring_public_tenant_id: "public-metrics"
+    monitoring_public_retention: "90d"
+    grafana_anonymous_enabled: true
+    grafana_provision_dashboards: false
+    monitoring_start_services: false
+    mimir_backup_enabled: false
 
   roles:
     - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir config
+      slurp:
+        path: /etc/mimir/mimir.yaml
+      register: mimir_config
+
+    - name: Read rendered Mimir runtime overrides
+      slurp:
+        path: /etc/mimir/runtime-overrides.yaml
+      register: mimir_runtime_overrides
+
+    - name: Read rendered Grafana datasources
+      slurp:
+        path: /etc/grafana/provisioning/datasources/mimir.yml
+      register: grafana_datasources
+
+    - name: Read rendered Docker Compose
+      slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: compose_config
+
+    - name: Assert multitenant monitoring config
+      assert:
+        that:
+          - "'multitenancy_enabled: true' in (mimir_config.content | b64decode)"
+          - "'runtime-overrides.yaml' in (mimir_config.content | b64decode)"
+          - "'app-metrics:' in (mimir_runtime_overrides.content | b64decode)"
+          - "'infra-metrics:' in (mimir_runtime_overrides.content | b64decode)"
+          - "'public-metrics:' in (mimir_runtime_overrides.content | b64decode)"
+          - "'max_total_query_length' in (mimir_runtime_overrides.content | b64decode)"
+          - "'max_fetched_series_per_query' in (mimir_runtime_overrides.content | b64decode)"
+          - "'AI Horde App' in (grafana_datasources.content | b64decode)"
+          - "'Infrastructure' in (grafana_datasources.content | b64decode)"
+          - "'orgId: 1' in (grafana_datasources.content | b64decode)"
+          - "'mimir-public' in (grafana_datasources.content | b64decode)"
+          - "'ANONYMOUS_ENABLED=true' in (compose_config.content | b64decode)"
+          - "'ANONYMOUS_ORG_NAME' in (compose_config.content | b64decode)"
+
+    - name: Assert S3 object storage config (MinIO)
+      assert:
+        that:
+          - "'backend: s3' in (mimir_config.content | b64decode)"
+          - "'endpoint: minio:' in (mimir_config.content | b64decode)"
+          - "'bucket_name: mimir-blocks' in (mimir_config.content | b64decode)"
+          - "'common:' in (mimir_config.content | b64decode)"
+          - "'minio' in (compose_config.content | b64decode)"
+          - "'minio-init' in (compose_config.content | b64decode)"
+          - "'minio/health/live' in (compose_config.content | b64decode)"
+
+    - name: Assert performance and caching config
+      assert:
+        that:
+          - "'activity_tracker' in (mimir_config.content | b64decode)"
+          - "'chunks_cache' in (mimir_config.content | b64decode)"
+          - "'metadata_cache' in (mimir_config.content | b64decode)"
+          - "'results_cache' in (mimir_config.content | b64decode)"
+          - "'split_queries_by_interval' in (mimir_config.content | b64decode)"
+          - "'deletion_delay' in (mimir_config.content | b64decode)"
+          - "'max_global_series_per_user' in (mimir_config.content | b64decode)"
+          - "'memcached' in (compose_config.content | b64decode)"
+
+    - name: Read rendered alerting rules
+      slurp:
+        path: /etc/prometheus/rules/monitoring-stack.rules
+      register: alerting_rules
+
+    - name: Assert alerting rules content
+      assert:
+        that:
+          - "'Watchdog' in (alerting_rules.content | b64decode)"
+          - "'MimirDown' in (alerting_rules.content | b64decode)"
+          - "'MimirRequestErrors' in (alerting_rules.content | b64decode)"
+          - "'MimirIngestionStalled' in (alerting_rules.content | b64decode)"
+          - "'MimirCompactorFailed' in (alerting_rules.content | b64decode)"
+          - "'MinIODown' in (alerting_rules.content | b64decode)"
+          - "'MinIODiskUsageCritical' in (alerting_rules.content | b64decode)"
+          - "'MinIODiskUsageWarning' in (alerting_rules.content | b64decode)"
+          - "'HostDiskUsageCritical' in (alerting_rules.content | b64decode)"
+          - "'HostDiskUsageHigh' in (alerting_rules.content | b64decode)"
+          - "'mimir-health' in (alerting_rules.content | b64decode)"
+          - "'minio-health' in (alerting_rules.content | b64decode)"
+          - "'host-disk-usage' in (alerting_rules.content | b64decode)"
+          - "'monitoring-stack-watchdog' in (alerting_rules.content | b64decode)"
+
+    - name: Assert no floating or latest image tags in Compose
+      assert:
+        that:
+          - "'latest' not in (compose_config.content | b64decode)"
+          - "'grafana/grafana:12.4.1' in (compose_config.content | b64decode)"
+          - "'memcached:1.6.41-alpine' in (compose_config.content | b64decode)"
+          - "'grafana/mimir:2.15.0' in (compose_config.content | b64decode)"
+        fail_msg: "All container images must use immutable version tags (no 'latest', no minor-only floating)"
+
+    - name: Assert log rotation is configured for all services
+      assert:
+        that:
+          - "'driver: local' in (compose_config.content | b64decode)"
+          - "'max-size' in (compose_config.content | b64decode)"
+          - "'max-file' in (compose_config.content | b64decode)"
+        fail_msg: "All Compose services must have logging driver with rotation configured"
+
+    - name: Read rendered systemd service
+      slurp:
+        path: /etc/systemd/system/mimir-monitoring.service
+      register: systemd_service
+
+    - name: Assert TimeoutStartSec is finite (not 0)
+      assert:
+        that:
+          - "'TimeoutStartSec=0' not in (systemd_service.content | b64decode)"
+          - "'TimeoutStartSec=300' in (systemd_service.content | b64decode)"
+        fail_msg: "TimeoutStartSec must be set to a finite value (300s) to prevent infinite boot hangs"
+
+    - name: Stat Mimir config file permissions
+      stat:
+        path: /etc/mimir/mimir.yaml
+      register: _mimir_config_stat
+
+    - name: Stat Docker Compose file permissions
+      stat:
+        path: /opt/mimir/docker-compose.yml
+      register: _compose_config_stat
+
+    - name: Stat Mimir runtime overrides permissions
+      stat:
+        path: /etc/mimir/runtime-overrides.yaml
+      register: _runtime_overrides_stat
+
+    - name: Assert secret-containing files are mode 0600 owned by root:root
+      assert:
+        that:
+          - _mimir_config_stat.stat.mode == '0600'
+          - _mimir_config_stat.stat.pw_name == 'root'
+          - _mimir_config_stat.stat.gr_name == 'root'
+          - _compose_config_stat.stat.mode == '0600'
+          - _compose_config_stat.stat.pw_name == 'root'
+          - _compose_config_stat.stat.gr_name == 'root'
+          - _runtime_overrides_stat.stat.mode == '0600'
+          - _runtime_overrides_stat.stat.pw_name == 'root'
+          - _runtime_overrides_stat.stat.gr_name == 'root'
+        fail_msg: "Secret-containing files must be mode 0600, owned root:root"
+
+    - name: Stat Mimir config directory
+      stat:
+        path: /etc/mimir
+      register: _mimir_dir_stat
+
+    - name: Stat Mimir data directory
+      stat:
+        path: /var/lib/mimir
+      register: _mimir_data_stat
+
+    - name: Stat MinIO data directory
+      stat:
+        path: /var/lib/minio-data
+      register: _minio_data_stat
+
+    - name: Assert directories are owned by root:root
+      assert:
+        that:
+          - _mimir_dir_stat.stat.pw_name == 'root'
+          - _mimir_dir_stat.stat.gr_name == 'root'
+          - _mimir_data_stat.stat.pw_name == 'root'
+          - _mimir_data_stat.stat.gr_name == 'root'
+          - _minio_data_stat.stat.pw_name == 'root'
+          - _minio_data_stat.stat.gr_name == 'root'
+        fail_msg: "Service directories must be owned by root:root, not docker group"
+
+    # Run the role a second time with a changed value so Ansible
+    # overwrites the config and creates a backup file.
+
+    - name: Re-run role with changed mimir_log_level to trigger backup
+      include_role:
+        name: horde_monitoring
+      vars:
+        mimir_log_level: "info"
+        monitoring_start_services: false
+
+    - name: Find backup files for mimir.yaml
+      find:
+        paths: /etc/mimir
+        patterns: "mimir.yaml.*~"
+      register: _mimir_backups
+
+    - name: Find backup files for docker-compose.yml
+      find:
+        paths: /opt/mimir
+        patterns: "docker-compose.yml.*~"
+      register: _compose_backups
+
+    - name: Find backup files for runtime-overrides.yaml
+      find:
+        paths: /etc/mimir
+        patterns: "runtime-overrides.yaml.*~"
+      register: _overrides_backups
+
+    - name: Assert config backups were created
+      assert:
+        that:
+          - _mimir_backups.matched > 0
+        fail_msg: "Template tasks must create backup files before overwriting"
+
+    - name: Stat critical output files
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/mimir/mimir.yaml
+        - /etc/mimir/runtime-overrides.yaml
+        - /opt/mimir/docker-compose.yml
+        - /etc/grafana/provisioning/datasources/mimir.yml
+        - /etc/prometheus/rules/monitoring-stack.rules
+        - /usr/local/bin/haproxy_safe_edit.sh
+      register: _critical_files
+
+    - name: Assert all critical output files exist
+      assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Critical file missing: {{ item.item }}"
+      loop: "{{ _critical_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+
+    - name: Stat HAProxy safe edit script
+      stat:
+        path: /usr/local/bin/haproxy_safe_edit.sh
+      register: _haproxy_script_stat
+
+    - name: Assert HAProxy safe edit script is executable
+      assert:
+        that:
+          - _haproxy_script_stat.stat.exists
+          - _haproxy_script_stat.stat.mode == '0755'
+        fail_msg: "HAProxy safe edit script must exist and be mode 0755"
+
+
+    - name: Assert systemd unit contains required directives
+      assert:
+        that:
+          - "'Requires=docker.service' in (systemd_service.content | b64decode)"
+          - "'docker compose' in (systemd_service.content | b64decode)"
+          - "'WorkingDirectory=' in (systemd_service.content | b64decode)"
+          - "'Restart=on-failure' in (systemd_service.content | b64decode)"
+          - "'RestartSec=10s' in (systemd_service.content | b64decode)"
+          - "'ExecStartPre' in (systemd_service.content | b64decode)"
+          - "'pull' in (systemd_service.content | b64decode)"
+        fail_msg: "Systemd unit must reference docker.service, use docker compose, include image pull on boot, and set WorkingDirectory + Restart=on-failure"
+
+- name: Test fail-fast rejects default passwords
+  hosts: testhost
+  become: true
+  gather_facts: no
+
+  tasks:
+    - name: Attempt role with default passwords and start_services=true
+      block:
+        - name: Run role with default credentials (should fail)
+          include_role:
+            name: horde_monitoring
+          vars:
+            monitoring_install_mimir: true
+            monitoring_install_grafana: true
+            monitoring_configure_firewall: false
+            monitoring_configure_haproxy: false
+            monitoring_start_services: true
+            minio_root_password: "changeme-minio-secret"
+            grafana_admin_password: "changeme"
+
+        - name: Fail if role did not reject default passwords
+          fail:
+            msg: "Role should have failed with default passwords but did not"
+
+      rescue:
+        - name: Assert failure was specifically about default credentials
+          assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - >-
+                'default placeholder' in ansible_failed_result.msg or
+                'changeme-minio-secret' in ansible_failed_result.msg or
+                'changeme' in ansible_failed_result.msg
+            fail_msg: >-
+              Expected fail-fast password rejection but got an unexpected error:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm expected failure occurred
+          debug:
+            msg: "PASS — Fail-fast correctly rejected default credentials"

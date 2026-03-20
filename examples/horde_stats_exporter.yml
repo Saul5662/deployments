@@ -7,11 +7,11 @@
   become: true
 
   vars:
-    # Path to directory containing horde_exporter.py and related files
-    exporter_source_dir: "../files/horde-exporter"
+    # Git ref to install (branch, tag, or commit hash)
+    # exporter_repo_ref: main
 
     # Exporter configuration
-    exporter_port: 9100
+    exporter_port: 9150
     exporter_api_base_url: "https://aihorde.net/api/v2"
 
     # Enable downsampling

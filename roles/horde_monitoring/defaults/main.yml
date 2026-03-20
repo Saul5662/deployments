@@ -1,51 +1,175 @@
 ---
 # Default variables for horde_monitoring role
+#
+# This role deploys Mimir + Grafana via Docker Compose.
+# Prometheus is NOT managed by this role — deploy it directly in your playbook
+# using the prometheus.prometheus.prometheus community role.
 
-# Component installation flags
-monitoring_install_prometheus: true
+# Component flags
+monitoring_install_mimir: true
 monitoring_install_grafana: true
-monitoring_install_influxdb: false
-monitoring_enable_prometheus_backup: true
-
-# Firewall configuration
 monitoring_configure_firewall: false
+monitoring_configure_haproxy: false
 
-# Prometheus configuration
-prometheus_version: "2.45.0"
-prometheus_arch: "{{ ansible_architecture | regex_replace('x86_64', 'amd64') | regex_replace('aarch64', 'arm64') }}"
-prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-{{ prometheus_arch }}.tar.gz"
-prometheus_port: 9090
-# Retention: "0" omits the flag → Prometheus default (15d).
-# For indefinite retention, set a large value like "100y".
-prometheus_retention_time: "100y"
-prometheus_retention_size: "0"  # "0" omits the flag (no size limit). Set e.g. "50GB" to limit.
-prometheus_web_external_url: ""
-prometheus_scrape_interval: 15s
-prometheus_evaluation_interval: 30s
+# Set to false in CI/test environments to skip Docker Compose service startup
+# and health-check waits. All configs are still rendered and can be asserted on.
+monitoring_start_services: true
 
-# Grafana configuration
+# Mimir configuration (Docker-based, monolithic mode, S3 object storage via MinIO)
+mimir_port: 9009
+mimir_image: "grafana/mimir:2.15.0"
+mimir_config_dir: "/etc/mimir"
+mimir_data_dir: "/var/lib/mimir"
+mimir_compose_dir: "/opt/mimir"
+mimir_log_level: "warn"
+# Global compactor block retention. Empty string = leave unset and rely on tenant overrides.
+mimir_blocks_retention: ""
+mimir_runtime_config_period: "10s"
+
+# MinIO object storage (S3-compatible, local self-hosted)
+# MinIO provides the long-term block storage backend for Mimir.
+mimir_enable_minio: true
+minio_image: "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+minio_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+minio_api_port: 9000
+minio_console_port: 9001
+# Persistent data directory — all MinIO object data lives here.
+# Place on a dedicated volume/partition in production for isolation.
+minio_data_dir: "/var/lib/minio-data"
+minio_root_user: "mimir"
+minio_root_password: "changeme-minio-secret"
+minio_blocks_bucket: "mimir-blocks"
+minio_ruler_bucket: "mimir-ruler"
+minio_memory_limit: "512m"
+
+# Offsite backup via MinIO client mirror.
+# Only applies when mimir_enable_minio is true (MinIO is the storage backend).
+# Enabled by default because MinIO runs in single-drive mode with no
+# redundancy — a disk failure causes permanent data loss without backup.
+# Set mimir_backup_enabled: false to disable (a warning task will fire).
+# Has no effect when mimir_enable_minio: false.
+mimir_backup_enabled: true
+mimir_backup_schedule: "*-*-* 02:00:00"
+mimir_backup_target_endpoint: ""
+mimir_backup_target_bucket: ""
+mimir_backup_target_access_key: ""
+mimir_backup_target_secret_key: ""
+mimir_backup_target_insecure: false
+# Controls whether `mc mirror --remove` is passed, which deletes objects
+# from the remote that were deleted locally (e.g. by the compactor after
+# retention expires). Default: false (append-only — safer, remote retains
+# data beyond local retention). Set to true for parity mode (space-efficient
+# but propagates accidental deletions).
+mimir_backup_remove_deleted: false
+# Include Grafana's SQLite database (grafana.db) in the backup scope.
+# When true, grafana.db is copied into the MinIO ruler bucket before the
+# mirror runs, so it is included in the offsite backup. Provisioned
+# resources (orgs, datasources, dashboards) are re-created by the playbook,
+# but user preferences, annotations, API keys, and manual edits are not.
+mimir_backup_grafana_db: false
+
+# Default two-tenant retention model. Mimir requires X-Scope-OrgID on writes and queries
+# when multitenancy is enabled, so keep these tenant IDs aligned with Prometheus remote_write
+# headers and Grafana datasource provisioning.
+monitoring_application_tenant_id: "ai-horde-app"
+# ⚠ Infinite retention: blocks accumulate indefinitely (~2 GB/month at 50k series).
+# This is an intentional trade-off — full history is valuable, and disk usage is
+# bounded in practice by monitoring alerts (MinIODiskUsageCritical/Warning +
+# HostDiskUsageHigh). If growth becomes a problem, change to a bounded value
+# (e.g. "365d") — the compactor will garbage-collect blocks beyond the window.
+monitoring_application_retention: "0"
+monitoring_application_datasource_name: "AI Horde App"
+
+monitoring_infrastructure_tenant_id: "infrastructure"
+monitoring_infrastructure_retention: "30d"
+monitoring_infrastructure_datasource_name: "Infrastructure"
+
+# Public tenant — receives real-time data via dual remote_write plus downsampled
+# historical data.  Strict query limits protect Mimir from expensive anonymous queries.
+monitoring_public_tenant_id: "ai-horde-public"
+monitoring_public_retention: "90d"
+monitoring_public_datasource_name: "AI Horde"
+monitoring_public_max_query_length: "7d"
+monitoring_public_max_fetched_series: 50000
+
+# Additional runtime override entries keyed by tenant ID.
+mimir_extra_tenant_overrides: {}
+
+# Mimir performance tuning
+mimir_grpc_max_msg_size: 104857600
+mimir_max_global_series_per_user: 500000
+mimir_ingestion_rate: 10000
+mimir_ingestion_burst_size: 200000
+mimir_compaction_interval: "1h"
+mimir_compactor_deletion_delay: "12h"
+mimir_split_queries_interval: "24h"
+
+# Memcached caching layer (chunks, metadata, and query results)
+mimir_enable_memcached: true
+mimir_memcached_image: "memcached:1.6.41-alpine"
+mimir_memcached_port: 11211
+mimir_memcached_memory_mb: 512
+mimir_memcached_max_item_size: "5m"
+mimir_memcached_max_connections: 1024
+mimir_memcached_timeout: "500ms"
+mimir_memcached_max_idle: 100
+mimir_memcached_memory_limit: "768m"
+
+# Container resource limits
+mimir_memory_limit: "3g"
+grafana_memory_limit: "512m"
+
+# Grafana configuration (Docker-based, part of the Mimir compose stack)
+grafana_image: "grafana/grafana:12.4.1"
 grafana_port: 3000
-grafana_domain: localhost
-grafana_root_url: "http://{{ grafana_domain }}:{{ grafana_port }}"
+grafana_admin_user: "admin"
 grafana_admin_password: "changeme"
+# Set to external URL when behind a reverse proxy (e.g. https://grafana.example.com)
+grafana_root_url: ""
+grafana_data_dir: "/var/lib/grafana"
+grafana_provisioning_dir: "/etc/grafana/provisioning"
+grafana_dashboard_dir: "/etc/grafana/dashboards"
 
-# InfluxDB configuration
-influxdb_port: 8086
-influxdb_org: "Cubox"
-influxdb_bucket: "horde-metrics"
+# Multi-org: anonymous public organization for AI Horde application dashboards
+grafana_public_org_name: "AI Horde Public"
+grafana_public_org_id: 2
+grafana_anonymous_enabled: true
+grafana_anonymous_org_role: "Viewer"
+# Dashboard refresh floor and dataproxy timeout protect against expensive queries
+# (primary query protection is at the Mimir tenant limits level)
+grafana_min_refresh_interval: "5s"
+grafana_dataproxy_timeout: 30
 
-# Prometheus Backup configuration
-prometheus_backup_dir: "/var/backups/prometheus"
-prometheus_backup_url: "http://localhost:{{ prometheus_port }}"
-prometheus_backup_data_dir: "/var/lib/prometheus"
-prometheus_backup_log_file: "/var/log/prometheus-backup.log"
-prometheus_backup_metrics_file: "/var/lib/prometheus/textfile_collector/prometheus_backup.prom"
-prometheus_backup_schedule: "*-*-* 02:00:00"  # Daily at 2 AM
-prometheus_backup_schedule_hour: "02"
-prometheus_backup_schedule_minute: "00"
-prometheus_backup_random_delay: "300"  # 5 minutes randomized delay
-prometheus_backup_daily_retention: "7"  # Keep 7 days of daily backups
-prometheus_backup_monthly_retention: "12"  # Keep 12 months of monthly backups
-prometheus_backup_compression: "gzip"  # Options: gzip, zstd
-prometheus_backup_remote_enabled: false  # Enable remote backup sync
-prometheus_backup_remote_dest: ""  # Remote rsync destination (e.g., user@host:/path/)
+# Dashboard provisioning from horde-exporters repository
+grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
+# Pin to a release tag for reproducible deployments (e.g., "v1.2.0").
+# Using "main" always fetches the latest dashboards but may break if the
+# repo layout changes.
+grafana_dashboards_repo_ref: "main"
+grafana_provision_dashboards: true
+
+# Alertmanager datasource in Grafana
+# When set to a non-empty URL, provisions an Alertmanager datasource in Grafana
+# so alerts are visible in the Grafana Alerting UI.  In production (Alertmanager
+# native on host, Grafana in Docker), use "http://host.docker.internal:9093".
+# Leave empty to skip provisioning this datasource.
+monitoring_alertmanager_url: ""
+
+# Alerting rules for monitoring stack self-monitoring
+# Renders a Prometheus alerting rules file for Mimir, MinIO, and pipeline health.
+# The rules file is placed in the Prometheus rules directory and auto-loaded.
+# Set to false if you provide your own rules or don't use Prometheus alerting.
+monitoring_install_alerting_rules: true
+# Host-level disk alerts (HostDiskUsageCritical, HostDiskUsageHigh) depend on
+# node_exporter being deployed and scraped by Prometheus. If you don't run
+# node_exporter, set this to false — the alerts will silently never fire without it.
+monitoring_install_host_disk_alerts: true
+monitoring_alerting_rules_dir: "/etc/prometheus/rules"
+monitoring_alerting_rules_file: "monitoring-stack.rules"
+# Job names must match the job_name in your Prometheus scrape_configs
+monitoring_mimir_job_name: "mimir"
+monitoring_minio_job_name: "minio"
+
+# HAProxy configuration (safe edit with permanent rolling backups)
+haproxy_config_path: "/etc/haproxy/haproxy.cfg"
+haproxy_backup_dir: "/var/backups/haproxy"

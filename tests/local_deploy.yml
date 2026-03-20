@@ -1,0 +1,50 @@
+---
+# Local deployment playbook — renders the full monitoring stack config
+# into local-deploy/ for manual validation via Docker Compose.
+#
+# This playbook is driven by tests/local_deploy.sh — do not run directly.
+# It applies the horde_monitoring role against localhost with
+# monitoring_start_services=false so that only configs are rendered
+# (no systemd units are enabled/started).
+
+- name: Render monitoring stack for local validation
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: yes
+
+  vars:
+    _local_root: "{{ playbook_dir }}/../local-deploy"
+
+    # ── Component flags ──────────────────────────────────────────
+    monitoring_install_mimir: true
+    monitoring_install_grafana: true
+    monitoring_configure_haproxy: false
+    monitoring_configure_firewall: false
+    monitoring_start_services: false          # script starts compose directly
+
+    # ── Redirect all paths into local-deploy/ ────────────────────
+    mimir_config_dir: "{{ _local_root }}/mimir/config"
+    mimir_data_dir: "{{ _local_root }}/mimir/data"
+    mimir_compose_dir: "{{ _local_root }}/compose"
+    grafana_data_dir: "{{ _local_root }}/grafana/data"
+    grafana_provisioning_dir: "{{ _local_root }}/grafana/provisioning"
+    grafana_dashboard_dir: "{{ _local_root }}/grafana/dashboards"
+
+    # ── Sensible local defaults ──────────────────────────────────
+    grafana_admin_password: "localdev"
+    grafana_anonymous_enabled: true
+    grafana_provision_dashboards: true
+
+    # Tenants
+    monitoring_application_tenant_id: "ai-horde-app"
+    monitoring_infrastructure_tenant_id: "infrastructure"
+    monitoring_public_tenant_id: "ai-horde-public"
+
+    # Alertmanager — runs as Docker container in local-deploy
+    monitoring_alertmanager_url: "http://alertmanager:9093"
+    # Redirect alerting rules into local-deploy so they can be mounted
+    monitoring_alerting_rules_dir: "{{ _local_root }}/prometheus/rules"
+
+  roles:
+    - role: horde_monitoring

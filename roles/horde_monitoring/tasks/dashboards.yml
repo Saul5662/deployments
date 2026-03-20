@@ -1,0 +1,198 @@
+---
+# Fetch Grafana dashboards from horde-exporters and deploy them
+# into per-org directories with patched datasource UIDs.
+#
+# Layout on disk:
+#   {{ grafana_dashboard_dir }}/app/        -> app dashboards for Org 1 (uid: mimir-app)
+#   {{ grafana_dashboard_dir }}/app-public/  -> app dashboards for Org 2 (uid: mimir-public)
+#   {{ grafana_dashboard_dir }}/infra/       -> infra dashboards for Org 1 (uid: mimir-infra)
+
+- name: Install git (needed for dashboard checkout)
+  apt:
+    name: git
+    state: present
+  become: true
+
+- name: Create dashboard subdirectories
+  file:
+    path: "{{ grafana_dashboard_dir }}/{{ item }}"
+    state: directory
+    owner: "472"
+    group: "472"
+    mode: '0755'
+  become: true
+  loop:
+    - app
+    - app-public
+    - infra
+
+- name: Clone horde-exporters repository (shallow)
+  git:
+    repo: "{{ grafana_dashboards_repo_url }}"
+    dest: /tmp/horde-exporters-dashboards
+    version: "{{ grafana_dashboards_repo_ref }}"
+    depth: 1
+    force: yes
+  become: true
+  register: _dashboards_clone
+
+- name: Verify expected dashboard directories exist after clone
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
+    - /tmp/horde-exporters-dashboards/dashboards
+  register: _dashboard_dirs
+  become: true
+
+- name: Fail if dashboard directories are missing (repo structure changed?)
+  fail:
+    msg: >-
+      Expected dashboard directory {{ item.item }} not found after cloning
+      {{ grafana_dashboards_repo_url }} at ref {{ grafana_dashboards_repo_ref }}.
+      The repository layout may have changed — update the dashboard paths or
+      pin grafana_dashboards_repo_ref to a known-good tag.
+  when: not item.stat.exists
+  loop: "{{ _dashboard_dirs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Find app dashboard JSON files
+  find:
+    paths: /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
+    patterns: "*.json"
+  register: _app_dashboard_files
+  become: true
+
+- name: Find infra dashboard JSON files
+  find:
+    paths: /tmp/horde-exporters-dashboards/dashboards
+    patterns: "*.json"
+    recurse: yes
+  register: _infra_dashboard_files
+  become: true
+
+# --- Copy dashboards into their target directories -----------------------
+
+- name: Copy app dashboards for Org 1 (admin)
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ grafana_dashboard_dir }}/app/{{ item.path | basename }}"
+    remote_src: yes
+    owner: "472"
+    group: "472"
+    mode: '0644'
+  become: true
+  loop: "{{ _app_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  notify: restart monitoring stack
+
+- name: Copy app dashboards for Org 2 (public)
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ grafana_dashboard_dir }}/app-public/{{ item.path | basename }}"
+    remote_src: yes
+    owner: "472"
+    group: "472"
+    mode: '0644'
+  become: true
+  loop: "{{ _app_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  notify: restart monitoring stack
+
+- name: Copy infra dashboards for Org 1 (admin)
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ grafana_dashboard_dir }}/infra/{{ item.path | basename }}"
+    remote_src: yes
+    owner: "472"
+    group: "472"
+    mode: '0644'
+  become: true
+  loop: "{{ _infra_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  notify: restart monitoring stack
+
+# --- Patch datasource UIDs in each set of dashboards --------------------
+# The upstream JSON files may reference arbitrary datasource UIDs.  We
+# normalise them to the UIDs provisioned by this role so that Grafana
+# resolves the correct tenant-scoped Mimir datasource.
+
+- name: Patch datasource UID in Org 1 app dashboards (mimir-app)
+  ansible.builtin.replace:
+    path: "{{ grafana_dashboard_dir }}/app/{{ item.path | basename }}"
+    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
+    replace: '"uid": "mimir-app"'
+  become: true
+  loop: "{{ _app_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Patch datasource UID in Org 2 public dashboards (mimir-public)
+  ansible.builtin.replace:
+    path: "{{ grafana_dashboard_dir }}/app-public/{{ item.path | basename }}"
+    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
+    replace: '"uid": "mimir-public"'
+  become: true
+  loop: "{{ _app_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Patch datasource UID in infra dashboards (mimir-infra)
+  ansible.builtin.replace:
+    path: "{{ grafana_dashboard_dir }}/infra/{{ item.path | basename }}"
+    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
+    replace: '"uid": "mimir-infra"'
+  become: true
+  loop: "{{ _infra_dashboard_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+# Also patch any hardcoded datasource objects (type + uid pattern):
+#   { "type": "prometheus", "uid": "..." }
+# This catches dashboards that embed a literal UID rather than a variable.
+
+- name: Patch hardcoded datasource objects in Org 1 app dashboards
+  ansible.builtin.shell: |
+    python3 -c "
+    import json, sys, pathlib
+    p = pathlib.Path(sys.argv[1])
+    d = json.loads(p.read_text())
+    def patch(obj, uid):
+        if isinstance(obj, dict):
+            if obj.get('type') == 'prometheus' and 'uid' in obj:
+                obj['uid'] = uid
+            for v in obj.values():
+                patch(v, uid)
+        elif isinstance(obj, list):
+            for v in obj:
+                patch(v, uid)
+    patch(d, sys.argv[2])
+    p.write_text(json.dumps(d, indent=2))
+    " "{{ grafana_dashboard_dir }}/{{ item.0 }}/{{ item.1.path | basename }}" "{{ item.2 }}"
+  become: true
+  loop: "{{ _patch_targets }}"
+  loop_control:
+    label: "{{ item.0 }}/{{ item.1.path | basename }}"
+  vars:
+    _patch_targets: >-
+      {{
+        (_app_dashboard_files.files | product(['app']) | map('reverse') | map('list')
+         | product(['mimir-app']) | map('flatten') | list)
+        +
+        (_app_dashboard_files.files | product(['app-public']) | map('reverse') | map('list')
+         | product(['mimir-public']) | map('flatten') | list)
+        +
+        (_infra_dashboard_files.files | product(['infra']) | map('reverse') | map('list')
+         | product(['mimir-infra']) | map('flatten') | list)
+      }}
+  changed_when: false
+
+- name: Clean up cloned repository
+  file:
+    path: /tmp/horde-exporters-dashboards
+    state: absent
+  become: true

@@ -1,0 +1,127 @@
+# CI for haidra.deployments collection
+# Runs linting and integration tests on PRs and pushes to protected branches.
+#
+# Security model:
+#   - Lint and syntax-check jobs run on all triggers (no privileges needed).
+#   - Integration tests use --privileged Docker containers (systemd-in-Docker)
+#     and are restricted to push events only. Fork PRs cannot trigger them.
+#   - The render-check job (PRs) performs Ansible --syntax-check only — no
+#     Docker containers, no --privileged execution.
+#   - Enable "Require approval for all outside collaborators" in repo
+#     Settings → Actions for defense-in-depth.
+
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'roles/**'
+      - 'tests/**'
+      - 'examples/**'
+      - 'galaxy.yml'
+      - '.github/workflows/test.yml'
+  push:
+    branches: [main, prom-changes]
+    paths:
+      - 'roles/**'
+      - 'tests/**'
+      - 'examples/**'
+      - 'galaxy.yml'
+      - '.github/workflows/test.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Lint ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (YAML + Ansible)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install linters
+        run: pip install yamllint ansible-lint ansible
+
+      - name: yamllint
+        run: |
+          yamllint -d '{extends: default, rules: {line-length: {max: 200}, truthy: {check-keys: false}}}' \
+            roles/ tests/*.yml examples/
+
+      - name: ansible-lint
+        run: ansible-lint roles/ tests/test_*.yml examples/
+
+  # ── Template rendering / config assertion tests ────────────────────
+  integration:
+    name: Integration tests
+    # Only run on push (not fork PRs) — uses --privileged containers.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install collection dependencies
+        run: ansible-galaxy collection install -r galaxy.yml --force
+
+      - name: Cache test Docker image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/test-image.tar
+          key: test-image-${{ hashFiles('tests/Dockerfile.systemd') }}
+
+      - name: Load cached image (if available)
+        run: |
+          if [ -f /tmp/test-image.tar ]; then
+            docker load -i /tmp/test-image.tar
+          fi
+
+      - name: Run integration tests
+        run: bash tests/run_tests.sh
+
+      - name: Save test image for cache
+        if: always()
+        run: |
+          docker image inspect horde-test-systemd >/dev/null 2>&1 && \
+            docker save horde-test-systemd -o /tmp/test-image.tar || true
+
+  # ── Syntax + render validation on PRs (non-privileged) ──────────────
+  render-check:
+    name: Render check (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install collection dependencies
+        run: ansible-galaxy collection install -r galaxy.yml --force
+
+      - name: Syntax check all test playbooks
+        run: |
+          for pb in tests/test_*.yml; do
+            echo "--- Syntax-checking $pb ---"
+            ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
+          done

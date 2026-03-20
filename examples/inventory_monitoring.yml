@@ -1,36 +1,48 @@
 ---
 # Example inventory for AI Horde monitoring deployment
+#
+# Groups:
+#   mimir     - hosts running Mimir + Grafana + Prometheus
+#   haproxy   - hosts with HAProxy (may overlap with mimir)
+#   artbot    - hosts running the artbot service
+#   all       - every host gets node_exporter (Play 1)
 
 all:
   children:
-    monitoring:
+    mimir:
       hosts:
-        grafana.example.com:
+        monitoring.example.com:
           ansible_host: 192.168.1.100
           ansible_user: admin
           ansible_become: true
 
-          # Prometheus configuration
-          prometheus_version: "2.45.0"
-          prometheus_port: 9090
-          prometheus_retention_time: "100y"  # Effectively indefinite for horde stats
-          prometheus_web_external_url: "https://grafana.example.com/prometheus"
-
-          # Grafana configuration
+          # Mimir + Grafana configuration
+          mimir_port: 9009
           grafana_port: 3000
-          grafana_domain: "grafana.example.com"
-          grafana_root_url: "https://grafana.example.com"
+          grafana_admin_password: "{{ vault_grafana_admin_password }}"
+          # grafana_root_url: "https://grafana.example.com"
+          monitoring_application_tenant_id: "ai-horde-app"
+          monitoring_application_retention: "0"
+          monitoring_infrastructure_tenant_id: "infrastructure"
+          monitoring_infrastructure_retention: "30d"
 
-          # Stats exporter configuration
-          exporter_source_dir: "/path/to/horde-grafana"
-          exporter_port: 9100
+          # HAProxy integration
+          monitoring_configure_haproxy: true
+
+          # Stats exporter
+          exporter_port: 9150
           exporter_enable_downsampling: true
 
-          # Component flags
-          monitoring_install_prometheus: true
-          monitoring_install_grafana: true
-          monitoring_install_influxdb: false
+    haproxy:
+      hosts:
+        monitoring.example.com:  # same host — HAProxy co-located with monitoring
+
+    artbot:
+      hosts:
+        artbot.example.com:
+          ansible_host: 192.168.1.101
+          ansible_user: admin
+          ansible_become: true
 
   vars:
-    # Common variables
     ansible_python_interpreter: /usr/bin/python3

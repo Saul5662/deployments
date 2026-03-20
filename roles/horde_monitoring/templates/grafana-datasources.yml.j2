@@ -1,0 +1,59 @@
+# Grafana datasource provisioning - Mimir
+# Managed by Ansible - do not edit manually
+
+apiVersion: 1
+
+datasources:
+  # --- Org 1 (admin) datasources ---
+  - name: {{ monitoring_application_datasource_name }}
+    uid: mimir-app
+    orgId: 1
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_application_tenant_id }}
+  - name: {{ monitoring_infrastructure_datasource_name }}
+    uid: mimir-infra
+    orgId: 1
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
+{% if monitoring_alertmanager_url %}
+  - name: Alertmanager
+    uid: alertmanager
+    orgId: 1
+    type: alertmanager
+    access: proxy
+    url: {{ monitoring_alertmanager_url }}
+    isDefault: false
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false
+{% endif %}
+{% if grafana_anonymous_enabled | bool %}
+  # --- Org 2 (public / anonymous) datasource ---
+  - name: {{ monitoring_public_datasource_name }}
+    uid: mimir-public
+    orgId: {{ grafana_public_org_id }}
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_public_tenant_id }}
+{% endif %}

@@ -1,0 +1,99 @@
+---
+# HAProxy safe configuration management for monitoring backends
+# Deploys a safe edit utility and optionally inserts monitoring backend definitions
+
+- name: Create HAProxy backup directory
+  file:
+    path: "{{ haproxy_backup_dir }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Deploy HAProxy safe edit script
+  template:
+    src: haproxy_safe_edit.sh.j2
+    dest: /usr/local/bin/haproxy_safe_edit.sh
+    mode: '0755'
+  become: true
+
+- name: Check if HAProxy config exists
+  stat:
+    path: "{{ haproxy_config_path }}"
+  register: _haproxy_config
+  become: true
+
+- name: Create permanent timestamped backup
+  copy:
+    src: "{{ haproxy_config_path }}"
+    dest: "{{ haproxy_backup_dir }}/haproxy.cfg.{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: yes
+  become: true
+  when: _haproxy_config.stat.exists
+
+- name: Create temporary working file for HAProxy config
+  tempfile:
+    state: file
+    path: /tmp
+    prefix: haproxy_working.
+    suffix: .cfg
+  register: _haproxy_working_file
+  become: true
+  when: _haproxy_config.stat.exists
+
+- name: Create working copy of HAProxy config
+  copy:
+    src: "{{ haproxy_config_path }}"
+    dest: "{{ _haproxy_working_file.path }}"
+    remote_src: yes
+  become: true
+  when: _haproxy_config.stat.exists
+
+- name: Insert monitoring backends into working copy
+  blockinfile:
+    path: "{{ _haproxy_working_file.path }}"
+    marker: "# {mark} ANSIBLE MANAGED - MONITORING BACKENDS"
+    block: |
+      backend grafana_backend
+          balance leastconn
+          option forwardfor if-none
+          server grafana_local 127.0.0.1:{{ grafana_port }} check
+
+      backend mimir_backend
+          balance leastconn
+          timeout queue 30s
+          retries 3
+          option forwardfor if-none
+          server mimir_local 127.0.0.1:{{ mimir_port }} check observe layer7
+          http-check expect ! rstatus ^5
+  become: true
+  when: _haproxy_config.stat.exists
+  register: _haproxy_modified
+
+- name: Validate working copy with HAProxy config checker
+  command: haproxy -c -f {{ _haproxy_working_file.path }}
+  become: true
+  register: _haproxy_validation
+  when:
+    - _haproxy_config.stat.exists
+    - _haproxy_modified.changed
+
+- name: Promote validated config to live
+  copy:
+    src: "{{ _haproxy_working_file.path }}"
+    dest: "{{ haproxy_config_path }}"
+    remote_src: yes
+  become: true
+  when:
+    - _haproxy_config.stat.exists
+    - _haproxy_modified.changed
+    - _haproxy_validation.rc == 0
+  notify: reload haproxy
+
+- name: Clean up working copy
+  file:
+    path: "{{ _haproxy_working_file.path }}"
+    state: absent
+  become: true
+  when:
+    - _haproxy_config.stat.exists
+    - _haproxy_working_file.path is defined

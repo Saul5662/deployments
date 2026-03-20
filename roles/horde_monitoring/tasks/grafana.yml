@@ -1,49 +1,57 @@
 ---
-# Grafana installation and configuration
+# Grafana provisioning (datasources and dashboards)
+# Grafana runs as part of the Mimir Docker Compose stack
 
-- name: Install Grafana dependencies
-  apt:
-    name:
-      - apt-transport-https
-      - software-properties-common
-      - wget
-    state: present
-    update_cache: yes
-  become: true
-
-- name: Add Grafana GPG key
-  apt_key:
-    url: https://apt.grafana.com/gpg.key
-    state: present
-  become: true
-
-- name: Add Grafana APT repository
-  apt_repository:
-    repo: deb https://apt.grafana.com stable main
-    state: present
-    filename: grafana
-  become: true
-
-- name: Install Grafana
-  apt:
-    name: grafana
-    state: present
-    update_cache: yes
-  become: true
-
-- name: Template Grafana configuration
+- name: Template Grafana datasource provisioning
   template:
-    src: grafana.ini.j2
-    dest: /etc/grafana/grafana.ini
-    owner: root
-    group: grafana
-    mode: '0640'
+    src: grafana-datasources.yml.j2
+    dest: "{{ grafana_provisioning_dir }}/datasources/mimir.yml"
+    owner: "472"
+    group: "472"
+    # 0600: secureJsonData contains Mimir tenant IDs which control write
+    # access to tenant data. Grafana (UID 472) is the owner so can still
+    # read the file. Consistent with Plan 003's posture for secret files.
+    mode: '0600'
   become: true
-  notify: restart grafana
+  notify: restart monitoring stack
 
-- name: Enable and start Grafana
-  systemd:
-    name: grafana-server
-    enabled: yes
-    state: started
+- name: Template Grafana dashboard provider
+  template:
+    src: grafana-dashboards.yml.j2
+    dest: "{{ grafana_provisioning_dir }}/dashboards/default.yml"
+    owner: "472"
+    group: "472"
+    mode: '0600'
   become: true
+  notify: restart monitoring stack
+
+# --- Public org creation (requires running Grafana) ---
+- name: Wait for Grafana to be healthy
+  uri:
+    url: "http://127.0.0.1:{{ grafana_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 30
+  delay: 2
+  when:
+    - grafana_anonymous_enabled | bool
+    - monitoring_start_services | bool
+
+- name: Create public Grafana organization
+  uri:
+    url: "http://127.0.0.1:{{ grafana_port }}/api/orgs"
+    method: POST
+    user: "{{ grafana_admin_user }}"
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ grafana_public_org_name }}"
+    status_code: [200, 409]
+  register: org_create_result
+  changed_when: org_create_result.status == 200
+  when:
+    - grafana_anonymous_enabled | bool
+    - monitoring_start_services | bool

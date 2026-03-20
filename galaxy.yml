@@ -4,10 +4,12 @@ name: "deployments"
 version: "0.3.1"
 readme: "README.md"
 authors:
-  - Divided by Zer0 <mail@dbzer0.com>
-dependencies: {}
+    - Divided by Zer0 <mail@dbzer0.com>
+dependencies:
+    "prometheus.prometheus": ">=0.16.0,<1.0.0"
+    "grafana.grafana": ">=6.0.0,<7.0.0"
 license:
-  - "MIT"
+    - "AGPL-3.0-or-later"
 tags:
   - haidra
   - aihorde

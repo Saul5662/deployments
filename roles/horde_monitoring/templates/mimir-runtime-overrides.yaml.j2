@@ -1,0 +1,15 @@
+# Grafana Mimir runtime overrides
+# Managed by Ansible - do not edit manually
+
+overrides:
+  {{ monitoring_application_tenant_id }}:
+    compactor_blocks_retention_period: {{ monitoring_application_retention }}
+  {{ monitoring_infrastructure_tenant_id }}:
+    compactor_blocks_retention_period: {{ monitoring_infrastructure_retention }}
+  {{ monitoring_public_tenant_id }}:
+    compactor_blocks_retention_period: {{ monitoring_public_retention }}
+    max_total_query_length: {{ monitoring_public_max_query_length }}
+    max_fetched_series_per_query: {{ monitoring_public_max_fetched_series }}
+{% if mimir_extra_tenant_overrides %}
+{{ mimir_extra_tenant_overrides | to_nice_yaml(indent=2, sort_keys=False) | indent(2, False) }}
+{% endif %}

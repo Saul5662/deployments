@@ -1,19 +1,186 @@
 ---
-# Test playbook: Backup with zstd compression
-- name: Test horde_monitoring - Backup with zstd
+# Test playbook: Custom retention, backup templates, extra overrides, and
+# the alerting-rules-disabled path.  Validates configuration permutations
+# that are NOT covered by the full-stack or prometheus-only tests.
+- name: Test horde_monitoring - retention, backup, overrides, skip paths
   hosts: testhost
   become: true
   gather_facts: yes
 
   vars:
-    monitoring_install_prometheus: true
-    monitoring_install_grafana: false
-    monitoring_install_influxdb: false
-    monitoring_enable_prometheus_backup: true
+    monitoring_install_mimir: true
+    monitoring_install_grafana: true
     monitoring_configure_firewall: false
-    prometheus_version: "2.45.0"
-    prometheus_retention_time: "15d"
-    prometheus_backup_compression: "zstd"
+    monitoring_configure_haproxy: false
+    grafana_admin_password: "testpass123"
+    grafana_anonymous_enabled: false
+    monitoring_application_tenant_id: "app-metrics"
+    monitoring_application_retention: "0"
+    monitoring_infrastructure_tenant_id: "infra-metrics"
+    monitoring_infrastructure_retention: "7d"
+    monitoring_start_services: false
+    # Alerting rules disabled — tests the skip path
+    monitoring_install_alerting_rules: false
+    # Backup enabled — tests backup service/timer template rendering
+    mimir_backup_enabled: true
+    mimir_backup_target_endpoint: "https://s3.example.com"
+    mimir_backup_target_bucket: "mimir-backup"
+    mimir_backup_target_access_key: "test-access-key"
+    mimir_backup_target_secret_key: "test-secret-key"
+    # Extra tenant overrides — tests the merge path
+    mimir_extra_tenant_overrides:
+      custom-tenant:
+        compactor_blocks_retention_period: "180d"
+        max_global_series_per_user: 100000
 
   roles:
     - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir runtime overrides
+      slurp:
+        path: /etc/mimir/runtime-overrides.yaml
+      register: mimir_runtime_overrides
+
+    - name: Assert custom retention values
+      assert:
+        that:
+          - "'compactor_blocks_retention_period: 0' in (mimir_runtime_overrides.content | b64decode)"
+          - "'compactor_blocks_retention_period: 7d' in (mimir_runtime_overrides.content | b64decode)"
+
+    - name: Assert extra tenant overrides are merged
+      assert:
+        that:
+          - "'custom-tenant' in (mimir_runtime_overrides.content | b64decode)"
+          - "'180d' in (mimir_runtime_overrides.content | b64decode)"
+          - "'100000' in (mimir_runtime_overrides.content | b64decode)"
+
+    # ── Alerting rules skip path ──────────────────────────────────
+
+    - name: Check alerting rules file is absent (disabled)
+      stat:
+        path: /etc/prometheus/rules/monitoring-stack.rules
+      register: _rules_file
+
+    - name: Assert alerting rules were NOT rendered
+      assert:
+        that:
+          - not _rules_file.stat.exists
+        fail_msg: "Alerting rules should be absent when monitoring_install_alerting_rules=false"
+
+    # ── Backup service/timer template rendering ───────────────────
+
+    - name: Check backup systemd service was rendered
+      stat:
+        path: /etc/systemd/system/mimir-backup.service
+      register: _backup_service
+
+    - name: Check backup systemd timer was rendered
+      stat:
+        path: /etc/systemd/system/mimir-backup.timer
+      register: _backup_timer
+
+    - name: Assert backup units were rendered
+      assert:
+        that:
+          - _backup_service.stat.exists
+          - _backup_timer.stat.exists
+
+    - name: Read backup service content
+      slurp:
+        path: /etc/systemd/system/mimir-backup.service
+      register: backup_service_content
+
+    - name: Read backup timer content
+      slurp:
+        path: /etc/systemd/system/mimir-backup.timer
+      register: backup_timer_content
+
+    - name: Assert backup service content
+      assert:
+        that:
+          - "'mc mirror' in (backup_service_content.content | b64decode)"
+          - "'mimir-blocks' in (backup_service_content.content | b64decode)"
+          - "'mimir-ruler' in (backup_service_content.content | b64decode)"
+          - "'mimir-backup-blocks' in (backup_service_content.content | b64decode)"
+          - "'mimir-backup-ruler' in (backup_service_content.content | b64decode)"
+          - "'EnvironmentFile=' in (backup_service_content.content | b64decode)"
+          # Credentials must NOT appear in the service file (F-1B)
+          - "'test-access-key' not in (backup_service_content.content | b64decode)"
+          - "'test-secret-key' not in (backup_service_content.content | b64decode)"
+          - "'s3.example.com' not in (backup_service_content.content | b64decode)"
+
+    - name: Check backup env file was rendered
+      stat:
+        path: /etc/mimir/mimir-backup.env
+      register: _backup_env
+
+    - name: Assert backup env file exists and is restricted
+      assert:
+        that:
+          - _backup_env.stat.exists
+          - _backup_env.stat.mode == '0600'
+          - _backup_env.stat.pw_name == 'root'
+          - _backup_env.stat.gr_name == 'root'
+
+    - name: Read backup env file content
+      slurp:
+        path: /etc/mimir/mimir-backup.env
+      register: backup_env_content
+
+    - name: Assert backup env file contains credentials
+      assert:
+        that:
+          - "'test-access-key' in (backup_env_content.content | b64decode)"
+          - "'test-secret-key' in (backup_env_content.content | b64decode)"
+          - "'s3.example.com' in (backup_env_content.content | b64decode)"
+
+    - name: Assert backup timer content
+      assert:
+        that:
+          - "'OnCalendar' in (backup_timer_content.content | b64decode)"
+          - "'Persistent=true' in (backup_timer_content.content | b64decode)"
+
+    # Default is append-only (no --remove)
+
+    - name: Assert backup service uses append-only mode by default
+      assert:
+        that:
+          - "'--remove' not in (backup_service_content.content | b64decode)"
+        fail_msg: "Backup should default to append-only (no --remove)"
+
+    # ── Grafana anonymous disabled path ───────────────────────────
+
+    - name: Read Grafana datasources
+      slurp:
+        path: /etc/grafana/provisioning/datasources/mimir.yml
+      register: grafana_ds
+
+    - name: Assert no public org datasource when anonymous disabled
+      assert:
+        that:
+          - "'orgId: 2' not in (grafana_ds.content | b64decode)"
+          - "'mimir-public' not in (grafana_ds.content | b64decode)"
+
+    - name: Read rendered Docker Compose
+      slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: compose_config
+
+    - name: Assert anonymous auth is disabled in Grafana
+      assert:
+        that:
+          - "'ANONYMOUS_ENABLED=false' in (compose_config.content | b64decode)"
+
+    - name: Stat Docker Compose file permissions
+      stat:
+        path: /opt/mimir/docker-compose.yml
+      register: _compose_config_stat
+
+    - name: Assert secret-containing files are mode 0600 owned by root:root
+      assert:
+        that:
+          - _compose_config_stat.stat.mode == '0600'
+          - _compose_config_stat.stat.pw_name == 'root'
+          - _compose_config_stat.stat.gr_name == 'root'
+        fail_msg: "Secret-containing files must be mode 0600, owned root:root (Plan 003A)"

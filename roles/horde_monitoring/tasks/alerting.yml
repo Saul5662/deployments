@@ -1,0 +1,26 @@
+---
+# Deploy alerting rules for the monitoring stack
+# These Prometheus rules monitor Mimir, MinIO, and alerting pipeline health.
+#
+# The rendered rules file is placed in the Prometheus rules directory where
+# it is automatically loaded by Prometheus via the rule_files glob.
+# See Plan 011 (docs/plans/011-alertmanager.md) for architecture details.
+
+- name: Ensure Prometheus rules directory exists
+  file:
+    path: "{{ monitoring_alerting_rules_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Template monitoring stack alerting rules
+  template:
+    src: alerting-rules.yml.j2
+    dest: "{{ monitoring_alerting_rules_dir }}/{{ monitoring_alerting_rules_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: reload prometheus

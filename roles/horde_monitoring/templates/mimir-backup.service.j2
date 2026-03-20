@@ -1,0 +1,39 @@
+[Unit]
+Description=Mirror MinIO Mimir data to offsite S3-compatible storage
+Requires=mimir-monitoring.service
+After=mimir-monitoring.service
+
+[Service]
+Type=oneshot
+EnvironmentFile={{ mimir_config_dir }}/mimir-backup.env
+{% if mimir_backup_grafana_db | bool %}
+ExecStartPre=/usr/bin/docker run --rm --network host \
+  -v {{ grafana_data_dir }}:/grafana-data:ro \
+  -e MINIO_LOCAL_ENDPOINT \
+  -e MINIO_LOCAL_USER \
+  -e MINIO_LOCAL_PASSWORD \
+  {{ minio_mc_image }} \
+  /bin/sh -c "\
+    mc alias set local $$MINIO_LOCAL_ENDPOINT $$MINIO_LOCAL_USER $$MINIO_LOCAL_PASSWORD; \
+    mc cp /grafana-data/grafana.db local/{{ minio_ruler_bucket }}/grafana-backup/grafana.db; \
+  "
+{% endif %}
+ExecStart=/usr/bin/docker run --rm --network host \
+  -e MINIO_LOCAL_ENDPOINT \
+  -e MINIO_LOCAL_USER \
+  -e MINIO_LOCAL_PASSWORD \
+  -e BACKUP_REMOTE_ENDPOINT \
+  -e BACKUP_REMOTE_ACCESS_KEY \
+  -e BACKUP_REMOTE_SECRET_KEY \
+  -e BACKUP_REMOTE_INSECURE \
+  {{ minio_mc_image }} \
+  /bin/sh -c "\
+    mc alias set local $$MINIO_LOCAL_ENDPOINT $$MINIO_LOCAL_USER $$MINIO_LOCAL_PASSWORD; \
+    mc alias set remote $$BACKUP_REMOTE_ENDPOINT $$BACKUP_REMOTE_ACCESS_KEY $$BACKUP_REMOTE_SECRET_KEY{% if mimir_backup_target_insecure | bool %} --insecure{% endif %}; \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_blocks_bucket }} remote/{{ mimir_backup_target_bucket }}-blocks && \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_ruler_bucket }} remote/{{ mimir_backup_target_bucket }}-ruler; \
+  "
+ExecStartPost=/usr/bin/touch {{ minio_data_dir }}/.backup-last-success
+
+[Install]
+WantedBy=multi-user.target

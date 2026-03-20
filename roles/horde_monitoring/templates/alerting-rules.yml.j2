@@ -1,0 +1,217 @@
+# Alerting rules for the AI Horde monitoring stack
+# Managed by Ansible (horde_monitoring role) — do not edit manually
+#
+# These rules monitor the health of:
+#   - Mimir (metrics storage)
+#   - MinIO (S3 object storage backend)
+#   - The alerting pipeline itself (Watchdog dead man's switch)
+#
+# Placed in Prometheus rules directory (default: /etc/prometheus/rules/)
+# Prometheus loads files matching /etc/prometheus/rules/*.rules automatically.
+#
+# Requires Prometheus scrape configs for:
+#   - job="{{ monitoring_mimir_job_name }}" → localhost:{{ mimir_port }}/metrics
+#   - job="{{ monitoring_minio_job_name }}" → localhost:{{ minio_api_port }}/minio/v2/metrics/cluster
+#     (MinIO rules are only included when mimir_enable_minio is true)
+
+groups:
+  # --- Dead man's switch ---
+  # The Watchdog alert is always firing. If your notification channel stops
+  # receiving it, the alerting pipeline (Prometheus → Alertmanager → receiver)
+  # is broken. Route this to a dead man's switch service in production,
+  # or to a null receiver during initial setup.
+  - name: monitoring-stack-watchdog
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: "Alerting pipeline is functional"
+          description: >-
+            This is a dead man's switch alert — it fires continuously.
+            If this alert stops arriving at your notification channel,
+            investigate the Prometheus → Alertmanager → receiver pipeline.
+
+  # --- Mimir health ---
+  - name: mimir-health
+    rules:
+      - alert: MimirDown
+        expr: up{job="{{ monitoring_mimir_job_name }}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mimir is unreachable"
+          description: >-
+            The Mimir metrics endpoint (job={{ monitoring_mimir_job_name }})
+            has been unreachable for more than 2 minutes. Check the
+            mimir-monitoring systemd service and Docker container health
+            with: systemctl status mimir-monitoring && docker compose
+            -f {{ mimir_compose_dir }}/docker-compose.yml ps
+
+      - alert: MimirRequestErrors
+        expr: >-
+          100 * (
+            sum(rate(cortex_request_duration_seconds_count{job="{{ monitoring_mimir_job_name }}", status_code=~"5.."}[5m]))
+          /
+            clamp_min(sum(rate(cortex_request_duration_seconds_count{job="{{ monitoring_mimir_job_name }}"}[5m])), 1)
+          ) > 1
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mimir has a high HTTP error rate"
+          description: >-
+            More than 1% of Mimir HTTP requests have returned 5xx errors
+            over the past 15 minutes. Check Mimir logs for errors with:
+            docker logs mimir --since 15m
+
+      - alert: MimirIngestionStalled
+        expr: >-
+          sum(rate(cortex_ingester_ingested_samples_total{job="{{ monitoring_mimir_job_name }}"}[15m])) == 0
+            and
+          up{job="{{ monitoring_mimir_job_name }}"} == 1
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mimir ingestion has stalled"
+          description: >-
+            Mimir is up but no samples have been ingested for 30 minutes.
+            Verify that Prometheus remote_write is configured and that
+            Prometheus can reach Mimir at localhost:{{ mimir_port }}.
+
+      - alert: MimirCompactorFailed
+        expr: increase(cortex_compactor_runs_failed_total{job="{{ monitoring_mimir_job_name }}"}[2h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mimir compactor has failing runs"
+          description: >-
+            The Mimir compactor has had failed runs in the past 2 hours.
+            Possible causes include disk space exhaustion, corrupt blocks,
+            or MinIO connectivity issues. Check: docker logs mimir --since 2h | grep -i compact
+
+      - alert: MimirCompactorNotRunning
+        expr: >-
+          increase(cortex_compactor_runs_completed_total{job="{{ monitoring_mimir_job_name }}"}[6h]) == 0
+            and
+          up{job="{{ monitoring_mimir_job_name }}"} == 1
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mimir compactor has not run recently"
+          description: >-
+            The Mimir compactor has not completed a successful run in
+            the past 6 hours (checked continuously for 2 hours).
+            This may indicate a stuck compactor or a configuration issue.
+            Compaction interval is {{ mimir_compaction_interval }};
+            expected ~6 runs in the lookback window.
+
+{% if mimir_enable_minio | bool %}
+  # --- MinIO health ---
+  # These rules require the MinIO Prometheus endpoint to be scraped.
+  # See the example playbook for the scrape config:
+  #   job_name: {{ monitoring_minio_job_name }}
+  #   metrics_path: /minio/v2/metrics/cluster
+  - name: minio-health
+    rules:
+      - alert: MinIODown
+        expr: up{job="{{ monitoring_minio_job_name }}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO is unreachable"
+          description: >-
+            MinIO (job={{ monitoring_minio_job_name }}) has been unreachable
+            for more than 2 minutes. Mimir cannot store or retrieve metric
+            blocks without MinIO. Check: docker logs minio --since 5m
+
+      - alert: MinIODiskUsageCritical
+        expr: >-
+          (
+            minio_cluster_capacity_usable_free_bytes{job="{{ monitoring_minio_job_name }}"}
+          /
+            minio_cluster_capacity_usable_total_bytes{job="{{ monitoring_minio_job_name }}"}
+          ) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO disk usage exceeds 95%"
+          description: >-
+            MinIO free disk space is below 5%. Ingestion will fail when
+            disk is full. Immediate action: expand storage, reduce retention
+            (see monitoring_application_retention), or move data off-host.
+
+      - alert: MinIODiskUsageWarning
+        expr: >-
+          (
+            minio_cluster_capacity_usable_free_bytes{job="{{ monitoring_minio_job_name }}"}
+          /
+            minio_cluster_capacity_usable_total_bytes{job="{{ monitoring_minio_job_name }}"}
+          ) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MinIO disk usage exceeds 85%"
+          description: >-
+            MinIO free disk space is below 15%. Plan for storage expansion
+            or review retention settings before disk fills up. Current data
+            directory: {{ minio_data_dir }}
+{% endif %}
+
+  # --- Host filesystem disk usage (Plan 005C) ---
+  # These rules use node_exporter metrics to monitor the host partitions
+  # where monitoring data lives. They fire regardless of which service
+  # consumes the space (MinIO, Mimir, Docker logs, etc.).
+  #
+  # DEPENDENCY: Requires node_exporter running on the host and scraped
+  # by Prometheus. If node_exporter is not deployed, these alerts will
+  # silently never fire. The example playbook deploys node_exporter via
+  # the prometheus.prometheus role, but this role does not install it.
+  # Set monitoring_install_host_disk_alerts: false to disable these rules
+  # if node_exporter is not available.
+{% if monitoring_install_host_disk_alerts | default(true) | bool %}
+  - name: host-disk-usage
+    rules:
+      - alert: HostDiskUsageCritical
+        expr: >-
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          /
+            node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}
+          ) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host filesystem < 5% free on {{ '{{' }} $labels.mountpoint {{ '}}' }}"
+          description: >-
+            Filesystem mounted at {{ '{{' }} $labels.mountpoint {{ '}}' }} has less than
+            5% free space. If this is the root filesystem or a monitoring
+            data partition, services will fail imminently. Check disk usage
+            with: df -h {{ '{{' }} $labels.mountpoint {{ '}}' }}
+
+      - alert: HostDiskUsageHigh
+        expr: >-
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          /
+            node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}
+          ) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host filesystem < 15% free on {{ '{{' }} $labels.mountpoint {{ '}}' }}"
+          description: >-
+            Filesystem mounted at {{ '{{' }} $labels.mountpoint {{ '}}' }} has less than
+            15% free space. If this hosts monitoring data (MinIO, Mimir),
+            plan for expansion or review retention settings.
+{% endif %}

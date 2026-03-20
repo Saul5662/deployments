@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic MinIO Mimir backup to offsite storage
+
+[Timer]
+OnCalendar={{ mimir_backup_schedule }}
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
