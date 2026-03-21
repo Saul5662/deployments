@@ -6,6 +6,11 @@
 # It applies the horde_monitoring role against localhost with
 # monitoring_start_services=false so that only configs are rendered
 # (no systemd units are enabled/started).
+#
+# After the role runs, post_tasks render the remaining configs that are
+# outside the role's scope (Prometheus, Alertmanager, Exporter, Alloy,
+# and the Compose overlay).  The shell script sources the rendered
+# local-deploy.env for ports/credentials — nothing is hardcoded there.
 
 - name: Render monitoring stack for local validation
   hosts: localhost
@@ -19,6 +24,9 @@
     # ── Component flags ──────────────────────────────────────────
     monitoring_install_mimir: true
     monitoring_install_grafana: true
+    monitoring_install_loki: true
+    monitoring_install_tempo: true
+    monitoring_install_pyroscope: true
     monitoring_configure_haproxy: false
     monitoring_configure_firewall: false
     monitoring_start_services: false          # script starts compose directly
@@ -30,6 +38,12 @@
     grafana_data_dir: "{{ _local_root }}/grafana/data"
     grafana_provisioning_dir: "{{ _local_root }}/grafana/provisioning"
     grafana_dashboard_dir: "{{ _local_root }}/grafana/dashboards"
+    loki_config_dir: "{{ _local_root }}/loki/config"
+    loki_data_dir: "{{ _local_root }}/loki/data"
+    tempo_config_dir: "{{ _local_root }}/tempo/config"
+    tempo_data_dir: "{{ _local_root }}/tempo/data"
+    pyroscope_config_dir: "{{ _local_root }}/pyroscope/config"
+    pyroscope_data_dir: "{{ _local_root }}/pyroscope/data"
 
     # ── Sensible local defaults ──────────────────────────────────
     grafana_admin_password: "localdev"
@@ -41,10 +55,88 @@
     monitoring_infrastructure_tenant_id: "infrastructure"
     monitoring_public_tenant_id: "ai-horde-public"
 
+    # Loki / Tempo local settings
+    loki_retention_period: "168h"     # 7 days for local dev
+    tempo_trace_retention: "24h"      # 1 day for local dev
+    tempo_metrics_generator_enabled: true
+    tempo_metrics_generator_tenant_id: "infrastructure"
+
+    # Pyroscope local settings
+    pyroscope_retention_period: "0s"
+    pyroscope_self_profiling: true
+
     # Alertmanager — runs as Docker container in local-deploy
     monitoring_alertmanager_url: "http://alertmanager:9093"
     # Redirect alerting rules into local-deploy so they can be mounted
     monitoring_alerting_rules_dir: "{{ _local_root }}/prometheus/rules"
 
+    # ── Local-deploy-only variables (consumed by tests/templates/) ─
+    # Ports for services that the shell script manages
+    _local_prometheus_port: 9090
+    _local_alertmanager_port: 9093
+    _local_exporter_port: 9150
+    _local_alloy_http_port: 12345
+    _local_otlp_grpc_port: 4317
+    _local_otlp_http_port: 4318
+
+    # Pinned image versions — single source of truth
+    _local_alertmanager_image: "prom/alertmanager:v0.31.1"
+    _local_prometheus_image: "prom/prometheus:v3.10.0"
+    _local_exporter_base_image: "python:3.12-bookworm"
+    _local_alloy_image: "grafana/alloy:v1.8.1"
+
+    # Exporter install source
+    _local_exporter_repo_url: "https://github.com/Haidra-Org/horde-exporters"
+    _local_exporter_repo_ref: "main"
+
   roles:
     - role: horde_monitoring
+
+  # ── Render configs outside the role's scope ────────────────────
+  post_tasks:
+    - name: Create local-deploy subdirectories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ _local_root }}/prometheus"
+        - "{{ _local_root }}/alertmanager"
+        - "{{ _local_root }}/exporter"
+        - "{{ _local_root }}/alloy"
+
+    - name: Render Prometheus config
+      template:
+        src: local-deploy/prometheus.yml.j2
+        dest: "{{ _local_root }}/prometheus/prometheus.yml"
+        mode: '0644'
+
+    - name: Render Alertmanager config
+      template:
+        src: local-deploy/alertmanager.yml.j2
+        dest: "{{ _local_root }}/alertmanager/alertmanager.yml"
+        mode: '0644'
+
+    - name: Render exporter config
+      template:
+        src: local-deploy/exporter-config.yaml.j2
+        dest: "{{ _local_root }}/exporter/config.yaml"
+        mode: '0644'
+
+    - name: Render Alloy config
+      template:
+        src: local-deploy/alloy-config.alloy.j2
+        dest: "{{ _local_root }}/alloy/config.alloy"
+        mode: '0644'
+
+    - name: Render Docker Compose overlay
+      template:
+        src: local-deploy/docker-compose.local.yml.j2
+        dest: "{{ mimir_compose_dir }}/docker-compose.local.yml"
+        mode: '0644'
+
+    - name: Render local-deploy.env
+      template:
+        src: local-deploy/local-deploy.env.j2
+        dest: "{{ _local_root }}/local-deploy.env"
+        mode: '0644'

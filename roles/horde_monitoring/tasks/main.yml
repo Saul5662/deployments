@@ -8,6 +8,18 @@
   include_tasks: mimir.yml
   when: monitoring_install_mimir | bool
 
+- name: Deploy Loki log aggregation backend
+  include_tasks: loki.yml
+  when: monitoring_install_loki | bool
+
+- name: Deploy Tempo distributed tracing backend
+  include_tasks: tempo.yml
+  when: monitoring_install_tempo | bool
+
+- name: Deploy Pyroscope continuous profiling backend
+  include_tasks: pyroscope.yml
+  when: monitoring_install_pyroscope | bool
+
 - name: Configure Grafana provisioning
   include_tasks: grafana.yml
   when:

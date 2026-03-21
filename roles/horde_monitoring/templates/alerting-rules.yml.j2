@@ -166,6 +166,162 @@ groups:
             directory: {{ minio_data_dir }}
 {% endif %}
 
+{% if monitoring_install_loki | bool %}
+  # --- Loki health ---
+  # These rules monitor the Loki log aggregation backend.
+  # Requires a Prometheus scrape config for:
+  #   job="{{ monitoring_loki_job_name }}" → localhost:{{ loki_port }}/metrics
+  - name: loki-health
+    rules:
+      - alert: LokiDown
+        expr: up{job="{{ monitoring_loki_job_name }}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki is unreachable"
+          description: >-
+            The Loki metrics endpoint (job={{ monitoring_loki_job_name }})
+            has been unreachable for more than 2 minutes. Log ingestion
+            is disrupted. Check: docker logs loki --since 5m
+
+      - alert: LokiRequestErrors
+        expr: >-
+          100 * (
+            sum(rate(loki_request_duration_seconds_count{job="{{ monitoring_loki_job_name }}", status_code=~"5.."}[5m]))
+          /
+            clamp_min(sum(rate(loki_request_duration_seconds_count{job="{{ monitoring_loki_job_name }}"}[5m])), 1)
+          ) > 1
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki has a high HTTP error rate"
+          description: >-
+            More than 1% of Loki HTTP requests have returned 5xx errors
+            over the past 15 minutes. Check Loki logs for errors with:
+            docker logs loki --since 15m
+
+      - alert: LokiIngestionStalled
+        expr: >-
+          sum(rate(loki_distributor_bytes_received_total{job="{{ monitoring_loki_job_name }}"}[15m])) == 0
+            and
+          up{job="{{ monitoring_loki_job_name }}"} == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki log ingestion has stalled"
+          description: >-
+            Loki is up but no log data has been received for 30 minutes.
+            Verify that Alloy or other log shippers are sending to Loki
+            at localhost:{{ loki_port }}.
+{% endif %}
+
+{% if monitoring_install_tempo | bool %}
+  # --- Tempo health ---
+  # These rules monitor the Tempo distributed tracing backend.
+  # Requires a Prometheus scrape config for:
+  #   job="{{ monitoring_tempo_job_name }}" → localhost:{{ tempo_http_port }}/metrics
+  - name: tempo-health
+    rules:
+      - alert: TempoDown
+        expr: up{job="{{ monitoring_tempo_job_name }}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tempo is unreachable"
+          description: >-
+            The Tempo metrics endpoint (job={{ monitoring_tempo_job_name }})
+            has been unreachable for more than 2 minutes. Trace ingestion
+            is disrupted. Check: docker logs tempo --since 5m
+
+      - alert: TempoRequestErrors
+        expr: >-
+          100 * (
+            sum(rate(tempo_request_duration_seconds_count{job="{{ monitoring_tempo_job_name }}", status_code=~"5.."}[5m]))
+          /
+            clamp_min(sum(rate(tempo_request_duration_seconds_count{job="{{ monitoring_tempo_job_name }}"}[5m])), 1)
+          ) > 1
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tempo has a high HTTP error rate"
+          description: >-
+            More than 1% of Tempo HTTP requests have returned 5xx errors
+            over the past 15 minutes. Check Tempo logs for errors with:
+            docker logs tempo --since 15m
+
+      - alert: TempoIngestionStalled
+        expr: >-
+          sum(rate(tempo_distributor_spans_received_total{job="{{ monitoring_tempo_job_name }}"}[15m])) == 0
+            and
+          up{job="{{ monitoring_tempo_job_name }}"} == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tempo trace ingestion has stalled"
+          description: >-
+            Tempo is up but no spans have been received for 30 minutes.
+            Verify that Alloy or other OTLP sources are sending traces
+            to localhost:{{ tempo_otlp_grpc_port }}.
+{% endif %}
+
+{% if monitoring_install_pyroscope | bool %}
+  # --- Pyroscope health ---
+  # These rules monitor the Pyroscope continuous profiling backend.
+  # Requires a Prometheus scrape config for:
+  #   job="{{ monitoring_pyroscope_job_name }}" → localhost:{{ pyroscope_port }}/metrics
+  - name: pyroscope-health
+    rules:
+      - alert: PyroscopeDown
+        expr: up{job="{{ monitoring_pyroscope_job_name }}"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pyroscope is unreachable"
+          description: >-
+            The Pyroscope metrics endpoint (job={{ monitoring_pyroscope_job_name }})
+            has been unreachable for more than 2 minutes. Profile ingestion
+            is disrupted. Check: docker logs pyroscope --since 5m
+
+      - alert: PyroscopeRequestErrors
+        expr: >-
+          100 * (
+            sum(rate(pyroscope_request_duration_seconds_count{job="{{ monitoring_pyroscope_job_name }}", status_code=~"5.."}[5m]))
+          /
+            clamp_min(sum(rate(pyroscope_request_duration_seconds_count{job="{{ monitoring_pyroscope_job_name }}"}[5m])), 1)
+          ) > 1
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pyroscope has a high HTTP error rate"
+          description: >-
+            More than 1% of Pyroscope HTTP requests have returned 5xx errors
+            over the past 15 minutes. Check Pyroscope logs for errors with:
+            docker logs pyroscope --since 15m
+
+      - alert: PyroscopeIngestionStalled
+        expr: >-
+          sum(rate(pyroscope_ingester_ingested_sample_count{job="{{ monitoring_pyroscope_job_name }}"}[15m])) == 0
+            and
+          up{job="{{ monitoring_pyroscope_job_name }}"} == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pyroscope profile ingestion has stalled"
+          description: >-
+            Pyroscope is up but no profiles have been received for 30 minutes.
+            Verify that SDK agents are configured to push profiles to
+            localhost:{{ pyroscope_port }}.
+{% endif %}
+
   # --- Host filesystem disk usage (Plan 005C) ---
   # These rules use node_exporter metrics to monitor the host partitions
   # where monitoring data lives. They fire regardless of which service

@@ -1,0 +1,43 @@
+---
+# Deploy Pyroscope continuous profiling backend via Docker Compose
+# Pyroscope runs as part of the monitoring Docker Compose stack
+
+- name: Create Pyroscope config directory
+  file:
+    path: "{{ pyroscope_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Create Pyroscope data directory
+  file:
+    path: "{{ pyroscope_data_dir }}"
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: '0755'
+  become: true
+
+- name: Template Pyroscope configuration
+  template:
+    src: pyroscope.yaml.j2
+    dest: "{{ pyroscope_config_dir }}/pyroscope.yaml"
+    owner: root
+    group: "10001"
+    mode: '0640'
+    backup: yes
+  become: true
+  notify: restart monitoring stack
+
+- name: Template Pyroscope runtime overrides
+  template:
+    src: pyroscope-runtime-overrides.yaml.j2
+    dest: "{{ pyroscope_config_dir }}/runtime-overrides.yaml"
+    owner: root
+    group: "10001"
+    mode: '0640'
+    backup: yes
+  become: true
+  notify: restart monitoring stack

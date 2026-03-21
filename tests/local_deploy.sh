@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────
 # Local deployment of the full horde monitoring + exporter stack for
-# manual validation.  Renders configs via Ansible, adds Prometheus and
-# the AI Horde stats exporter, then starts everything via Docker Compose.
+# manual validation.  Renders ALL configs via Ansible (including
+# Prometheus, Alertmanager, Exporter, Alloy, and the Compose overlay),
+# then starts everything via Docker Compose.
+#
+# All ports, image versions, and configuration values are defined once
+# in tests/local_deploy.yml.  The Ansible playbook renders them into
+# config files and a local-deploy.env that this script sources.
+# Nothing is hardcoded here.
 #
 # Usage:
 #   ./tests/local_deploy.sh up       # render configs + start full stack
@@ -10,13 +16,8 @@
 #   ./tests/local_deploy.sh status   # show running containers
 #   ./tests/local_deploy.sh logs     # tail compose logs
 #
-# After "up", access:
-#   Grafana admin  →  http://localhost:3000  (admin / localdev)
-#   Grafana anon   →  http://localhost:3000  (switch to "AI Horde Public" org)
-#   Mimir API      →  http://localhost:9009/ready
-#   Prometheus     →  http://localhost:9090
-#   Alertmanager   →  http://localhost:9093
-#   Exporter raw   →  http://localhost:9150/metrics
+# After "up", access the URLs printed by the banner (ports come from
+# local_deploy.yml and are displayed after stack startup).
 # ─────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -24,15 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 COMPOSE_DIR="$LOCAL_ROOT/compose"
-GRAFANA_PORT=3000
-PROMETHEUS_PORT=9090
-ALERTMANAGER_PORT=9093
-EXPORTER_PORT=9150
-
-# Pinned image versions for local-deploy reproducibility (Plan 012)
-ALERTMANAGER_IMAGE="${ALERTMANAGER_IMAGE:-prom/alertmanager:v0.31.1}"
-PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-prom/prometheus:v3.10.0}"
-EXPORTER_BASE_IMAGE="${EXPORTER_BASE_IMAGE:-python:3.12-bookworm}"
+ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 
 # Colours
 if [ -t 1 ]; then
@@ -102,6 +95,20 @@ render_configs() {
   log "Config rendering complete."
 }
 
+# ── Load rendered environment ────────────────────────────────────────
+load_env() {
+  if [ ! -f "$ENV_FILE" ]; then
+    err "Environment file not found at $ENV_FILE — did render_configs fail?"
+    exit 1
+  fi
+  # Source only lines that look like VAR=value (skip comments / blanks).
+  # shellcheck disable=SC1090
+  set -a
+  source "$ENV_FILE"
+  set +a
+  log "Loaded environment from $ENV_FILE"
+}
+
 # ── Wait helper ───────────────────────────────────────────────────────
 wait_for_url() {
   local url="$1" label="$2" timeout="${3:-60}"
@@ -116,176 +123,6 @@ wait_for_url() {
   done
   warn "$label did not become ready within ${timeout}s"
   return 1
-}
-
-# ── Generate Prometheus + Exporter configs ───────────────────────────
-generate_local_configs() {
-  log "Generating Prometheus + exporter configs ..."
-
-  # ── Prometheus config ─────────────────────────────────────────────
-  mkdir -p "$LOCAL_ROOT/prometheus"
-  cat > "$LOCAL_ROOT/prometheus/prometheus.yml" <<'PROMEOF'
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-rule_files:
-  - /etc/prometheus/rules/*.rules
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - alertmanager:9093
-
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-
-  - job_name: 'mimir'
-    static_configs:
-      - targets: ['mimir:9009']
-
-  - job_name: 'horde-exporter'
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['horde-exporter:9150']
-
-remote_write:
-  - url: http://mimir:9009/api/v1/push
-    headers:
-      X-Scope-OrgID: ai-horde-app
-  - url: http://mimir:9009/api/v1/push
-    headers:
-      X-Scope-OrgID: infrastructure
-    write_relabel_configs:
-      - source_labels: [job]
-        regex: "prometheus|mimir"
-        action: keep
-  - url: http://mimir:9009/api/v1/push
-    headers:
-      X-Scope-OrgID: ai-horde-public
-    write_relabel_configs:
-      - source_labels: [job]
-        regex: horde-exporter
-        action: keep
-PROMEOF
-
-  # ── AI Horde Stats Exporter config ────────────────────────────────
-  mkdir -p "$LOCAL_ROOT/exporter"
-  cat > "$LOCAL_ROOT/exporter/config.yaml" <<'EXPEOF'
-scrape_intervals:
-  models: 8
-  workers: 300
-  performance: 2
-  stats: 120
-  modes: 30
-  teams: 300
-
-api:
-  base_url: "https://aihorde.net/api/v2"
-  user_agent: "horde_prometheus_exporter/local-dev"
-  timeout: 10
-
-exporter:
-  port: 9150
-  log_level: INFO
-EXPEOF
-
-  # ── Alertmanager config ───────────────────────────────────────────
-  mkdir -p "$LOCAL_ROOT/alertmanager"
-  cat > "$LOCAL_ROOT/alertmanager/alertmanager.yml" <<'AMEOF'
-global:
-  resolve_timeout: 5m
-
-route:
-  group_by: ['alertname', 'job']
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
-  receiver: default
-  routes:
-    - matchers:
-        - alertname="Watchdog"
-      receiver: "null"
-      repeat_interval: 5m
-
-receivers:
-  - name: default
-  - name: "null"
-
-inhibit_rules:
-  - source_matchers:
-      - severity="critical"
-    target_matchers:
-      - severity="warning"
-    equal: ['alertname', 'job']
-AMEOF
-
-  # ── Docker Compose override: Prometheus + Alertmanager + Exporter ─
-  cat > "$COMPOSE_DIR/docker-compose.local.yml" <<COMPEOF
-# Auto-generated by local_deploy.sh — adds Prometheus + Alertmanager + AI Horde Exporter
-services:
-  alertmanager:
-    image: ${ALERTMANAGER_IMAGE}
-    container_name: alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--web.listen-address=:9093'
-    volumes:
-      - $LOCAL_ROOT/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    ports:
-      - "127.0.0.1:${ALERTMANAGER_PORT}:9093"
-    restart: unless-stopped
-    networks:
-      - monitoring
-
-  prometheus:
-    image: ${PROMETHEUS_IMAGE}
-    container_name: prometheus
-    volumes:
-      - $LOCAL_ROOT/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - $LOCAL_ROOT/prometheus/rules:/etc/prometheus/rules:ro
-    ports:
-      - "127.0.0.1:${PROMETHEUS_PORT}:9090"
-    restart: unless-stopped
-    networks:
-      - monitoring
-    depends_on:
-      - mimir
-      - alertmanager
-
-  horde-exporter:
-    image: ${EXPORTER_BASE_IMAGE}
-    container_name: horde-exporter
-    entrypoint: ["sh", "-c"]
-    command:
-      - |
-        set -e
-        if [ ! -f /opt/exporter-venv/bin/horde-exporter ]; then
-          echo "Installing ai-horde-stats-exporter (first run) ..."
-          python -m venv /opt/exporter-venv
-          /opt/exporter-venv/bin/pip install --quiet \\
-            "ai-horde-stats-exporter @ git+https://github.com/Haidra-Org/horde-exporters@main#subdirectory=packages/ai-horde-stats-exporter"
-        else
-          echo "Exporter already installed, starting ..."
-        fi
-        exec /opt/exporter-venv/bin/horde-exporter --config /etc/exporter/config.yaml
-    volumes:
-      - exporter-venv:/opt/exporter-venv
-      - $LOCAL_ROOT/exporter/config.yaml:/etc/exporter/config.yaml:ro
-    ports:
-      - "127.0.0.1:${EXPORTER_PORT}:9150"
-    restart: unless-stopped
-    networks:
-      - monitoring
-
-volumes:
-  exporter-venv:
-COMPEOF
-
-  log "Local configs generated."
 }
 
 # ── Start the stack ──────────────────────────────────────────────────
@@ -322,7 +159,7 @@ with open(sys.argv[1], 'w') as f:
   log "Starting Docker Compose stack ..."
   dc up -d
 
-  wait_for_url "http://127.0.0.1:9009/ready" "Mimir" 60 || true
+  wait_for_url "http://127.0.0.1:${MIMIR_PORT}/ready" "Mimir" 60 || true
   wait_for_url "http://127.0.0.1:${GRAFANA_PORT}/api/health" "Grafana" 60 || true
 
   # Phase 2 — Create Org 2, restore full provisioning, restart Grafana.
@@ -330,9 +167,9 @@ with open(sys.argv[1], 'w') as f:
   local http_code
   http_code=$(curl -s -o /dev/null -w '%{http_code}' \
     -X POST "http://127.0.0.1:${GRAFANA_PORT}/api/orgs" \
-    -u "admin:localdev" \
+    -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
     -H "Content-Type: application/json" \
-    -d '{"name":"AI Horde Public"}' 2>/dev/null || echo "000")
+    -d "{\"name\":\"${GRAFANA_PUBLIC_ORG_NAME}\"}" 2>/dev/null || echo "000")
   case "$http_code" in
     200) log "Created Org 2 (AI Horde Public)." ;;
     409) info "Org 2 already exists." ;;
@@ -358,6 +195,12 @@ with open(sys.argv[1], 'w') as f:
   wait_for_url "http://127.0.0.1:${PROMETHEUS_PORT}/-/ready" "Prometheus" 60 || true
 
   wait_for_url "http://127.0.0.1:${ALERTMANAGER_PORT}/-/ready" "Alertmanager" 60 || true
+
+  wait_for_url "http://127.0.0.1:${LOKI_PORT}/ready" "Loki" 60 || true
+
+  wait_for_url "http://127.0.0.1:${TEMPO_HTTP_PORT}/ready" "Tempo" 60 || true
+
+  wait_for_url "http://127.0.0.1:${ALLOY_HTTP_PORT}/-/healthy" "Alloy" 60 || true
 
   log "Waiting for exporter to start (installs on first run) ..."
   wait_for_url "http://127.0.0.1:${EXPORTER_PORT}/metrics" "Exporter" 180 || true
@@ -400,12 +243,19 @@ compose_logs() {
 print_banner() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "Grafana (admin)   →  http://localhost:${GRAFANA_PORT}  (admin / localdev)"
-  info "Grafana (anon)    →  http://localhost:${GRAFANA_PORT}  (switch to 'AI Horde Public' org)"
+  info "Grafana (admin)   →  http://localhost:${GRAFANA_PORT}  (admin / ${GRAFANA_ADMIN_PASSWORD})"
+  info "Grafana (anon)    →  http://localhost:${GRAFANA_PORT}  (switch to '${GRAFANA_PUBLIC_ORG_NAME}' org)"
   info "Prometheus        →  http://localhost:${PROMETHEUS_PORT}"
   info "Alertmanager      →  http://localhost:${ALERTMANAGER_PORT}"
-  info "Mimir readiness   →  http://localhost:9009/ready"
+  info "Mimir readiness   →  http://localhost:${MIMIR_PORT}/ready"
+  info "Loki readiness    →  http://localhost:${LOKI_PORT}/ready"
+  info "Tempo readiness   →  http://localhost:${TEMPO_HTTP_PORT}/ready"
+  info "Alloy UI          →  http://localhost:${ALLOY_HTTP_PORT}"
   info "Exporter metrics  →  http://localhost:${EXPORTER_PORT}/metrics"
+  echo ""
+  info "OTLP endpoints (via Alloy):"
+  info "  gRPC  →  localhost:${TEMPO_OTLP_GRPC_PORT}"
+  info "  HTTP  →  http://localhost:${TEMPO_OTLP_HTTP_PORT}"
   echo ""
   info "Dashboards are provisioned from horde-exporters."
   info "  Org 1 (admin): 'AI Horde' + 'Infrastructure' folders"
@@ -414,6 +264,8 @@ print_banner() {
   info "Live data pipeline:"
   info "  horde-exporter → Prometheus → Mimir → Grafana"
   info "  Prometheus → Alertmanager (alerts visible in Grafana Alerting UI)"
+  info "  Alloy → Loki (container logs, explore in Grafana)"
+  info "  App → Alloy → Tempo (traces, explore in Grafana)"
   info "  Metrics should appear in dashboards within ~30s."
   echo ""
   info "Tear down:  $0 down"
@@ -428,7 +280,7 @@ main() {
     up)
       check_prerequisites
       render_configs
-      generate_local_configs
+      load_env
       compose_up
       print_banner
       ;;

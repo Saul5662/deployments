@@ -172,6 +172,14 @@
         that:
           - "'ANONYMOUS_ENABLED=false' in (compose_config.content | b64decode)"
 
+    # ── Pyroscope absent when disabled ────────────────────────────
+
+    - name: Assert Pyroscope is absent when not enabled
+      assert:
+        that:
+          - "'pyroscope' not in (compose_config.content | b64decode)"
+        fail_msg: "Pyroscope should not appear in Compose when monitoring_install_pyroscope is false"
+
     - name: Stat Docker Compose file permissions
       stat:
         path: /opt/mimir/docker-compose.yml
