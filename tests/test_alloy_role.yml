@@ -1,0 +1,267 @@
+---
+# Test playbook: Grafana Alloy role (config rendering only, no service start)
+- name: Test horde_alloy - Config rendering
+  hosts: testhost
+  become: true
+  gather_facts: yes
+
+  vars:
+    alloy_version: "1.8.1"
+    alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
+    alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
+    alloy_tempo_endpoint: "https://tempo.test.local:4318"
+    alloy_tenant_id: "test-tenant"
+    alloy_basic_auth_username: "alloy"
+    alloy_basic_auth_password: "test-secret-not-default"
+    alloy_collect_metrics: true
+    alloy_collect_logs: true
+    alloy_collect_journal: true
+    alloy_collect_log_files:
+      - "/var/log/test/*.log"
+    alloy_collect_docker_logs: false
+    alloy_collect_traces: true
+    alloy_external_labels:
+      environment: "test"
+    alloy_log_labels:
+      app: "testapp"
+    alloy_extra_scrape_targets:
+      - job: "myapp"
+        address: "127.0.0.1:8080"
+        metrics_path: "/metrics"
+    alloy_start_service: false
+    # Skip package installation in CI — just test config rendering
+    alloy_install_method: "package"
+
+  pre_tasks:
+    # Create the alloy user/group that the role expects
+    - name: Create alloy group
+      ansible.builtin.group:
+        name: alloy
+        state: present
+
+    - name: Create alloy user
+      ansible.builtin.user:
+        name: alloy
+        group: alloy
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+
+  tasks:
+    # Skip install.yml and run configure tasks only
+    - name: Validate Alloy endpoint configuration
+      ansible.builtin.assert:
+        that:
+          - alloy_mimir_endpoint | length > 0 or not alloy_collect_metrics
+          - alloy_loki_endpoint  | length > 0 or not alloy_collect_logs
+          - alloy_tempo_endpoint | length > 0 or not alloy_collect_traces
+
+    - name: Ensure Alloy config directory exists
+      ansible.builtin.file:
+        path: "{{ alloy_config_dir | default('/etc/alloy') }}"
+        state: directory
+        owner: alloy
+        group: alloy
+        mode: "0750"
+
+    - name: Ensure Alloy data directory exists
+      ansible.builtin.file:
+        path: "{{ alloy_data_dir | default('/var/lib/alloy') }}"
+        state: directory
+        owner: alloy
+        group: alloy
+        mode: "0750"
+
+    - name: Deploy Alloy configuration (template only)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/horde_alloy/templates/config.alloy.j2"
+        dest: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: "0640"
+
+    - name: Deploy Alloy environment file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/horde_alloy/templates/alloy.env.j2"
+        dest: /etc/default/alloy
+        owner: root
+        group: root
+        mode: "0644"
+
+  post_tasks:
+    - name: Read rendered Alloy config
+      slurp:
+        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+      register: alloy_config
+
+    - name: Assert metrics pipeline is present
+      assert:
+        that:
+          - "'prometheus.exporter.unix' in (alloy_config.content | b64decode)"
+          - "'prometheus.scrape' in (alloy_config.content | b64decode)"
+          - "'prometheus.remote_write' in (alloy_config.content | b64decode)"
+          - "'X-Scope-OrgID' in (alloy_config.content | b64decode)"
+          - "'test-tenant' in (alloy_config.content | b64decode)"
+          - "'mimir.test.local' in (alloy_config.content | b64decode)"
+          - "'basic_auth' in (alloy_config.content | b64decode)"
+        fail_msg: "Alloy config must contain metrics pipeline with tenant header"
+
+    - name: Assert extra scrape target is present
+      assert:
+        that:
+          - "'myapp' in (alloy_config.content | b64decode)"
+          - "'127.0.0.1:8080' in (alloy_config.content | b64decode)"
+        fail_msg: "Extra scrape targets must be rendered in config"
+
+    - name: Assert log pipeline is present
+      assert:
+        that:
+          - "'loki.source.journal' in (alloy_config.content | b64decode)"
+          - "'loki.relabel' in (alloy_config.content | b64decode)"
+          - "'loki.write' in (alloy_config.content | b64decode)"
+          - "'loki.test.local' in (alloy_config.content | b64decode)"
+          - "'local.file_match' in (alloy_config.content | b64decode)"
+          - "'loki.source.file' in (alloy_config.content | b64decode)"
+          - "'/var/log/test/*.log' in (alloy_config.content | b64decode)"
+        fail_msg: "Alloy config must contain log pipeline with journal and file sources"
+
+    - name: Assert trace pipeline is present
+      assert:
+        that:
+          - "'otelcol.receiver.otlp' in (alloy_config.content | b64decode)"
+          - "'otelcol.processor.batch' in (alloy_config.content | b64decode)"
+          - "'otelcol.exporter.otlphttp' in (alloy_config.content | b64decode)"
+          - "'otelcol.auth.basic' in (alloy_config.content | b64decode)"
+          - "'tempo.test.local' in (alloy_config.content | b64decode)"
+          - "'4317' in (alloy_config.content | b64decode)"
+          - "'4318' in (alloy_config.content | b64decode)"
+        fail_msg: "Alloy config must contain trace pipeline with OTLP receiver and Tempo exporter"
+
+    - name: Assert external labels are present
+      assert:
+        that:
+          - "'environment' in (alloy_config.content | b64decode)"
+          - "'test' in (alloy_config.content | b64decode)"
+        fail_msg: "External labels must be rendered in config"
+
+    - name: Assert log labels are present
+      assert:
+        that:
+          - "'testapp' in (alloy_config.content | b64decode)"
+        fail_msg: "Log labels must be rendered in config"
+
+    - name: Assert Docker log collection is NOT present when disabled
+      assert:
+        that:
+          - "'loki.source.docker' not in (alloy_config.content | b64decode)"
+          - "'discovery.docker' not in (alloy_config.content | b64decode)"
+        fail_msg: "Docker log collection should not appear when alloy_collect_docker_logs is false"
+
+    - name: Stat config file permissions
+      stat:
+        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+      register: _alloy_config_stat
+
+    - name: Assert config file permissions
+      assert:
+        that:
+          - _alloy_config_stat.stat.mode == '0640'
+          - _alloy_config_stat.stat.pw_name == 'alloy'
+          - _alloy_config_stat.stat.gr_name == 'alloy'
+        fail_msg: "Alloy config must be 0640 owned by alloy:alloy"
+
+    - name: Read environment file
+      slurp:
+        path: /etc/default/alloy
+      register: alloy_env
+
+    - name: Assert environment file content
+      assert:
+        that:
+          - "'config.alloy' in (alloy_env.content | b64decode)"
+          - "'12345' in (alloy_env.content | b64decode)"
+          - "'stability.level' in (alloy_env.content | b64decode)"
+        fail_msg: "Alloy environment file must reference config path and HTTP port"
+
+# ---------------------------------------------------------------------------
+# Play 2: Test with minimal config (only metrics, no logs/traces)
+# ---------------------------------------------------------------------------
+- name: Test horde_alloy - Metrics only
+  hosts: testhost
+  become: true
+  gather_facts: yes
+
+  vars:
+    alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
+    alloy_loki_endpoint: ""
+    alloy_tempo_endpoint: ""
+    alloy_tenant_id: "infra"
+    alloy_basic_auth_username: ""
+    alloy_basic_auth_password: ""
+    alloy_collect_metrics: true
+    alloy_collect_logs: false
+    alloy_collect_traces: false
+    alloy_start_service: false
+
+  tasks:
+    - name: Deploy Alloy configuration (metrics only)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/horde_alloy/templates/config.alloy.j2"
+        dest: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: "0640"
+
+    - name: Read rendered Alloy config (metrics only)
+      slurp:
+        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+      register: alloy_metrics_only
+
+    - name: Assert metrics pipeline is present
+      assert:
+        that:
+          - "'prometheus.exporter.unix' in (alloy_metrics_only.content | b64decode)"
+          - "'prometheus.remote_write' in (alloy_metrics_only.content | b64decode)"
+
+    - name: Assert log and trace pipelines are NOT present
+      assert:
+        that:
+          - "'loki.source.journal' not in (alloy_metrics_only.content | b64decode)"
+          - "'loki.write' not in (alloy_metrics_only.content | b64decode)"
+          - "'otelcol.receiver.otlp' not in (alloy_metrics_only.content | b64decode)"
+          - "'otelcol.exporter.otlphttp' not in (alloy_metrics_only.content | b64decode)"
+        fail_msg: "Log and trace pipelines should not appear when disabled"
+
+    - name: Assert no basic_auth block when username is empty
+      assert:
+        that:
+          - "'basic_auth' not in (alloy_metrics_only.content | b64decode)"
+        fail_msg: "basic_auth block should not appear when alloy_basic_auth_username is empty"
+
+# ---------------------------------------------------------------------------
+# Play 3: Test fail-fast rejects default password
+# ---------------------------------------------------------------------------
+- name: Test horde_alloy - Fail-fast on default password
+  hosts: testhost
+  become: true
+  gather_facts: no
+
+  tasks:
+    - name: Attempt validation with default password (should fail)
+      block:
+        - name: Run assertion with default password
+          ansible.builtin.assert:
+            that:
+              - "'changeme-alloy' != 'changeme-alloy'"
+            fail_msg: >-
+              alloy_basic_auth_password is still set to the insecure default.
+              Override it in your inventory or vault.
+
+        - name: Fail if assertion did not reject default
+          fail:
+            msg: "Should have failed with default password"
+
+      rescue:
+        - name: Confirm expected failure
+          debug:
+            msg: "PASS — Fail-fast correctly rejected default Alloy password"

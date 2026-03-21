@@ -31,7 +31,10 @@ ExecStart=/usr/bin/docker run --rm --network host \
     mc alias set local $$MINIO_LOCAL_ENDPOINT $$MINIO_LOCAL_USER $$MINIO_LOCAL_PASSWORD; \
     mc alias set remote $$BACKUP_REMOTE_ENDPOINT $$BACKUP_REMOTE_ACCESS_KEY $$BACKUP_REMOTE_SECRET_KEY{% if mimir_backup_target_insecure | bool %} --insecure{% endif %}; \
     mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_blocks_bucket }} remote/{{ mimir_backup_target_bucket }}-blocks && \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_ruler_bucket }} remote/{{ mimir_backup_target_bucket }}-ruler; \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_ruler_bucket }} remote/{{ mimir_backup_target_bucket }}-ruler{% if monitoring_install_loki | bool %} && \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ loki_chunks_bucket }} remote/{{ mimir_backup_target_bucket }}-loki-chunks{% endif %}{% if monitoring_install_tempo | bool %} && \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ tempo_traces_bucket }} remote/{{ mimir_backup_target_bucket }}-tempo-traces{% endif %}{% if monitoring_install_pyroscope | bool %} && \
+    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ pyroscope_blocks_bucket }} remote/{{ mimir_backup_target_bucket }}-pyroscope-data{% endif %}; \
   "
 ExecStartPost=/usr/bin/touch {{ minio_data_dir }}/.backup-last-success
 

@@ -1,0 +1,13 @@
+# Grafana Pyroscope runtime overrides
+# Managed by Ansible - do not edit manually
+
+overrides:
+  {{ monitoring_application_tenant_id }}:
+    compactor_blocks_retention_period: {{ pyroscope_application_retention }}
+  {{ monitoring_infrastructure_tenant_id }}:
+    compactor_blocks_retention_period: {{ pyroscope_infrastructure_retention }}
+  {{ monitoring_public_tenant_id }}:
+    compactor_blocks_retention_period: {{ pyroscope_public_retention }}
+{% if pyroscope_extra_tenant_overrides %}
+{{ pyroscope_extra_tenant_overrides | to_nice_yaml(indent=2, sort_keys=False) | indent(2, False) }}
+{% endif %}

@@ -1,0 +1,34 @@
+---
+# Grafana Alloy – role entry point
+# Deploys Alloy as a native systemd service on application hosts.
+# Collects metrics, logs, and traces; forwards to the central monitoring stack.
+
+- name: Validate Alloy endpoint configuration
+  ansible.builtin.assert:
+    that:
+      - alloy_mimir_endpoint | length > 0 or not alloy_collect_metrics
+      - alloy_loki_endpoint  | length > 0 or not alloy_collect_logs
+      - alloy_tempo_endpoint | length > 0 or not alloy_collect_traces
+    fail_msg: >-
+      Alloy endpoints must be configured when the corresponding collection
+      pipeline is enabled. Set alloy_mimir_endpoint, alloy_loki_endpoint,
+      and/or alloy_tempo_endpoint in your inventory.
+
+- name: Validate Alloy basic auth is not using default password
+  ansible.builtin.assert:
+    that:
+      - alloy_basic_auth_password != "changeme-alloy"
+    fail_msg: >-
+      alloy_basic_auth_password is still set to the insecure default.
+      Override it in your inventory or vault.
+  when: alloy_basic_auth_username | length > 0
+
+- name: Install Grafana Alloy
+  ansible.builtin.include_tasks: install.yml
+
+- name: Configure Grafana Alloy
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Deploy TLS CA certificate
+  ansible.builtin.include_tasks: tls.yml
+  when: alloy_tls_ca_cert | length > 0

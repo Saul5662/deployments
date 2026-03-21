@@ -314,3 +314,329 @@
         - name: Confirm expected failure occurred
           debug:
             msg: "PASS — Fail-fast correctly rejected default credentials"
+
+# ---------------------------------------------------------------------------
+# Play 3: Loki + Tempo integration tests
+# ---------------------------------------------------------------------------
+- name: Test horde_monitoring - Loki + Tempo enabled
+  hosts: testhost
+  become: true
+  gather_facts: yes
+
+  vars:
+    monitoring_install_mimir: true
+    monitoring_install_grafana: true
+    monitoring_install_loki: true
+    monitoring_install_tempo: true
+    monitoring_install_pyroscope: true
+    monitoring_configure_firewall: false
+    monitoring_configure_haproxy: true
+    grafana_admin_password: "testpass123"
+    monitoring_application_tenant_id: "app-metrics"
+    monitoring_infrastructure_tenant_id: "infra-metrics"
+    monitoring_public_tenant_id: "public-metrics"
+    monitoring_start_services: false
+    mimir_backup_enabled: false
+
+  roles:
+    - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Docker Compose (loki/tempo)
+      slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: compose_lt
+
+    - name: Assert Loki service is present in Compose
+      assert:
+        that:
+          - "'loki:' in (compose_lt.content | b64decode)"
+          - "'grafana/loki:3.4.2' in (compose_lt.content | b64decode)"
+          - "'3100:3100' in (compose_lt.content | b64decode)"
+          - "'loki-chunks' in (compose_lt.content | b64decode)"
+        fail_msg: "Docker Compose must contain a Loki service with pinned image tag"
+
+    - name: Assert Tempo service is present in Compose
+      assert:
+        that:
+          - "'tempo:' in (compose_lt.content | b64decode)"
+          - "'grafana/tempo:2.7.1' in (compose_lt.content | b64decode)"
+          - "'3200:3200' in (compose_lt.content | b64decode)"
+          - "'4317:4317' in (compose_lt.content | b64decode)"
+          - "'4318:4318' in (compose_lt.content | b64decode)"
+          - "'tempo-traces' in (compose_lt.content | b64decode)"
+        fail_msg: "Docker Compose must contain a Tempo service with pinned image tag"
+
+    - name: Assert no :latest tags in Compose
+      assert:
+        that:
+          - "':latest' not in (compose_lt.content | b64decode)"
+        fail_msg: "No :latest tags allowed in Docker Compose"
+
+    - name: Stat Loki config file
+      stat:
+        path: /etc/loki/loki.yaml
+      register: _loki_config_stat
+
+    - name: Assert Loki config exists with correct permissions
+      assert:
+        that:
+          - _loki_config_stat.stat.exists
+          - _loki_config_stat.stat.mode == '0640'
+        fail_msg: "Loki config must exist as 0640"
+
+    - name: Read Loki config
+      slurp:
+        path: /etc/loki/loki.yaml
+      register: loki_config
+
+    - name: Assert Loki config content
+      assert:
+        that:
+          - "'auth_enabled: true' in (loki_config.content | b64decode)"
+          - "'schema_config' in (loki_config.content | b64decode)"
+          - "'tsdb' in (loki_config.content | b64decode)"
+          - "'loki-chunks' in (loki_config.content | b64decode)"
+          - "'retention_period' in (loki_config.content | b64decode)"
+
+    - name: Stat Tempo config file
+      stat:
+        path: /etc/tempo/tempo.yaml
+      register: _tempo_config_stat
+
+    - name: Assert Tempo config exists with correct permissions
+      assert:
+        that:
+          - _tempo_config_stat.stat.exists
+          - _tempo_config_stat.stat.mode == '0640'
+        fail_msg: "Tempo config must exist as 0640"
+
+    - name: Read Tempo config
+      slurp:
+        path: /etc/tempo/tempo.yaml
+      register: tempo_config
+
+    - name: Assert Tempo config content
+      assert:
+        that:
+          - "'distributor' in (tempo_config.content | b64decode)"
+          - "'otlp' in (tempo_config.content | b64decode)"
+          - "'tempo-traces' in (tempo_config.content | b64decode)"
+          - "'block_retention' in (tempo_config.content | b64decode)"
+
+    - name: Read Grafana datasources
+      slurp:
+        path: /etc/grafana/provisioning/datasources/mimir.yml
+      register: grafana_ds_lt
+
+    - name: Assert Loki datasources are provisioned
+      assert:
+        that:
+          - "'loki-app' in (grafana_ds_lt.content | b64decode)"
+          - "'loki-infra' in (grafana_ds_lt.content | b64decode)"
+          - "'type: loki' in (grafana_ds_lt.content | b64decode)"
+        fail_msg: "Grafana must have Loki datasources provisioned"
+
+    - name: Assert Tempo datasource is provisioned
+      assert:
+        that:
+          - "'type: tempo' in (grafana_ds_lt.content | b64decode)"
+        fail_msg: "Grafana must have Tempo datasource provisioned"
+
+    - name: Read alerting rules
+      slurp:
+        path: /etc/prometheus/rules/monitoring-stack.rules
+      register: alerting_rules_lt
+
+    - name: Assert Loki alerting rules are present
+      assert:
+        that:
+          - "'LokiDown' in (alerting_rules_lt.content | b64decode)"
+          - "'LokiRequestErrors' in (alerting_rules_lt.content | b64decode)"
+          - "'LokiIngestionStalled' in (alerting_rules_lt.content | b64decode)"
+          - "'loki-health' in (alerting_rules_lt.content | b64decode)"
+        fail_msg: "Alerting rules must include Loki health alerts"
+
+    - name: Assert Tempo alerting rules are present
+      assert:
+        that:
+          - "'TempoDown' in (alerting_rules_lt.content | b64decode)"
+          - "'TempoRequestErrors' in (alerting_rules_lt.content | b64decode)"
+          - "'TempoIngestionStalled' in (alerting_rules_lt.content | b64decode)"
+          - "'tempo-health' in (alerting_rules_lt.content | b64decode)"
+        fail_msg: "Alerting rules must include Tempo health alerts"
+
+    - name: Assert Pyroscope alerting rules are present
+      assert:
+        that:
+          - "'PyroscopeDown' in (alerting_rules_lt.content | b64decode)"
+          - "'PyroscopeRequestErrors' in (alerting_rules_lt.content | b64decode)"
+          - "'PyroscopeIngestionStalled' in (alerting_rules_lt.content | b64decode)"
+          - "'pyroscope-health' in (alerting_rules_lt.content | b64decode)"
+        fail_msg: "Alerting rules must include Pyroscope health alerts"
+
+    - name: Assert Loki data directories exist
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/loki
+        - /var/lib/loki/index
+        - /var/lib/loki/chunks
+      register: _loki_dirs
+
+    - name: Validate Loki directories
+      assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+      loop: "{{ _loki_dirs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert Tempo data directories exist
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /var/lib/tempo
+        - /var/lib/tempo/wal
+        - /var/lib/tempo/blocks
+      register: _tempo_dirs
+
+    - name: Validate Tempo directories
+      assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+      loop: "{{ _tempo_dirs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # ── Pyroscope assertions ──────────────────────────────────────
+
+    - name: Assert Pyroscope service is present in Compose
+      assert:
+        that:
+          - "'pyroscope:' in (compose_lt.content | b64decode)"
+          - "'grafana/pyroscope:1.19.0' in (compose_lt.content | b64decode)"
+          - "'4040:4040' in (compose_lt.content | b64decode)"
+          - "'pyroscope-data' in (compose_lt.content | b64decode)"
+          - "'runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro' in (compose_lt.content | b64decode)"
+        fail_msg: "Docker Compose must contain a Pyroscope service with pinned image tag and runtime overrides mount"
+
+    - name: Stat Pyroscope config file
+      stat:
+        path: /etc/pyroscope/pyroscope.yaml
+      register: _pyroscope_config_stat
+
+    - name: Assert Pyroscope config exists with correct permissions
+      assert:
+        that:
+          - _pyroscope_config_stat.stat.exists
+          - _pyroscope_config_stat.stat.mode == '0640'
+        fail_msg: "Pyroscope config must exist as 0640"
+
+    - name: Read Pyroscope config
+      slurp:
+        path: /etc/pyroscope/pyroscope.yaml
+      register: pyroscope_config
+
+    - name: Assert Pyroscope config content
+      assert:
+        that:
+          - "'multitenancy_enabled: true' in (pyroscope_config.content | b64decode)"
+          - "'pyroscope-data' in (pyroscope_config.content | b64decode)"
+          - "'backend: s3' in (pyroscope_config.content | b64decode)"
+          - "'runtime_config' in (pyroscope_config.content | b64decode)"
+          - "'runtime-overrides.yaml' in (pyroscope_config.content | b64decode)"
+
+    - name: Stat Pyroscope runtime overrides
+      stat:
+        path: /etc/pyroscope/runtime-overrides.yaml
+      register: _pyroscope_overrides_stat
+
+    - name: Assert Pyroscope runtime overrides exist
+      assert:
+        that:
+          - _pyroscope_overrides_stat.stat.exists
+          - _pyroscope_overrides_stat.stat.mode == '0640'
+        fail_msg: "Pyroscope runtime overrides must exist as 0640"
+
+    - name: Read Pyroscope runtime overrides
+      slurp:
+        path: /etc/pyroscope/runtime-overrides.yaml
+      register: pyroscope_overrides
+
+    - name: Assert Pyroscope per-tenant overrides
+      assert:
+        that:
+          - "'ai-horde-app' in (pyroscope_overrides.content | b64decode)"
+          - "'infrastructure' in (pyroscope_overrides.content | b64decode)"
+          - "'ai-horde-public' in (pyroscope_overrides.content | b64decode)"
+          - "'compactor_blocks_retention_period' in (pyroscope_overrides.content | b64decode)"
+        fail_msg: "Pyroscope must have per-tenant retention overrides"
+
+    - name: Assert Pyroscope datasources are provisioned
+      assert:
+        that:
+          - "'pyroscope-app' in (grafana_ds_lt.content | b64decode)"
+          - "'pyroscope-infra' in (grafana_ds_lt.content | b64decode)"
+          - "'grafana-pyroscope-datasource' in (grafana_ds_lt.content | b64decode)"
+        fail_msg: "Grafana must have Pyroscope datasources provisioned"
+
+    - name: Assert Pyroscope data directory exists
+      stat:
+        path: /var/lib/pyroscope
+      register: _pyroscope_data_dir
+
+    - name: Validate Pyroscope data directory
+      assert:
+        that:
+          - _pyroscope_data_dir.stat.exists
+          - _pyroscope_data_dir.stat.isdir
+
+# ---------------------------------------------------------------------------
+# Play 4: Verify Loki+Tempo are NOT present when disabled
+# ---------------------------------------------------------------------------
+- name: Test horde_monitoring - Loki + Tempo disabled (negative test)
+  hosts: testhost
+  become: true
+  gather_facts: yes
+
+  vars:
+    monitoring_install_mimir: true
+    monitoring_install_grafana: true
+    monitoring_install_loki: false
+    monitoring_install_tempo: false
+    monitoring_configure_firewall: false
+    monitoring_configure_haproxy: false
+    grafana_admin_password: "testpass123"
+    monitoring_start_services: false
+    mimir_backup_enabled: false
+
+  roles:
+    - role: horde_monitoring
+
+  post_tasks:
+    - name: Read Docker Compose (disabled loki/tempo)
+      slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: compose_disabled
+
+    - name: Assert Loki and Tempo are NOT in Compose when disabled
+      assert:
+        that:
+          - "'grafana/loki' not in (compose_disabled.content | b64decode)"
+          - "'grafana/tempo' not in (compose_disabled.content | b64decode)"
+        fail_msg: "Loki/Tempo should not appear in Compose when disabled"
+
+    - name: Read alerting rules (disabled)
+      slurp:
+        path: /etc/prometheus/rules/monitoring-stack.rules
+      register: alerting_disabled
+
+    - name: Assert Loki and Tempo alerts are NOT present when disabled
+      assert:
+        that:
+          - "'LokiDown' not in (alerting_disabled.content | b64decode)"
+          - "'TempoDown' not in (alerting_disabled.content | b64decode)"
+        fail_msg: "Loki/Tempo alerts should not be present when those components are disabled"

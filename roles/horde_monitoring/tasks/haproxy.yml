@@ -48,23 +48,55 @@
   become: true
   when: _haproxy_config.stat.exists
 
+- name: Build monitoring backends block content
+  set_fact:
+    _haproxy_backends_block: >-
+      {{
+        [
+          'backend grafana_backend',
+          '    balance leastconn',
+          '    option forwardfor if-none',
+          '    server grafana_local 127.0.0.1:' ~ grafana_port ~ ' check',
+          '',
+          'backend mimir_backend',
+          '    balance leastconn',
+          '    timeout queue 30s',
+          '    retries 3',
+          '    option forwardfor if-none',
+          '    server mimir_local 127.0.0.1:' ~ mimir_port ~ ' check observe layer7',
+          '    http-check expect ! rstatus ^5',
+        ]
+        + (
+          [
+            '',
+            'backend loki_backend',
+            '    balance leastconn',
+            '    timeout queue 30s',
+            '    retries 3',
+            '    option forwardfor if-none',
+            '    server loki_local 127.0.0.1:' ~ loki_port ~ ' check observe layer7',
+            '    http-check expect ! rstatus ^5',
+          ] if (monitoring_install_loki | bool) else []
+        )
+        + (
+          [
+            '',
+            'backend tempo_otlp_backend',
+            '    balance leastconn',
+            '    timeout queue 30s',
+            '    retries 3',
+            '    option forwardfor if-none',
+            '    server tempo_local 127.0.0.1:' ~ tempo_otlp_http_port ~ ' check',
+          ] if (monitoring_install_tempo | bool) else []
+        )
+      | join('\n') }}
+  when: _haproxy_config.stat.exists
+
 - name: Insert monitoring backends into working copy
   blockinfile:
     path: "{{ _haproxy_working_file.path }}"
     marker: "# {mark} ANSIBLE MANAGED - MONITORING BACKENDS"
-    block: |
-      backend grafana_backend
-          balance leastconn
-          option forwardfor if-none
-          server grafana_local 127.0.0.1:{{ grafana_port }} check
-
-      backend mimir_backend
-          balance leastconn
-          timeout queue 30s
-          retries 3
-          option forwardfor if-none
-          server mimir_local 127.0.0.1:{{ mimir_port }} check observe layer7
-          http-check expect ! rstatus ^5
+    block: "{{ _haproxy_backends_block }}"
   become: true
   when: _haproxy_config.stat.exists
   register: _haproxy_modified

@@ -1,0 +1,60 @@
+---
+# Install Grafana Alloy from the official Grafana APT/RPM repository.
+# Uses the modern signed-by approach (no apt-key).
+
+- name: Install prerequisite packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - software-properties-common
+      - gpg
+    state: present
+    update_cache: true
+  become: true
+  when: ansible_os_family == "Debian"
+
+- name: Add Grafana GPG signing key
+  ansible.builtin.get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: "0644"
+  become: true
+  when: ansible_os_family == "Debian"
+
+- name: Add Grafana APT repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/grafana.asc]
+      https://apt.grafana.com stable main
+    state: present
+    filename: grafana
+  become: true
+  when: ansible_os_family == "Debian"
+
+- name: Install Alloy package (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: "alloy={{ alloy_version }}*"
+    state: present
+    update_cache: true
+  become: true
+  notify: restart alloy
+  when: ansible_os_family == "Debian"
+
+- name: Add Grafana RPM repository
+  ansible.builtin.yum_repository:
+    name: grafana
+    description: Grafana OSS packages
+    baseurl: https://rpm.grafana.com
+    gpgcheck: true
+    gpgkey: https://rpm.grafana.com/gpg.key
+    enabled: true
+  become: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install Alloy package (RHEL/CentOS)
+  ansible.builtin.dnf:
+    name: "alloy-{{ alloy_version }}"
+    state: present
+  become: true
+  notify: restart alloy
+  when: ansible_os_family == "RedHat"

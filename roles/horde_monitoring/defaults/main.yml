@@ -169,6 +169,136 @@ monitoring_alerting_rules_file: "monitoring-stack.rules"
 # Job names must match the job_name in your Prometheus scrape_configs
 monitoring_mimir_job_name: "mimir"
 monitoring_minio_job_name: "minio"
+monitoring_loki_job_name: "loki"
+monitoring_tempo_job_name: "tempo"
+monitoring_pyroscope_job_name: "pyroscope"
+
+# ---------------------------------------------------------------------------
+# Loki (log aggregation — Docker-based, monolithic mode, S3 via MinIO)
+# ---------------------------------------------------------------------------
+# Opt-in: set to true to deploy Loki alongside Mimir in the Docker Compose stack.
+# When enabled, Loki stores logs in MinIO and is accessible at localhost:3100.
+monitoring_install_loki: false
+
+loki_image: "grafana/loki:3.4.2"
+loki_port: 3100
+loki_grpc_port: 9095
+loki_config_dir: "/etc/loki"
+loki_data_dir: "/var/lib/loki"
+loki_memory_limit: "2g"
+loki_log_level: "warn"
+
+# Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
+loki_auth_enabled: true
+
+# MinIO bucket for Loki log chunks and index data
+loki_chunks_bucket: "loki-chunks"
+
+# Retention via the compactor. Set to "0" to disable (infinite retention).
+# Uses Go duration format: "2160h" = 90 days.
+loki_retention_enabled: true
+loki_retention_period: "2160h"
+
+# Per-tenant limit overrides (keyed by tenant ID). Example:
+#   loki_tenant_overrides:
+#     ai-horde-app:
+#       retention_period: "8760h"
+loki_tenant_overrides: {}
+
+# Ingestion rate limits (per-tenant defaults)
+loki_ingestion_rate_mb: 10
+loki_ingestion_burst_size_mb: 20
+loki_max_streams_per_user: 10000
+
+# Query limits
+loki_max_query_length: "721h"
+loki_max_query_lookback: "2160h"
+
+# Structured metadata (enables trace_id/span_id on log lines from OTLP sources)
+loki_allow_structured_metadata: true
+
+# ---------------------------------------------------------------------------
+# Tempo (distributed tracing — Docker-based, monolithic mode, S3 via MinIO)
+# ---------------------------------------------------------------------------
+# Opt-in: set to true to deploy Tempo alongside Mimir in the Docker Compose stack.
+# When enabled, Tempo receives OTLP traces and stores them in MinIO.
+monitoring_install_tempo: false
+
+tempo_image: "grafana/tempo:2.7.1"
+tempo_http_port: 3200
+tempo_otlp_grpc_port: 4317
+tempo_otlp_http_port: 4318
+tempo_config_dir: "/etc/tempo"
+tempo_data_dir: "/var/lib/tempo"
+tempo_memory_limit: "2g"
+tempo_log_level: "warn"
+
+# MinIO bucket for Tempo trace blocks
+tempo_traces_bucket: "tempo-traces"
+
+# Trace retention — the compactor removes blocks older than this.
+# Uses Go duration format: "168h" = 7 days.
+tempo_trace_retention: "168h"
+
+# Metrics generator — derives RED metrics from traces and remote_writes them
+# to Mimir. Enables service graph and span metrics visualisations in Grafana.
+tempo_metrics_generator_enabled: true
+# Tenant ID used when the metrics generator writes to Mimir via remote_write.
+tempo_metrics_generator_tenant_id: "infrastructure"
+# Processors to enable (service-graphs provides service map, span-metrics provides RED).
+tempo_metrics_generator_processors:
+  - "service-graphs"
+  - "span-metrics"
+
+# OTLP receiver bind address inside Docker.
+# 0.0.0.0 within the container — external access is controlled by Docker port
+# mapping (127.0.0.1 by default) and HAProxy for remote ingest.
+tempo_otlp_bind_address: "0.0.0.0"
+
+# Ingester tuning (conservative for ≤10 host deployments)
+tempo_ingester_trace_idle_period: "10s"
+tempo_ingester_max_block_bytes: 1000000
+tempo_ingester_max_block_duration: "5m"
+
+# ---------------------------------------------------------------------------
+# Pyroscope (continuous profiling — Docker-based, monolithic mode, S3 via MinIO)
+# ---------------------------------------------------------------------------
+# Opt-in: set to true to deploy Pyroscope alongside Mimir in the Docker Compose stack.
+# When enabled, Pyroscope receives profiling data and stores it in MinIO.
+monitoring_install_pyroscope: false
+
+pyroscope_image: "grafana/pyroscope:1.19.0"
+pyroscope_port: 4040
+pyroscope_memberlist_port: 7946
+pyroscope_config_dir: "/etc/pyroscope"
+pyroscope_data_dir: "/var/lib/pyroscope"
+pyroscope_memory_limit: "2g"
+pyroscope_log_level: "warn"
+
+# Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
+pyroscope_auth_enabled: true
+
+# MinIO bucket for Pyroscope profile data
+pyroscope_blocks_bucket: "pyroscope-data"
+
+# Global retention default (applies to tenants without overrides).
+# Uses Go duration format: "0s" = infinite retention.
+pyroscope_retention_period: "0s"
+
+# Per-tenant retention (matches Mimir's multi-tenant model).
+pyroscope_application_retention: "0"
+pyroscope_infrastructure_retention: "30d"
+pyroscope_public_retention: "90d"
+
+# Additional per-tenant override entries (dict). Merged into runtime-overrides.yaml.
+pyroscope_extra_tenant_overrides: {}
+
+# Self-profiling: Pyroscope profiles itself for debugging/monitoring
+pyroscope_self_profiling: true
+
+# Ingestion rate limit (MB/s per tenant)
+pyroscope_ingestion_rate_mb: 4
+pyroscope_ingestion_burst_size_mb: 2
 
 # HAProxy configuration (safe edit with permanent rolling backups)
 haproxy_config_path: "/etc/haproxy/haproxy.cfg"

@@ -50,6 +50,15 @@ services:
       until mc alias set local http://minio:9000 $$MINIO_INIT_USER $$MINIO_INIT_PASSWORD; do sleep 2; done;
       mc mb --ignore-existing local/{{ minio_blocks_bucket }};
       mc mb --ignore-existing local/{{ minio_ruler_bucket }};
+{% if monitoring_install_loki | bool %}
+      mc mb --ignore-existing local/{{ loki_chunks_bucket }};
+{% endif %}
+{% if monitoring_install_tempo | bool %}
+      mc mb --ignore-existing local/{{ tempo_traces_bucket }};
+{% endif %}
+{% if monitoring_install_pyroscope | bool %}
+      mc mb --ignore-existing local/{{ pyroscope_blocks_bucket }};
+{% endif %}
       exit 0;
       "
     logging:
@@ -174,6 +183,127 @@ services:
       - monitoring
     depends_on:
       - mimir
+{% if monitoring_install_loki | bool %}
+      - loki
+{% endif %}
+{% if monitoring_install_tempo | bool %}
+      - tempo
+{% endif %}
+{% if monitoring_install_pyroscope | bool %}
+      - pyroscope
+{% endif %}
+{% endif %}
+
+{% if monitoring_install_loki | bool %}
+  loki:
+    image: {{ loki_image }}
+    container_name: loki
+    command:
+      - "-config.file=/etc/loki/loki.yaml"
+    ports:
+      - "127.0.0.1:{{ loki_port }}:{{ loki_port }}"
+    volumes:
+      - {{ loki_config_dir }}/loki.yaml:/etc/loki/loki.yaml:ro
+      - {{ loki_data_dir }}:/loki
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {{ loki_memory_limit }}
+    logging:
+      driver: local
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ loki_port }}/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+{% if mimir_enable_minio | bool %}
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+{% endif %}
+    networks:
+      - monitoring
+{% endif %}
+
+{% if monitoring_install_tempo | bool %}
+  tempo:
+    image: {{ tempo_image }}
+    container_name: tempo
+    command:
+      - "-config.file=/etc/tempo/tempo.yaml"
+    ports:
+      - "127.0.0.1:{{ tempo_http_port }}:{{ tempo_http_port }}"
+      - "127.0.0.1:{{ tempo_otlp_grpc_port }}:{{ tempo_otlp_grpc_port }}"
+      - "127.0.0.1:{{ tempo_otlp_http_port }}:{{ tempo_otlp_http_port }}"
+    volumes:
+      - {{ tempo_config_dir }}/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - {{ tempo_data_dir }}:/var/tempo
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {{ tempo_memory_limit }}
+    logging:
+      driver: local
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ tempo_http_port }}/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+{% if mimir_enable_minio | bool %}
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+{% endif %}
+    networks:
+      - monitoring
+{% endif %}
+
+{% if monitoring_install_pyroscope | bool %}
+  pyroscope:
+    image: {{ pyroscope_image }}
+    container_name: pyroscope
+    command:
+      - "-config.file=/etc/pyroscope/pyroscope.yaml"
+      - "-target=all"
+    ports:
+      - "127.0.0.1:{{ pyroscope_port }}:{{ pyroscope_port }}"
+    volumes:
+      - {{ pyroscope_config_dir }}/pyroscope.yaml:/etc/pyroscope/pyroscope.yaml:ro
+      - {{ pyroscope_config_dir }}/runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro
+      - {{ pyroscope_data_dir }}:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {{ pyroscope_memory_limit }}
+    logging:
+      driver: local
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ pyroscope_port }}/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+{% if mimir_enable_minio | bool %}
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+{% endif %}
+    networks:
+      - monitoring
 {% endif %}
 
 networks:

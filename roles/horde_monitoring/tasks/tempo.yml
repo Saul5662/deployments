@@ -1,0 +1,38 @@
+---
+# Deploy Tempo distributed tracing backend via Docker Compose
+# Tempo runs as part of the monitoring Docker Compose stack
+
+- name: Create Tempo config directory
+  file:
+    path: "{{ tempo_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Create Tempo data directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: '0755'
+  become: true
+  loop:
+    - "{{ tempo_data_dir }}"
+    - "{{ tempo_data_dir }}/wal"
+    - "{{ tempo_data_dir }}/blocks"
+    - "{{ tempo_data_dir }}/generator"
+    - "{{ tempo_data_dir }}/generator/wal"
+
+- name: Template Tempo configuration
+  template:
+    src: tempo.yaml.j2
+    dest: "{{ tempo_config_dir }}/tempo.yaml"
+    owner: root
+    group: "10001"
+    mode: '0640'
+    backup: yes
+  become: true
+  notify: restart monitoring stack

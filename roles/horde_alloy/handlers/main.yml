@@ -1,0 +1,17 @@
+---
+# Handlers for horde_alloy role
+
+- name: restart alloy
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: alloy_start_service | bool
+
+- name: reload alloy
+  ansible.builtin.systemd:
+    name: alloy
+    state: reloaded
+  become: true
+  when: alloy_start_service | bool

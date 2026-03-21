@@ -1,0 +1,30 @@
+---
+dependencies: []
+
+galaxy_info:
+  author: "Haidra Org"
+  description: "Deploy Grafana Alloy as a telemetry collector on application hosts"
+  license: "AGPL-3.0"
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - monitoring
+    - observability
+    - alloy
+    - opentelemetry
+    - loki
+    - tempo
+    - metrics
+    - logs
+    - traces

@@ -1,4 +1,4 @@
-# Grafana datasource provisioning - Mimir
+# Grafana datasource provisioning - Mimir, Loki, Tempo
 # Managed by Ansible - do not edit manually
 
 apiVersion: 1
@@ -42,6 +42,95 @@ datasources:
       implementation: prometheus
       handleGrafanaManagedAlerts: false
 {% endif %}
+{% if monitoring_install_loki | bool %}
+  - name: Loki ({{ monitoring_application_datasource_name }})
+    uid: loki-app
+    orgId: 1
+    type: loki
+    access: proxy
+    url: http://loki:{{ loki_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+      derivedFields:
+{% if monitoring_install_tempo | bool %}
+        - datasourceUid: tempo
+          matcherRegex: "(?:trace_id|traceID|traceId)=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+{% endif %}
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_application_tenant_id }}
+  - name: Loki ({{ monitoring_infrastructure_datasource_name }})
+    uid: loki-infra
+    orgId: 1
+    type: loki
+    access: proxy
+    url: http://loki:{{ loki_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+      derivedFields:
+{% if monitoring_install_tempo | bool %}
+        - datasourceUid: tempo
+          matcherRegex: "(?:trace_id|traceID|traceId)=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+{% endif %}
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
+{% endif %}
+{% if monitoring_install_tempo | bool %}
+  - name: Tempo
+    uid: tempo
+    orgId: 1
+    type: tempo
+    access: proxy
+    url: http://tempo:{{ tempo_http_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+{% if monitoring_install_loki | bool %}
+        datasourceUid: loki-app
+        filterByTraceID: true
+        filterBySpanID: true
+{% endif %}
+      tracesToMetrics:
+        datasourceUid: mimir-infra
+      serviceMap:
+        datasourceUid: mimir-infra
+      nodeGraph:
+        enabled: true
+{% endif %}
+{% if monitoring_install_pyroscope | bool %}
+  - name: Pyroscope ({{ monitoring_application_datasource_name }})
+    uid: pyroscope-app
+    orgId: 1
+    type: grafana-pyroscope-datasource
+    access: proxy
+    url: http://pyroscope:{{ pyroscope_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_application_tenant_id }}
+  - name: Pyroscope ({{ monitoring_infrastructure_datasource_name }})
+    uid: pyroscope-infra
+    orgId: 1
+    type: grafana-pyroscope-datasource
+    access: proxy
+    url: http://pyroscope:{{ pyroscope_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
+{% endif %}
 {% if grafana_anonymous_enabled | bool %}
   # --- Org 2 (public / anonymous) datasource ---
   - name: {{ monitoring_public_datasource_name }}
@@ -56,4 +145,45 @@ datasources:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
       httpHeaderValue1: {{ monitoring_public_tenant_id }}
+{% if monitoring_install_loki | bool %}
+  - name: Loki ({{ monitoring_public_datasource_name }})
+    uid: loki-public
+    orgId: {{ grafana_public_org_id }}
+    type: loki
+    access: proxy
+    url: http://loki:{{ loki_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_public_tenant_id }}
+{% endif %}
+{% if monitoring_install_tempo | bool %}
+  - name: Tempo
+    uid: tempo-public
+    orgId: {{ grafana_public_org_id }}
+    type: tempo
+    access: proxy
+    url: http://tempo:{{ tempo_http_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      nodeGraph:
+        enabled: true
+{% endif %}
+{% if monitoring_install_pyroscope | bool %}
+  - name: Pyroscope ({{ monitoring_public_datasource_name }})
+    uid: pyroscope-public
+    orgId: {{ grafana_public_org_id }}
+    type: grafana-pyroscope-datasource
+    access: proxy
+    url: http://pyroscope:{{ pyroscope_port }}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ monitoring_public_tenant_id }}
+{% endif %}
 {% endif %}
