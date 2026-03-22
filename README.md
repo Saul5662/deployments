@@ -1,47 +1,60 @@
 # Haidra Deployments
 
-Code for deploying the various Haidra services
+Ansible collection for deploying Haidra services — AI Horde workers, monitoring
+infrastructure, and supporting applications.
 
-# Usage
+## Usage
 
-These deployments are all using [ansible](https://www.ansible.com/) the use of which is beyond the scope of this readme.
-
-You can install ansible on Linux using pip. It doesn't work on Windows.
+Install [Ansible](https://www.ansible.com/) (Linux only):
 
 ```bash
 python -m pip install ansible
 ```
 
-Make sure your local account can ssh to the various linux machines using ssh and public key authentication using an ssh-agent.
+Ensure your control host can SSH to targets using key-based authentication via
+an ssh-agent. If the remote user requires a sudo password, append `-K` to all
+`ansible-playbook` commands.
 
-Make sure your remote account has sudo access. If it require a sudo password, make sure you append `-K` to all `ansible-playbook` commands you see in the READMEs.
-
-Make sure you download this collection using ansible-galaxy. An example requirements.yml file has been provided.
+Install this collection and its dependencies:
 
 ```bash
 wget https://raw.githubusercontent.com/Haidra-Org/deployments/main/examples/requirements.yml
 ansible-galaxy collection install -r requirements.yml
 ```
 
-Alternatively you can use the provided requir
+## Included Roles
 
-# Included Roles
+Each role provides its own README with full variable documentation and examples.
+Adjust an [example inventory](examples/) with your hostnames, then run the
+corresponding example playbook — or build your own `site.yml`.
 
-Each role within provides its own readme with instructions.
-Each role within provides its own readme with instructions.
+### Application Roles
 
-Typically you just need to adjust an inventory with your hostnames and addresses and then adjust one of the examples provided.
+| Role | Description |
+|------|-------------|
+| [artbot](roles/artbot/README.md) | Web frontend for AI Horde |
+| [artbot_revproxy](roles/artbot_revproxy/README.md) | HAProxy reverse proxy for Artbot |
+| [horde_regen_worker](roles/horde_regen_worker/README.md) | AI Horde worker (Dreamer, Scribe, Alchemist) |
+| [amd_gpu_drivers](roles/amd_gpu_drivers/README.md) | AMD GPU driver and ROCm setup |
 
-Or you can make your own global `site.yml` with all your configuration for the various Haidra services.
+### Monitoring Roles
 
-## Application Roles
-* [artbot](roles/artbot/README.md) - Web frontend for AI Horde
-* [artbot_revproxy](roles/artbot_revproxy/README.md) - HAProxy reverse proxy for Artbot
-* [regen_worker](roles/regen_worker/README.md) - AI Horde worker deployment (Dreamer, Scribe, Alchemist)
-* [amd_gpu_drivers](roles/amd_gpu_drivers/README.md) - AMD GPU driver setup for workers
+| Role | Description |
+|------|-------------|
+| [horde_monitoring](roles/horde_monitoring/README.md) | Mimir + Grafana + MinIO monitoring stack (Docker Compose) |
+| [horde_stats_exporter](roles/horde_stats_exporter/README.md) | AI Horde API → Prometheus metrics exporter |
+| [horde_alloy](roles/horde_alloy/README.md) | Grafana Alloy telemetry collector for app hosts |
 
-## Monitoring Roles
-* [horde_stats_exporter](roles/horde_stats_exporter/) - AI Horde Prometheus metrics exporter
-* [horde_monitoring](roles/horde_monitoring/) - Complete monitoring stack (Prometheus, Grafana, InfluxDB)
+See [MONITORING.md](MONITORING.md) for the architecture overview, quick start,
+and how the monitoring roles work together.
 
-See [MONITORING.md](MONITORING.md) for detailed monitoring deployment guide.
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [Monitoring Guide](MONITORING.md) | Architecture, quick start, troubleshooting |
+| [Observability Stack](docs/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive |
+| [Backup & Restore](docs/BACKUP.md) | RPO/RTO, backup configuration, restore procedures |
+| [Credentials](docs/CREDENTIALS.md) | Credential management and rotation |
+| [Upgrading](docs/UPGRADING.md) | Component version upgrade procedures |
+| [Migration](docs/MIGRATION.md) | Host migration runbook (planned and forced) |

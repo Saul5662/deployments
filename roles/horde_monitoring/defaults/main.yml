@@ -1,9 +1,12 @@
 ---
 # Default variables for horde_monitoring role
 #
-# This role deploys Mimir + Grafana via Docker Compose.
-# Prometheus is NOT managed by this role — deploy it directly in your playbook
-# using the prometheus.prometheus.prometheus community role.
+# This role deploys Mimir + Grafana (and optionally Loki, Tempo, Pyroscope)
+# via Docker Compose. Prometheus is NOT managed by this role — deploy it
+# directly in your playbook using the prometheus.prometheus.prometheus
+# community role.
+#
+# See roles/horde_monitoring/README.md for full documentation.
 
 # Component flags
 monitoring_install_mimir: true

@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: horde_stats_exporter
+  author: Haidra-Org
+  description: Deploy AI Horde Prometheus metrics exporter as a systemd service
+  license: AGPL-3.0
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - monitoring
+    - prometheus
+    - exporter
+    - horde
+
+dependencies: []
