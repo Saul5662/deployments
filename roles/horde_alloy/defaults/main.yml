@@ -96,6 +96,12 @@ alloy_log_labels: {}
 # ---------------------------------------------------------------------------
 alloy_collect_traces: true
 
+# Forward OTLP metrics from instrumented apps to Mimir via remote_write.
+# Reuses the same OTLP receiver — requires alloy_collect_traces: true.
+alloy_forward_otlp_metrics: true
+# Tenant ID for OTLP-sourced metrics (may differ from scraped metrics).
+alloy_otlp_metrics_tenant_id: "{{ alloy_tenant_id }}"
+
 # Bind address for the OTLP receiver — apps on this host send traces here.
 # 127.0.0.1 restricts to local apps only. Use 0.0.0.0 if containers need access.
 alloy_otlp_listen_address: "127.0.0.1"

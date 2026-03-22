@@ -7,6 +7,7 @@
 //   Metrics: prometheus.exporter.unix → prometheus.scrape → prometheus.remote_write (Mimir)
 //   Logs:    loki.source.journal / loki.source.file / loki.source.docker → loki.write (Loki)
 //   Traces:  otelcol.receiver.otlp → otelcol.processor.batch → otelcol.exporter.otlphttp (Tempo)
+//   OTLP Metrics: otelcol.receiver.otlp → otelcol.processor.batch → otelcol.exporter.prometheus → prometheus.remote_write (Mimir)
 
 logging {
   level = {{ alloy_log_level | to_json }}
@@ -191,7 +192,7 @@ loki.write "loki" {
 
 {% endif %}
 // ============================================================================
-// TRACE PIPELINE
+// OTLP PIPELINE (traces + metrics from instrumented applications)
 // ============================================================================
 {% if alloy_collect_traces %}
 
@@ -205,7 +206,10 @@ otelcol.receiver.otlp "local" {
   }
 
   output {
-    traces = [otelcol.processor.batch.default.input]
+{% if alloy_forward_otlp_metrics %}
+    metrics = [otelcol.processor.batch.default.input]
+{% endif %}
+    traces  = [otelcol.processor.batch.default.input]
   }
 }
 
@@ -214,10 +218,49 @@ otelcol.processor.batch "default" {
   send_batch_max_size = {{ alloy_trace_batch_size }}
 
   output {
-    traces = [otelcol.exporter.otlphttp.tempo.input]
+{% if alloy_forward_otlp_metrics %}
+    metrics = [otelcol.exporter.prometheus.mimir.input]
+{% endif %}
+    traces  = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
+{% if alloy_forward_otlp_metrics %}
+otelcol.exporter.prometheus "mimir" {
+  forward_to = [prometheus.remote_write.otlp_metrics.receiver]
+}
+
+prometheus.remote_write "otlp_metrics" {
+  external_labels = merge(
+    { "instance" = {{ ansible_hostname | to_json }} },
+{% for k, v in alloy_external_labels.items() %}
+    { {{ k | to_json }} = {{ v | to_json }} },
+{% endfor %}
+  )
+
+  endpoint {
+    url = {{ alloy_mimir_endpoint | to_json }}
+
+    headers = {
+      "X-Scope-OrgID" = {{ alloy_otlp_metrics_tenant_id | to_json }},
+    }
+
+{% if alloy_basic_auth_username %}
+    basic_auth {
+      username = {{ alloy_basic_auth_username | to_json }}
+      password = {{ alloy_basic_auth_password | to_json }}
+    }
+{% endif %}
+
+{% if alloy_tls_ca_cert %}
+    tls_config {
+      ca_file = "{{ alloy_config_dir }}/ca.crt"
+    }
+{% endif %}
+  }
+}
+
+{% endif %}
 {% if alloy_basic_auth_username %}
 otelcol.auth.basic "tempo" {
   username = {{ alloy_basic_auth_username | to_json }}

@@ -249,6 +249,7 @@ tempo_metrics_generator_tenant_id: "infrastructure"
 tempo_metrics_generator_processors:
   - "service-graphs"
   - "span-metrics"
+  - "local-blocks"
 
 # OTLP receiver bind address inside Docker.
 # 0.0.0.0 within the container — external access is controlled by Docker port
