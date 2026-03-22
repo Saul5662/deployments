@@ -1,29 +1,53 @@
 ---
 # Default variables for horde_stats_exporter role
+#
+# This role deploys the AI Horde Prometheus exporter as a systemd service.
+# It polls the AI Horde public API and exposes metrics at /metrics for
+# Prometheus to scrape. Uses uv to manage its own Python 3.12 environment.
+#
+# See roles/horde_stats_exporter/README.md for full documentation.
 
+# ---------------------------------------------------------------------------
 # User and directories
+# ---------------------------------------------------------------------------
+# Dedicated unprivileged system user — created automatically by the role.
 exporter_user: horde-exporter
 exporter_install_dir: /opt/horde-exporter
 
-# Git repository (uv installs directly from GitHub)
+# ---------------------------------------------------------------------------
+# Git repository
+# ---------------------------------------------------------------------------
+# The exporter is installed directly from GitHub via uv.
+# Pin exporter_repo_ref to a release tag or commit SHA for reproducibility.
 exporter_repo_url: "https://github.com/Haidra-Org/horde-exporters"
 exporter_repo_ref: main
 
+# ---------------------------------------------------------------------------
 # Exporter configuration
+# ---------------------------------------------------------------------------
+# Port where the /metrics endpoint is served.
 exporter_port: 9150
 exporter_api_base_url: "https://aihorde.net/api/v2"
 exporter_user_agent: "horde_prometheus_exporter"
+# API request timeout in seconds.
 exporter_api_timeout: 10
 
+# ---------------------------------------------------------------------------
 # Scrape intervals (seconds)
-exporter_scrape_models: 8
-exporter_scrape_workers: 300
-exporter_scrape_performance: 2
-exporter_scrape_stats: 120
-exporter_scrape_modes: 30
-exporter_scrape_teams: 300
+# ---------------------------------------------------------------------------
+# Each metric group is polled independently at its own interval.
+exporter_scrape_models: 8           # Model queue depths and worker counts
+exporter_scrape_workers: 300        # Individual worker statistics
+exporter_scrape_performance: 2      # Global queue and performance counters
+exporter_scrape_stats: 120          # Historical generation statistics
+exporter_scrape_modes: 30           # Heartbeat and maintenance mode flags
+exporter_scrape_teams: 300          # Team-level statistics
 
-# Downsampling configuration
+# ---------------------------------------------------------------------------
+# Downsampling (opt-in)
+# ---------------------------------------------------------------------------
+# Reads high-resolution data from the application Mimir tenant and writes a
+# lower-resolution copy to the public tenant for public-facing dashboards.
 exporter_enable_downsampling: true
 exporter_downsample_schedule: daily
 exporter_prometheus_url: "http://localhost:9090"
@@ -32,6 +56,8 @@ exporter_downsample_target_tenant: "ai-horde-public"
 exporter_downsample_mimir_url: "http://localhost:9009"
 exporter_downsample_resolution: "5m"
 
+# ---------------------------------------------------------------------------
 # Logging
+# ---------------------------------------------------------------------------
 exporter_log_level: INFO
 exporter_log_file: /var/log/horde-stats/exporter.log
