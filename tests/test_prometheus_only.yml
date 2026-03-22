@@ -110,7 +110,6 @@
           - _mimir_dir_stat.stat.gr_name == 'root'
         fail_msg: "Service directories must be owned by root:root, not docker group"
 
-
 - name: Test backup skipped when MinIO is disabled
   hosts: testhost
   become: true

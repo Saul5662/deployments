@@ -59,63 +59,64 @@ complete example playbook.
 
 ### General
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `alloy_version` | `1.8.1` | Pinned Alloy package version |
-| `alloy_config_dir` | `/etc/alloy` | Configuration directory |
-| `alloy_data_dir` | `/var/lib/alloy` | Persistent data (WAL, positions) |
-| `alloy_log_level` | `warn` | Log verbosity |
-| `alloy_http_listen_address` | `127.0.0.1` | Health/UI bind address |
-| `alloy_http_port` | `12345` | Health/UI port |
-| `alloy_start_service` | `true` | Start the service (`false` for CI/test) |
+| Variable                    | Default          | Description                             |
+| --------------------------- | ---------------- | --------------------------------------- |
+| `alloy_version`             | `1.8.1`          | Pinned Alloy package version            |
+| `alloy_config_dir`          | `/etc/alloy`     | Configuration directory                 |
+| `alloy_data_dir`            | `/var/lib/alloy` | Persistent data (WAL, positions)        |
+| `alloy_log_level`           | `warn`           | Log verbosity                           |
+| `alloy_http_listen_address` | `127.0.0.1`      | Health/UI bind address                  |
+| `alloy_http_port`           | `12345`          | Health/UI port                          |
+| `alloy_start_service`       | `true`           | Start the service (`false` for CI/test) |
 
 ### Authentication
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `alloy_tenant_id` | `infrastructure` | Mimir/Loki tenant ID |
-| `alloy_basic_auth_username` | `alloy` | Basic auth username for all endpoints |
-| `alloy_basic_auth_password` | `changeme-alloy` | Basic auth password (**must override**) |
-| `alloy_tls_ca_cert` | `""` | Path to CA cert on the Ansible controller (empty = skip TLS) |
+| Variable                    | Default          | Description                                                  |
+| --------------------------- | ---------------- | ------------------------------------------------------------ |
+| `alloy_tenant_id`           | `infrastructure` | Mimir/Loki tenant ID                                         |
+| `alloy_basic_auth_username` | `alloy`          | Basic auth username for all endpoints                        |
+| `alloy_basic_auth_password` | `changeme-alloy` | Basic auth password (**must override**)                      |
+| `alloy_tls_ca_cert`         | `""`             | Path to CA cert on the Ansible controller (empty = skip TLS) |
 
 ### Metrics Pipeline
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `alloy_mimir_endpoint` | `""` | Mimir remote_write URL (required if metrics enabled) |
-| `alloy_collect_metrics` | `true` | Enable host metrics collection |
-| `alloy_scrape_interval` | `15s` | Metrics scrape interval |
-| `alloy_external_labels` | `{}` | Extra labels added to all metrics |
-| `alloy_extra_scrape_targets` | `[]` | Additional scrape targets (list of `{job, targets}`) |
+| Variable                     | Default | Description                                          |
+| ---------------------------- | ------- | ---------------------------------------------------- |
+| `alloy_mimir_endpoint`       | `""`    | Mimir remote_write URL (required if metrics enabled) |
+| `alloy_collect_metrics`      | `true`  | Enable host metrics collection                       |
+| `alloy_scrape_interval`      | `15s`   | Metrics scrape interval                              |
+| `alloy_external_labels`      | `{}`    | Extra labels added to all metrics                    |
+| `alloy_extra_scrape_targets` | `[]`    | Additional scrape targets (list of `{job, targets}`) |
 
 ### Logs Pipeline
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `alloy_loki_endpoint` | `""` | Loki push URL (required if logs enabled) |
-| `alloy_collect_logs` | `true` | Enable log collection |
-| `alloy_collect_journal` | `true` | Collect systemd journal |
-| `alloy_journal_max_age` | `24h` | Max journal entry age on first start |
-| `alloy_collect_log_files` | `[]` | Glob patterns for file-based log collection |
-| `alloy_collect_docker_logs` | `false` | Collect Docker container logs |
-| `alloy_log_labels` | `{}` | Extra labels on all log streams |
+| Variable                    | Default | Description                                 |
+| --------------------------- | ------- | ------------------------------------------- |
+| `alloy_loki_endpoint`       | `""`    | Loki push URL (required if logs enabled)    |
+| `alloy_collect_logs`        | `true`  | Enable log collection                       |
+| `alloy_collect_journal`     | `true`  | Collect systemd journal                     |
+| `alloy_journal_max_age`     | `24h`   | Max journal entry age on first start        |
+| `alloy_collect_log_files`   | `[]`    | Glob patterns for file-based log collection |
+| `alloy_collect_docker_logs` | `false` | Collect Docker container logs               |
+| `alloy_log_labels`          | `{}`    | Extra labels on all log streams             |
 
 ### Traces Pipeline
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `alloy_tempo_endpoint` | `""` | Tempo OTLP endpoint (required if traces enabled) |
-| `alloy_collect_traces` | `true` | Enable OTLP trace receiver |
-| `alloy_otlp_listen_address` | `127.0.0.1` | OTLP receiver bind address |
-| `alloy_otlp_grpc_port` | `4317` | OTLP gRPC port |
-| `alloy_otlp_http_port` | `4318` | OTLP HTTP port |
-| `alloy_trace_batch_timeout` | `5s` | Batch flush interval |
-| `alloy_trace_batch_size` | `8192` | Max batch size (spans) |
-| `alloy_forward_otlp_metrics` | `true` | Forward OTLP metrics to Mimir |
+| Variable                     | Default     | Description                                      |
+| ---------------------------- | ----------- | ------------------------------------------------ |
+| `alloy_tempo_endpoint`       | `""`        | Tempo OTLP endpoint (required if traces enabled) |
+| `alloy_collect_traces`       | `true`      | Enable OTLP trace receiver                       |
+| `alloy_otlp_listen_address`  | `127.0.0.1` | OTLP receiver bind address                       |
+| `alloy_otlp_grpc_port`       | `4317`      | OTLP gRPC port                                   |
+| `alloy_otlp_http_port`       | `4318`      | OTLP HTTP port                                   |
+| `alloy_trace_batch_timeout`  | `5s`        | Batch flush interval                             |
+| `alloy_trace_batch_size`     | `8192`      | Max batch size (spans)                           |
+| `alloy_forward_otlp_metrics` | `true`      | Forward OTLP metrics to Mimir                    |
 
 ## Validation
 
 The role asserts at the start of execution that:
+
 - Endpoint URLs are configured for each enabled pipeline
 - `alloy_basic_auth_password` is not the insecure default
 

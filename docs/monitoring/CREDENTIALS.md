@@ -4,11 +4,11 @@
 
 The monitoring stack uses three sets of credentials:
 
-| Credential | Where it appears | Purpose |
-|------------|-----------------|---------|
-| `minio_root_password` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin access (S3 API for Mimir block storage) |
-| `grafana_admin_password` | `docker-compose.yml` | Grafana admin UI login |
-| `minio_root_user` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin username |
+| Credential               | Where it appears                                           | Purpose                                             |
+| ------------------------ | ---------------------------------------------------------- | --------------------------------------------------- |
+| `minio_root_password`    | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin access (S3 API for Mimir block storage) |
+| `grafana_admin_password` | `docker-compose.yml`                                       | Grafana admin UI login                              |
+| `minio_root_user`        | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin username                                |
 
 ## File Permissions
 
@@ -61,6 +61,7 @@ where the credentials are internal (loopback network only).
 ### MinIO password rotation
 
 The `minio_root_password` appears in:
+
 1. MinIO's `MINIO_ROOT_PASSWORD` environment variable (Compose)
 2. Mimir's `common.storage.s3.secret_access_key` (mimir.yaml)
 3. The `minio-init` sidecar's `mc alias set` command (Compose)
@@ -78,6 +79,7 @@ The `minio_root_password` appears in:
 ### Grafana password rotation
 
 The `grafana_admin_password` appears only in:
+
 1. Grafana's `GF_SECURITY_ADMIN_PASSWORD` environment variable (Compose)
 
 **Procedure:**

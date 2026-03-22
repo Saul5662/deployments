@@ -12,7 +12,7 @@
     state: directory
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Template monitoring stack alerting rules
@@ -21,6 +21,6 @@
     dest: "{{ monitoring_alerting_rules_dir }}/{{ monitoring_alerting_rules_file }}"
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
   become: true
   notify: reload prometheus

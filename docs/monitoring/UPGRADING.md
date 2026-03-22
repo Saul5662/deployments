@@ -33,6 +33,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 [Grafana Mimir upgrade guide](https://grafana.com/docs/mimir/latest/set-up/migrate/)
 
 **Key considerations:**
+
 - Read the upgrade guide for the target version — config keys are sometimes
   renamed or removed between minor versions.
 - The monolithic deployment (`-target=all`) means all components upgrade
@@ -56,6 +57,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 [MinIO releases](https://github.com/minio/minio/releases)
 
 **Key considerations:**
+
 - MinIO uses date-based release tags (e.g., `RELEASE.2025-09-07T16-13-09Z`).
 - MinIO is generally backward-compatible, but major feature releases
   occasionally change on-disk format or default behaviors.
@@ -77,6 +79,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 [Grafana upgrade guide](https://grafana.com/docs/grafana/latest/upgrade-guide/)
 
 **Key considerations:**
+
 - **Back up `/var/lib/grafana/grafana.db` before upgrading.** Grafana's
   SQLite database is migrated on first startup with the new version. This
   migration is **not easily reversible**.
@@ -99,6 +102,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 [Memcached releases](https://github.com/memcached/memcached/wiki/ReleaseNotes)
 
 **Key considerations:**
+
 - Memcached is stateless (cache only). Upgrading is effectively zero-risk —
   the cache is simply empty after restart and repopulated by Mimir queries.
 - No special verification needed beyond confirming the container starts.
@@ -115,6 +119,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 [prometheus.prometheus collection docs](https://prometheus-community.github.io/ansible/branch/main/).
 
 **Key considerations:**
+
 - These are native binaries managed by the community role, not Docker
   containers managed by this role.
 - The community role handles downloading, installing, and restarting.
@@ -130,10 +135,12 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 (pinned versions for reproducible installs)
 
 The role depends on:
+
 - `prometheus.prometheus` (constrained to `>=0.16.0,<1.0.0`)
 - `grafana.grafana` (constrained to `>=6.0.0,<7.0.0`)
 
 **Key considerations:**
+
 - Ansible Galaxy doesn't have lockfiles. The constraints in `galaxy.yml`
   provide guardrails, but for reproducible deployments, pin exact versions
   in your `requirements.yml`.
@@ -151,6 +158,7 @@ The role depends on:
 [Grafana Loki upgrade guide](https://grafana.com/docs/loki/latest/setup/upgrade/)
 
 **Key considerations:**
+
 - Loki schema versions are forward-only. The role uses TSDB v13 — ensure
   the target version supports this schema.
 - Read the upgrade guide for breaking config changes (field renames,
@@ -174,6 +182,7 @@ The role depends on:
 [Grafana Tempo upgrade guide](https://grafana.com/docs/tempo/latest/setup/upgrade/)
 
 **Key considerations:**
+
 - Tempo's block format changes between major versions. The compactor
   handles block migration, but read the upgrade notes carefully.
 - If `tempo_metrics_generator_enabled` is true, verify that generated
@@ -193,6 +202,7 @@ The role depends on:
 [Grafana Pyroscope releases](https://github.com/grafana/pyroscope/releases)
 
 **Key considerations:**
+
 - Pyroscope stores profile data in MinIO. Block format changes between major
   versions are handled by the compactor, but read release notes carefully.
 - The monolithic deployment (`-target=all`) means all components upgrade
@@ -216,6 +226,7 @@ The role depends on:
 [Grafana Alloy releases](https://github.com/grafana/alloy/releases)
 
 **Key considerations:**
+
 - Alloy is installed as a native package (APT/RPM), not a Docker container.
   The role pins the exact version.
 - River configuration syntax may change between versions. Review release

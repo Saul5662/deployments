@@ -35,7 +35,7 @@ all:
 
     haproxy:
       hosts:
-        monitoring.example.com:  # same host — HAProxy co-located with monitoring
+        monitoring.example.com: # same host — HAProxy co-located with monitoring
 
     artbot:
       hosts:

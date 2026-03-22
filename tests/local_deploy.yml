@@ -29,7 +29,7 @@
     monitoring_install_pyroscope: true
     monitoring_configure_haproxy: false
     monitoring_configure_firewall: false
-    monitoring_start_services: false          # script starts compose directly
+    monitoring_start_services: false # script starts compose directly
 
     # ── Redirect all paths into local-deploy/ ────────────────────
     mimir_config_dir: "{{ _local_root }}/mimir/config"
@@ -56,8 +56,8 @@
     monitoring_public_tenant_id: "ai-horde-public"
 
     # Loki / Tempo local settings
-    loki_retention_period: "168h"     # 7 days for local dev
-    tempo_trace_retention: "24h"      # 1 day for local dev
+    loki_retention_period: "168h" # 7 days for local dev
+    tempo_trace_retention: "24h" # 1 day for local dev
     tempo_metrics_generator_enabled: true
     tempo_metrics_generator_tenant_id: "infrastructure"
 
@@ -98,7 +98,7 @@
       file:
         path: "{{ item }}"
         state: directory
-        mode: '0755'
+        mode: "0755"
       loop:
         - "{{ _local_root }}/prometheus"
         - "{{ _local_root }}/alertmanager"
@@ -109,34 +109,34 @@
       template:
         src: local-deploy/prometheus.yml.j2
         dest: "{{ _local_root }}/prometheus/prometheus.yml"
-        mode: '0644'
+        mode: "0644"
 
     - name: Render Alertmanager config
       template:
         src: local-deploy/alertmanager.yml.j2
         dest: "{{ _local_root }}/alertmanager/alertmanager.yml"
-        mode: '0644'
+        mode: "0644"
 
     - name: Render exporter config
       template:
         src: local-deploy/exporter-config.yaml.j2
         dest: "{{ _local_root }}/exporter/config.yaml"
-        mode: '0644'
+        mode: "0644"
 
     - name: Render Alloy config
       template:
         src: local-deploy/alloy-config.alloy.j2
         dest: "{{ _local_root }}/alloy/config.alloy"
-        mode: '0644'
+        mode: "0644"
 
     - name: Render Docker Compose overlay
       template:
         src: local-deploy/docker-compose.local.yml.j2
         dest: "{{ mimir_compose_dir }}/docker-compose.local.yml"
-        mode: '0644'
+        mode: "0644"
 
     - name: Render local-deploy.env
       template:
         src: local-deploy/local-deploy.env.j2
         dest: "{{ _local_root }}/local-deploy.env"
-        mode: '0644'
+        mode: "0644"

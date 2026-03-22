@@ -8,7 +8,7 @@
     state: directory
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Create Pyroscope data directory
@@ -17,7 +17,7 @@
     state: directory
     owner: "10001"
     group: "10001"
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Template Pyroscope configuration
@@ -26,7 +26,7 @@
     dest: "{{ pyroscope_config_dir }}/pyroscope.yaml"
     owner: root
     group: "10001"
-    mode: '0640'
+    mode: "0640"
     backup: yes
   become: true
   notify: restart monitoring stack
@@ -37,7 +37,7 @@
     dest: "{{ pyroscope_config_dir }}/runtime-overrides.yaml"
     owner: root
     group: "10001"
-    mode: '0640'
+    mode: "0640"
     backup: yes
   become: true
   notify: restart monitoring stack

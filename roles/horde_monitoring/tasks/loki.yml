@@ -8,7 +8,7 @@
     state: directory
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Create Loki data directories
@@ -17,7 +17,7 @@
     state: directory
     owner: "10001"
     group: "10001"
-    mode: '0755'
+    mode: "0755"
   become: true
   loop:
     - "{{ loki_data_dir }}"
@@ -33,7 +33,7 @@
     dest: "{{ loki_config_dir }}/loki.yaml"
     owner: root
     group: "10001"
-    mode: '0640'
+    mode: "0640"
     backup: yes
   become: true
   notify: restart monitoring stack

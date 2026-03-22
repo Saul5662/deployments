@@ -50,39 +50,39 @@ for the full integrated stack.
 
 ### Exporter Settings
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `exporter_user` | `horde-exporter` | Unprivileged system user |
-| `exporter_install_dir` | `/opt/horde-exporter` | Installation directory |
-| `exporter_repo_url` | `https://github.com/Haidra-Org/horde-exporters` | Git repository |
-| `exporter_repo_ref` | `main` | Git ref (branch, tag, or commit SHA) |
-| `exporter_port` | `9150` | Metrics endpoint port |
-| `exporter_log_level` | `INFO` | Log verbosity |
-| `exporter_log_file` | `/var/log/horde-stats/exporter.log` | Log file path |
+| Variable               | Default                                         | Description                          |
+| ---------------------- | ----------------------------------------------- | ------------------------------------ |
+| `exporter_user`        | `horde-exporter`                                | Unprivileged system user             |
+| `exporter_install_dir` | `/opt/horde-exporter`                           | Installation directory               |
+| `exporter_repo_url`    | `https://github.com/Haidra-Org/horde-exporters` | Git repository                       |
+| `exporter_repo_ref`    | `main`                                          | Git ref (branch, tag, or commit SHA) |
+| `exporter_port`        | `9150`                                          | Metrics endpoint port                |
+| `exporter_log_level`   | `INFO`                                          | Log verbosity                        |
+| `exporter_log_file`    | `/var/log/horde-stats/exporter.log`             | Log file path                        |
 
 For reproducible deployments, pin `exporter_repo_ref` to a release tag or
 commit SHA.
 
 ### API Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `exporter_api_base_url` | `https://aihorde.net/api/v2` | AI Horde API base URL |
-| `exporter_api_timeout` | `10` | API request timeout (seconds) |
-| `exporter_user_agent` | `horde_prometheus_exporter` | HTTP User-Agent header |
+| Variable                | Default                      | Description                   |
+| ----------------------- | ---------------------------- | ----------------------------- |
+| `exporter_api_base_url` | `https://aihorde.net/api/v2` | AI Horde API base URL         |
+| `exporter_api_timeout`  | `10`                         | API request timeout (seconds) |
+| `exporter_user_agent`   | `horde_prometheus_exporter`  | HTTP User-Agent header        |
 
 ### Scrape Intervals
 
 Each metric group is polled on its own interval (seconds):
 
-| Variable | Default | What It Collects |
-|----------|---------|-----------------|
-| `exporter_scrape_models` | `8` | Model queue depths and worker counts |
-| `exporter_scrape_workers` | `300` | Individual worker stats |
-| `exporter_scrape_performance` | `2` | Global queue and performance counters |
-| `exporter_scrape_stats` | `120` | Historical generation statistics |
-| `exporter_scrape_modes` | `30` | Heartbeat and maintenance mode flags |
-| `exporter_scrape_teams` | `300` | Team-level statistics |
+| Variable                      | Default | What It Collects                      |
+| ----------------------------- | ------- | ------------------------------------- |
+| `exporter_scrape_models`      | `8`     | Model queue depths and worker counts  |
+| `exporter_scrape_workers`     | `300`   | Individual worker stats               |
+| `exporter_scrape_performance` | `2`     | Global queue and performance counters |
+| `exporter_scrape_stats`       | `120`   | Historical generation statistics      |
+| `exporter_scrape_modes`       | `30`    | Heartbeat and maintenance mode flags  |
+| `exporter_scrape_teams`       | `300`   | Team-level statistics                 |
 
 ### Downsampling (Opt-in)
 
@@ -90,15 +90,15 @@ The downsampling timer reads high-resolution data from the application Mimir
 tenant and writes a lower-resolution copy to the public tenant, suitable for
 public-facing dashboards.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `exporter_enable_downsampling` | `true` | Enable daily downsampling timer |
-| `exporter_downsample_schedule` | `daily` | systemd calendar spec |
-| `exporter_prometheus_url` | `http://localhost:9090` | Prometheus read endpoint |
-| `exporter_downsample_source_tenant` | `ai-horde-app` | Source Mimir tenant |
-| `exporter_downsample_target_tenant` | `ai-horde-public` | Target Mimir tenant |
-| `exporter_downsample_mimir_url` | `http://localhost:9009` | Mimir write endpoint |
-| `exporter_downsample_resolution` | `5m` | Output resolution |
+| Variable                            | Default                 | Description                     |
+| ----------------------------------- | ----------------------- | ------------------------------- |
+| `exporter_enable_downsampling`      | `true`                  | Enable daily downsampling timer |
+| `exporter_downsample_schedule`      | `daily`                 | systemd calendar spec           |
+| `exporter_prometheus_url`           | `http://localhost:9090` | Prometheus read endpoint        |
+| `exporter_downsample_source_tenant` | `ai-horde-app`          | Source Mimir tenant             |
+| `exporter_downsample_target_tenant` | `ai-horde-public`       | Target Mimir tenant             |
+| `exporter_downsample_mimir_url`     | `http://localhost:9009` | Mimir write endpoint            |
+| `exporter_downsample_resolution`    | `5m`                    | Output resolution               |
 
 ## Metrics Exposed
 

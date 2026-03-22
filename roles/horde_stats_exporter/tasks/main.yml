@@ -14,7 +14,7 @@
   ansible.builtin.get_url:
     url: https://astral.sh/uv/install.sh
     dest: /tmp/uv-install.sh
-    mode: '0755'
+    mode: "0755"
   become: true
   when: not ansible_check_mode
 
@@ -31,7 +31,7 @@
   copy:
     content: 'export PATH="/root/.local/bin:$PATH"'
     dest: /etc/profile.d/uv.sh
-    mode: '0644'
+    mode: "0644"
   become: true
 
 - name: Create exporter user
@@ -48,7 +48,7 @@
     state: directory
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Create log directory
@@ -57,7 +57,7 @@
     state: directory
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Create virtual environment with uv
@@ -104,7 +104,7 @@
     content: "{{ exporter_repo_ref }}\n"
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
-    mode: '0644'
+    mode: "0644"
   become: true
   when:
     - not ansible_check_mode
@@ -116,7 +116,7 @@
     dest: "{{ exporter_install_dir }}/exporter_config.yaml"
     owner: "{{ exporter_user }}"
     group: "{{ exporter_user }}"
-    mode: '0644'
+    mode: "0644"
   become: true
   notify: restart horde-exporter
 
@@ -124,7 +124,7 @@
   template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
-    mode: '0644'
+    mode: "0644"
   become: true
   loop:
     - horde-exporter.service
@@ -136,7 +136,7 @@
   template:
     src: logrotate-horde-stats.j2
     dest: /etc/logrotate.d/horde-stats
-    mode: '0644'
+    mode: "0644"
   become: true
 
 - name: Enable and start horde-exporter service

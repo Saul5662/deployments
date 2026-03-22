@@ -36,12 +36,12 @@ exporter_api_timeout: 10
 # Scrape intervals (seconds)
 # ---------------------------------------------------------------------------
 # Each metric group is polled independently at its own interval.
-exporter_scrape_models: 8           # Model queue depths and worker counts
-exporter_scrape_workers: 300        # Individual worker statistics
-exporter_scrape_performance: 2      # Global queue and performance counters
-exporter_scrape_stats: 120          # Historical generation statistics
-exporter_scrape_modes: 30           # Heartbeat and maintenance mode flags
-exporter_scrape_teams: 300          # Team-level statistics
+exporter_scrape_models: 8 # Model queue depths and worker counts
+exporter_scrape_workers: 300 # Individual worker statistics
+exporter_scrape_performance: 2 # Global queue and performance counters
+exporter_scrape_stats: 120 # Historical generation statistics
+exporter_scrape_modes: 30 # Heartbeat and maintenance mode flags
+exporter_scrape_teams: 300 # Team-level statistics
 
 # ---------------------------------------------------------------------------
 # Downsampling (opt-in)

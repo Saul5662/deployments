@@ -19,7 +19,7 @@
     state: directory
     owner: "472"
     group: "472"
-    mode: '0755'
+    mode: "0755"
   become: true
   loop:
     - app
@@ -81,7 +81,7 @@
     remote_src: yes
     owner: "472"
     group: "472"
-    mode: '0644'
+    mode: "0644"
   become: true
   loop: "{{ _app_dashboard_files.files }}"
   loop_control:
@@ -95,7 +95,7 @@
     remote_src: yes
     owner: "472"
     group: "472"
-    mode: '0644'
+    mode: "0644"
   become: true
   loop: "{{ _app_dashboard_files.files }}"
   loop_control:
@@ -109,7 +109,7 @@
     remote_src: yes
     owner: "472"
     group: "472"
-    mode: '0644'
+    mode: "0644"
   become: true
   loop: "{{ _infra_dashboard_files.files }}"
   loop_control:

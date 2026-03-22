@@ -248,7 +248,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-
     - name: Stat HAProxy safe edit script
       stat:
         path: /usr/local/bin/haproxy_safe_edit.sh
@@ -260,7 +259,6 @@
           - _haproxy_script_stat.stat.exists
           - _haproxy_script_stat.stat.mode == '0755'
         fail_msg: "HAProxy safe edit script must exist and be mode 0755"
-
 
     - name: Assert systemd unit contains required directives
       assert:

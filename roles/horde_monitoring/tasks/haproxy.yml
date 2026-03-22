@@ -6,14 +6,14 @@
   file:
     path: "{{ haproxy_backup_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Deploy HAProxy safe edit script
   template:
     src: haproxy_safe_edit.sh.j2
     dest: /usr/local/bin/haproxy_safe_edit.sh
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Check if HAProxy config exists

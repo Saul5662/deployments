@@ -8,7 +8,7 @@
     state: directory
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Create Tempo data directories
@@ -17,7 +17,7 @@
     state: directory
     owner: "10001"
     group: "10001"
-    mode: '0755'
+    mode: "0755"
   become: true
   loop:
     - "{{ tempo_data_dir }}"
@@ -32,7 +32,7 @@
     dest: "{{ tempo_config_dir }}/tempo.yaml"
     owner: root
     group: "10001"
-    mode: '0640'
+    mode: "0640"
     backup: yes
   become: true
   notify: restart monitoring stack

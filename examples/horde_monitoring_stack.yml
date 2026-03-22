@@ -34,13 +34,13 @@
       copy:
         src: "tls/{{ inventory_hostname }}.crt"
         dest: /etc/node_exporter/tls.crt
-        mode: '0644'
+        mode: "0644"
 
     - name: Push TLS key for node_exporter
       copy:
         src: "tls/{{ inventory_hostname }}.key"
         dest: /etc/node_exporter/tls.key
-        mode: '0600'
+        mode: "0600"
 
   roles:
     - prometheus.prometheus.node_exporter
@@ -70,18 +70,18 @@
 
     # -- Loki (log aggregation — opt-in) --
     monitoring_install_loki: true
-    loki_retention_period: "2160h"   # 90 days
+    loki_retention_period: "2160h" # 90 days
 
     # -- Tempo (distributed tracing — opt-in) --
     monitoring_install_tempo: true
-    tempo_trace_retention: "168h"    # 7 days
+    tempo_trace_retention: "168h" # 7 days
     tempo_metrics_generator_enabled: true
     tempo_metrics_generator_tenant_id: "infrastructure"
 
     # -- Pyroscope (continuous profiling — opt-in) --
     monitoring_install_pyroscope: true
-    pyroscope_retention_period: "0s"    # global default (infinite)
-    pyroscope_application_retention: "0"    # per-tenant: infinite
+    pyroscope_retention_period: "0s" # global default (infinite)
+    pyroscope_application_retention: "0" # per-tenant: infinite
     pyroscope_infrastructure_retention: "30d"
     pyroscope_public_retention: "90d"
     pyroscope_self_profiling: true
@@ -125,7 +125,7 @@
         # Silently drops alerts. Used for Watchdog during initial setup.
         # In production, replace with a dead man's switch endpoint.
     alertmanager_route:
-      group_by: ['alertname', 'job']
+      group_by: ["alertname", "job"]
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 4h
@@ -140,7 +140,7 @@
           - severity="critical"
         target_matchers:
           - severity="warning"
-        equal: ['alertname', 'job']
+        equal: ["alertname", "job"]
 
     # -- Prometheus (community role, applied directly) --
     prometheus_web_listen_address: "127.0.0.1:9090"
@@ -232,7 +232,7 @@
       copy:
         src: tls/ca.crt
         dest: /etc/prometheus/ca.crt
-        mode: '0644'
+        mode: "0644"
 
   roles:
     - haidra.deployments.horde_monitoring

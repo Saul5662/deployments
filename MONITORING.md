@@ -7,11 +7,11 @@ fit together.
 
 ## Roles
 
-| Role | Purpose | README |
-|------|---------|--------|
-| [horde_monitoring](roles/horde_monitoring/) | Mimir + Grafana + MinIO + optional Loki/Tempo/Pyroscope via Docker Compose | [README](roles/horde_monitoring/README.md) |
-| [horde_stats_exporter](roles/horde_stats_exporter/) | AI Horde API → Prometheus metrics exporter (systemd) | [README](roles/horde_stats_exporter/README.md) |
-| [horde_alloy](roles/horde_alloy/) | Grafana Alloy telemetry collector on application hosts | [README](roles/horde_alloy/README.md) |
+| Role                                                | Purpose                                                                    | README                                         |
+| --------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------- |
+| [horde_monitoring](roles/horde_monitoring/)         | Mimir + Grafana + MinIO + optional Loki/Tempo/Pyroscope via Docker Compose | [README](roles/horde_monitoring/README.md)     |
+| [horde_stats_exporter](roles/horde_stats_exporter/) | AI Horde API → Prometheus metrics exporter (systemd)                       | [README](roles/horde_stats_exporter/README.md) |
+| [horde_alloy](roles/horde_alloy/)                   | Grafana Alloy telemetry collector on application hosts                     | [README](roles/horde_alloy/README.md)          |
 
 Prometheus and Alertmanager are deployed directly using the
 `prometheus.prometheus` community collection in your playbook — they are not
@@ -61,6 +61,7 @@ ansible-playbook -i inventory.yml examples/horde_monitoring_stack.yml -K
 ```
 
 This runs a two-play playbook:
+
 - **Play 1**: `node_exporter` on all hosts (TLS + basic_auth)
 - **Play 2**: Mimir + Grafana + Prometheus + Alertmanager + stats exporter
   on the monitoring host
@@ -98,14 +99,14 @@ all:
 
 ## Data Retention
 
-| Layer | Default | Purpose |
-|-------|---------|---------|
-| Prometheus (local) | `48h` | Buffer for `remote_write` — short-lived |
-| Mimir `ai-horde-app` tenant | Infinite (`0`) | AI Horde application metrics |
-| Mimir `infrastructure` tenant | `30d` | Host and infrastructure metrics |
-| Mimir `ai-horde-public` tenant | `90d` | Public-facing dashboard metrics |
-| Loki (opt-in) | `90d` | Log retention |
-| Tempo (opt-in) | `7d` | Trace retention |
+| Layer                          | Default        | Purpose                                 |
+| ------------------------------ | -------------- | --------------------------------------- |
+| Prometheus (local)             | `48h`          | Buffer for `remote_write` — short-lived |
+| Mimir `ai-horde-app` tenant    | Infinite (`0`) | AI Horde application metrics            |
+| Mimir `infrastructure` tenant  | `30d`          | Host and infrastructure metrics         |
+| Mimir `ai-horde-public` tenant | `90d`          | Public-facing dashboard metrics         |
+| Loki (opt-in)                  | `90d`          | Log retention                           |
+| Tempo (opt-in)                 | `7d`           | Trace retention                         |
 
 Prometheus splits data by job: `horde-exporter` → app tenant, everything else
 → infrastructure tenant. See the
@@ -178,13 +179,13 @@ Any `changed` tasks indicate drift from the Ansible-managed state.
 
 ## Operational Guides
 
-| Topic | Document |
-|-------|----------|
-| Logs, traces, and Alloy deep-dive | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) |
-| Backup & restore (RPO/RTO, procedures) | [docs/BACKUP.md](docs/BACKUP.md) |
-| Credential management and rotation | [docs/CREDENTIALS.md](docs/CREDENTIALS.md) |
-| Component version upgrades | [docs/UPGRADING.md](docs/UPGRADING.md) |
-| Host migration (planned and forced) | [docs/MIGRATION.md](docs/MIGRATION.md) |
+| Topic                                  | Document                                       |
+| -------------------------------------- | ---------------------------------------------- |
+| Logs, traces, and Alloy deep-dive      | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) |
+| Backup & restore (RPO/RTO, procedures) | [docs/BACKUP.md](docs/BACKUP.md)               |
+| Credential management and rotation     | [docs/CREDENTIALS.md](docs/CREDENTIALS.md)     |
+| Component version upgrades             | [docs/UPGRADING.md](docs/UPGRADING.md)         |
+| Host migration (planned and forced)    | [docs/MIGRATION.md](docs/MIGRATION.md)         |
 
 ## Further Reading
 

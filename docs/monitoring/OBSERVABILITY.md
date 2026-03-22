@@ -36,6 +36,7 @@ Mimir + Grafana + Prometheus setup, see [MONITORING.md](../MONITORING.md).
 ```
 
 **Data flows:**
+
 - **Metrics**: Alloy's `prometheus.exporter.unix` → `remote_write` → Mimir
 - **Logs**: Alloy's journal/file/docker sources → Loki push API
 - **Traces**: App → OTLP → Alloy → Tempo OTLP HTTP
@@ -57,35 +58,36 @@ MinIO buckets are created automatically by the init container.
 
 ### Loki Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `monitoring_install_loki` | `false` | Enable Loki deployment |
-| `loki_image` | `grafana/loki:3.4.2` | Loki Docker image |
-| `loki_port` | `3100` | HTTP listen port |
-| `loki_retention_period` | `2160h` | How long to keep log data (90d) |
-| `loki_retention_enabled` | `true` | Enable compactor retention |
-| `loki_ingestion_rate_mb` | `10` | Per-tenant ingestion rate (MB/s) |
-| `loki_ingestion_burst_size_mb` | `20` | Per-tenant burst size (MB) |
-| `loki_allow_structured_metadata` | `true` | Enable for OTLP trace correlation |
-| `loki_chunks_bucket` | `loki-chunks` | MinIO bucket name |
+| Variable                         | Default              | Description                       |
+| -------------------------------- | -------------------- | --------------------------------- |
+| `monitoring_install_loki`        | `false`              | Enable Loki deployment            |
+| `loki_image`                     | `grafana/loki:3.4.2` | Loki Docker image                 |
+| `loki_port`                      | `3100`               | HTTP listen port                  |
+| `loki_retention_period`          | `2160h`              | How long to keep log data (90d)   |
+| `loki_retention_enabled`         | `true`               | Enable compactor retention        |
+| `loki_ingestion_rate_mb`         | `10`                 | Per-tenant ingestion rate (MB/s)  |
+| `loki_ingestion_burst_size_mb`   | `20`                 | Per-tenant burst size (MB)        |
+| `loki_allow_structured_metadata` | `true`               | Enable for OTLP trace correlation |
+| `loki_chunks_bucket`             | `loki-chunks`        | MinIO bucket name                 |
 
 ### Tempo Configuration
 
-| Variable | Default | Description |
-|---|---|---|
-| `monitoring_install_tempo` | `false` | Enable Tempo deployment |
-| `tempo_image` | `grafana/tempo:2.7.1` | Tempo Docker image |
-| `tempo_http_port` | `3200` | HTTP API port |
-| `tempo_otlp_grpc_port` | `4317` | OTLP gRPC receiver port |
-| `tempo_otlp_http_port` | `4318` | OTLP HTTP receiver port |
-| `tempo_trace_retention` | `168h` | Trace block retention (7d) |
-| `tempo_metrics_generator_enabled` | `true` | Generate metrics from traces |
-| `tempo_metrics_generator_tenant_id` | `infrastructure` | Mimir tenant for generated metrics |
-| `tempo_traces_bucket` | `tempo-traces` | MinIO bucket name |
+| Variable                            | Default               | Description                        |
+| ----------------------------------- | --------------------- | ---------------------------------- |
+| `monitoring_install_tempo`          | `false`               | Enable Tempo deployment            |
+| `tempo_image`                       | `grafana/tempo:2.7.1` | Tempo Docker image                 |
+| `tempo_http_port`                   | `3200`                | HTTP API port                      |
+| `tempo_otlp_grpc_port`              | `4317`                | OTLP gRPC receiver port            |
+| `tempo_otlp_http_port`              | `4318`                | OTLP HTTP receiver port            |
+| `tempo_trace_retention`             | `168h`                | Trace block retention (7d)         |
+| `tempo_metrics_generator_enabled`   | `true`                | Generate metrics from traces       |
+| `tempo_metrics_generator_tenant_id` | `infrastructure`      | Mimir tenant for generated metrics |
+| `tempo_traces_bucket`               | `tempo-traces`        | MinIO bucket name                  |
 
 ### Grafana Integration
 
 When Loki and/or Tempo are enabled, the role automatically provisions:
+
 - **Loki datasources** per tenant (app, infrastructure, public) with
   `X-Scope-OrgID` headers
 - **Tempo datasource** with trace-to-logs correlation (links to Loki),
@@ -96,6 +98,7 @@ When Loki and/or Tempo are enabled, the role automatically provisions:
 ### Alerting
 
 Self-monitoring alerts are added automatically:
+
 - `LokiDown` / `LokiRequestErrors` / `LokiIngestionStalled`
 - `TempoDown` / `TempoRequestErrors` / `TempoIngestionStalled`
 
@@ -136,36 +139,36 @@ complete example playbook.
 
 ### What Alloy Collects
 
-| Pipeline | Source | Destination | Toggle |
-|---|---|---|---|
-| Metrics | `prometheus.exporter.unix` (host metrics) | Mimir | `alloy_collect_metrics` |
-| Metrics | Extra scrape targets | Mimir | `alloy_extra_scrape_targets` |
-| Logs | systemd journal | Loki | `alloy_collect_journal` |
-| Logs | Log file globs | Loki | `alloy_collect_log_files` |
-| Logs | Docker container logs | Loki | `alloy_collect_docker_logs` |
-| Traces | OTLP gRPC/HTTP receiver | Tempo | `alloy_collect_traces` |
+| Pipeline | Source                                    | Destination | Toggle                       |
+| -------- | ----------------------------------------- | ----------- | ---------------------------- |
+| Metrics  | `prometheus.exporter.unix` (host metrics) | Mimir       | `alloy_collect_metrics`      |
+| Metrics  | Extra scrape targets                      | Mimir       | `alloy_extra_scrape_targets` |
+| Logs     | systemd journal                           | Loki        | `alloy_collect_journal`      |
+| Logs     | Log file globs                            | Loki        | `alloy_collect_log_files`    |
+| Logs     | Docker container logs                     | Loki        | `alloy_collect_docker_logs`  |
+| Traces   | OTLP gRPC/HTTP receiver                   | Tempo       | `alloy_collect_traces`       |
 
 ### Alloy Variables Reference
 
-| Variable | Default | Description |
-|---|---|---|
-| `alloy_version` | `1.8.1` | Pinned Alloy version |
-| `alloy_config_dir` | `/etc/alloy` | Configuration directory |
-| `alloy_data_dir` | `/var/lib/alloy` | Persistent data directory |
-| `alloy_http_listen_address` | `127.0.0.1` | Health/UI endpoint bind |
-| `alloy_http_port` | `12345` | Health/UI endpoint port |
-| `alloy_scrape_interval` | `15s` | Metrics scrape interval |
-| `alloy_external_labels` | `{}` | Extra labels on all metrics |
-| `alloy_collect_journal` | `true` | Collect systemd journal logs |
-| `alloy_journal_max_age` | `24h` | Max journal entry age on first start |
-| `alloy_collect_log_files` | `[]` | Glob patterns for file log collection |
-| `alloy_collect_docker_logs` | `false` | Collect Docker container logs |
-| `alloy_log_labels` | `{}` | Extra labels on all log streams |
-| `alloy_otlp_listen_address` | `127.0.0.1` | OTLP receiver bind address |
-| `alloy_otlp_grpc_port` | `4317` | OTLP gRPC port |
-| `alloy_otlp_http_port` | `4318` | OTLP HTTP port |
-| `alloy_trace_batch_timeout` | `5s` | Batch processor flush interval |
-| `alloy_trace_batch_size` | `8192` | Max batch size (spans) |
+| Variable                    | Default          | Description                           |
+| --------------------------- | ---------------- | ------------------------------------- |
+| `alloy_version`             | `1.8.1`          | Pinned Alloy version                  |
+| `alloy_config_dir`          | `/etc/alloy`     | Configuration directory               |
+| `alloy_data_dir`            | `/var/lib/alloy` | Persistent data directory             |
+| `alloy_http_listen_address` | `127.0.0.1`      | Health/UI endpoint bind               |
+| `alloy_http_port`           | `12345`          | Health/UI endpoint port               |
+| `alloy_scrape_interval`     | `15s`            | Metrics scrape interval               |
+| `alloy_external_labels`     | `{}`             | Extra labels on all metrics           |
+| `alloy_collect_journal`     | `true`           | Collect systemd journal logs          |
+| `alloy_journal_max_age`     | `24h`            | Max journal entry age on first start  |
+| `alloy_collect_log_files`   | `[]`             | Glob patterns for file log collection |
+| `alloy_collect_docker_logs` | `false`          | Collect Docker container logs         |
+| `alloy_log_labels`          | `{}`             | Extra labels on all log streams       |
+| `alloy_otlp_listen_address` | `127.0.0.1`      | OTLP receiver bind address            |
+| `alloy_otlp_grpc_port`      | `4317`           | OTLP gRPC port                        |
+| `alloy_otlp_http_port`      | `4318`           | OTLP HTTP port                        |
+| `alloy_trace_batch_timeout` | `5s`             | Batch processor flush interval        |
+| `alloy_trace_batch_size`    | `8192`           | Max batch size (spans)                |
 
 ## Instrumenting Applications with OTLP
 
@@ -219,14 +222,16 @@ npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
 ```
 
 ```javascript
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { NodeSDK } = require("@opentelemetry/sdk-node");
+const {
+  OTLPTraceExporter,
+} = require("@opentelemetry/exporter-trace-otlp-http");
 
 const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
-    url: 'http://127.0.0.1:4318/v1/traces',
+    url: "http://127.0.0.1:4318/v1/traces",
   }),
-  serviceName: 'my-service',
+  serviceName: "my-service",
 });
 
 sdk.start();
@@ -257,12 +262,12 @@ will turn these into clickable links to Tempo in Grafana.
 
 ## Retention Summary
 
-| Signal | Component | Default Retention | Variable |
-|---|---|---|---|
-| Metrics | Mimir | Per-tenant (0/30d/90d) | `monitoring_*_retention` |
-| Logs | Loki | 90 days | `loki_retention_period` |
-| Traces | Tempo | 7 days | `tempo_trace_retention` |
-| Metrics (on-host) | Prometheus | 48 hours | `prometheus_storage_retention` |
+| Signal            | Component  | Default Retention      | Variable                       |
+| ----------------- | ---------- | ---------------------- | ------------------------------ |
+| Metrics           | Mimir      | Per-tenant (0/30d/90d) | `monitoring_*_retention`       |
+| Logs              | Loki       | 90 days                | `loki_retention_period`        |
+| Traces            | Tempo      | 7 days                 | `tempo_trace_retention`        |
+| Metrics (on-host) | Prometheus | 48 hours               | `prometheus_storage_retention` |
 
 ## Health Checks
 

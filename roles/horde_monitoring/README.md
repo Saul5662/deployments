@@ -5,17 +5,17 @@ Docker Compose, managed by a single systemd service.
 
 ## What This Role Deploys
 
-| Component | Purpose | Toggle |
-|-----------|---------|--------|
-| **Grafana Mimir** | Long-term metric storage (multi-tenant, S3-backed via MinIO) | `monitoring_install_mimir` |
-| **MinIO** | S3-compatible object storage for Mimir blocks and ruler data | `mimir_enable_minio` |
-| **Memcached** | Query and metadata caching for Mimir | `mimir_enable_memcached` |
-| **Grafana** | Visualization and dashboarding (pre-provisioned datasources + dashboards) | `monitoring_install_grafana` |
-| **Loki** | Log aggregation (opt-in) | `monitoring_install_loki` |
-| **Tempo** | Distributed tracing (opt-in) | `monitoring_install_tempo` |
-| **Pyroscope** | Continuous profiling (opt-in) | `monitoring_install_pyroscope` |
-| **Offsite backup** | Daily `mc mirror` of MinIO data to a remote S3 target | `mimir_backup_enabled` |
-| **Alerting rules** | Prometheus recording/alerting rules for stack self-monitoring | `monitoring_install_alerting_rules` |
+| Component          | Purpose                                                                   | Toggle                              |
+| ------------------ | ------------------------------------------------------------------------- | ----------------------------------- |
+| **Grafana Mimir**  | Long-term metric storage (multi-tenant, S3-backed via MinIO)              | `monitoring_install_mimir`          |
+| **MinIO**          | S3-compatible object storage for Mimir blocks and ruler data              | `mimir_enable_minio`                |
+| **Memcached**      | Query and metadata caching for Mimir                                      | `mimir_enable_memcached`            |
+| **Grafana**        | Visualization and dashboarding (pre-provisioned datasources + dashboards) | `monitoring_install_grafana`        |
+| **Loki**           | Log aggregation (opt-in)                                                  | `monitoring_install_loki`           |
+| **Tempo**          | Distributed tracing (opt-in)                                              | `monitoring_install_tempo`          |
+| **Pyroscope**      | Continuous profiling (opt-in)                                             | `monitoring_install_pyroscope`      |
+| **Offsite backup** | Daily `mc mirror` of MinIO data to a remote S3 target                     | `mimir_backup_enabled`              |
+| **Alerting rules** | Prometheus recording/alerting rules for stack self-monitoring             | `monitoring_install_alerting_rules` |
 
 > **Prometheus is NOT part of this role.** Deploy it directly in your playbook
 > using `prometheus.prometheus.prometheus` for full control over TLS, scrape
@@ -67,60 +67,60 @@ stats exporter.
 
 ### Core Settings
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `monitoring_install_mimir` | `true` | Deploy Mimir + MinIO + Memcached |
-| `monitoring_install_grafana` | `true` | Include Grafana in the Docker stack |
-| `monitoring_configure_haproxy` | `false` | Insert monitoring backends into an existing HAProxy config |
-| `monitoring_configure_firewall` | `false` | Open ports with UFW |
-| `monitoring_start_services` | `true` | Start Docker Compose services (`false` for CI/test) |
+| Variable                        | Default | Description                                                |
+| ------------------------------- | ------- | ---------------------------------------------------------- |
+| `monitoring_install_mimir`      | `true`  | Deploy Mimir + MinIO + Memcached                           |
+| `monitoring_install_grafana`    | `true`  | Include Grafana in the Docker stack                        |
+| `monitoring_configure_haproxy`  | `false` | Insert monitoring backends into an existing HAProxy config |
+| `monitoring_configure_firewall` | `false` | Open ports with UFW                                        |
+| `monitoring_start_services`     | `true`  | Start Docker Compose services (`false` for CI/test)        |
 
 ### Mimir
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `mimir_image` | `grafana/mimir:2.15.0` | Mimir Docker image (pinned) |
-| `mimir_port` | `9009` | HTTP API port |
-| `mimir_config_dir` | `/etc/mimir` | Host path for rendered config |
-| `mimir_data_dir` | `/var/lib/mimir` | WAL, TSDB, compactor work directory |
-| `mimir_compose_dir` | `/opt/mimir` | Docker Compose file location |
-| `mimir_log_level` | `warn` | Log verbosity |
-| `mimir_blocks_retention` | `""` | Global fallback retention (empty = use per-tenant) |
-| `mimir_memory_limit` | `3g` | Container memory limit |
+| Variable                 | Default                | Description                                        |
+| ------------------------ | ---------------------- | -------------------------------------------------- |
+| `mimir_image`            | `grafana/mimir:2.15.0` | Mimir Docker image (pinned)                        |
+| `mimir_port`             | `9009`                 | HTTP API port                                      |
+| `mimir_config_dir`       | `/etc/mimir`           | Host path for rendered config                      |
+| `mimir_data_dir`         | `/var/lib/mimir`       | WAL, TSDB, compactor work directory                |
+| `mimir_compose_dir`      | `/opt/mimir`           | Docker Compose file location                       |
+| `mimir_log_level`        | `warn`                 | Log verbosity                                      |
+| `mimir_blocks_retention` | `""`                   | Global fallback retention (empty = use per-tenant) |
+| `mimir_memory_limit`     | `3g`                   | Container memory limit                             |
 
 ### MinIO (S3 Backend)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `mimir_enable_minio` | `true` | Deploy MinIO alongside Mimir |
-| `minio_image` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | MinIO image (pinned) |
-| `minio_root_user` | `mimir` | MinIO admin username |
-| `minio_root_password` | `changeme-minio-secret` | MinIO admin password (**must override**) |
-| `minio_data_dir` | `/var/lib/minio-data` | Persistent data directory |
-| `minio_memory_limit` | `512m` | Container memory limit |
+| Variable              | Default                                    | Description                              |
+| --------------------- | ------------------------------------------ | ---------------------------------------- |
+| `mimir_enable_minio`  | `true`                                     | Deploy MinIO alongside Mimir             |
+| `minio_image`         | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | MinIO image (pinned)                     |
+| `minio_root_user`     | `mimir`                                    | MinIO admin username                     |
+| `minio_root_password` | `changeme-minio-secret`                    | MinIO admin password (**must override**) |
+| `minio_data_dir`      | `/var/lib/minio-data`                      | Persistent data directory                |
+| `minio_memory_limit`  | `512m`                                     | Container memory limit                   |
 
 ### Multi-Tenant Retention
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `monitoring_application_tenant_id` | `ai-horde-app` | Tenant for AI Horde exporter metrics |
-| `monitoring_application_retention` | `0` | Retention (`0` = infinite) |
-| `monitoring_infrastructure_tenant_id` | `infrastructure` | Tenant for host/infra metrics |
-| `monitoring_infrastructure_retention` | `30d` | Retention period |
-| `monitoring_public_tenant_id` | `ai-horde-public` | Read-only public tenant |
-| `monitoring_public_retention` | `90d` | Retention period |
+| Variable                              | Default           | Description                          |
+| ------------------------------------- | ----------------- | ------------------------------------ |
+| `monitoring_application_tenant_id`    | `ai-horde-app`    | Tenant for AI Horde exporter metrics |
+| `monitoring_application_retention`    | `0`               | Retention (`0` = infinite)           |
+| `monitoring_infrastructure_tenant_id` | `infrastructure`  | Tenant for host/infra metrics        |
+| `monitoring_infrastructure_retention` | `30d`             | Retention period                     |
+| `monitoring_public_tenant_id`         | `ai-horde-public` | Read-only public tenant              |
+| `monitoring_public_retention`         | `90d`             | Retention period                     |
 
 ### Grafana
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `grafana_image` | `grafana/grafana:12.4.1` | Grafana image (pinned) |
-| `grafana_port` | `3000` | Web UI port |
-| `grafana_admin_password` | `changeme` | Admin password (**must override**) |
-| `grafana_root_url` | `""` | External URL (set when behind a reverse proxy) |
-| `grafana_anonymous_enabled` | `true` | Enable anonymous access to public org |
-| `grafana_provision_dashboards` | `true` | Auto-provision dashboards from horde-exporters repo |
-| `grafana_dashboards_repo_ref` | `main` | Git ref for dashboard source |
+| Variable                       | Default                  | Description                                         |
+| ------------------------------ | ------------------------ | --------------------------------------------------- |
+| `grafana_image`                | `grafana/grafana:12.4.1` | Grafana image (pinned)                              |
+| `grafana_port`                 | `3000`                   | Web UI port                                         |
+| `grafana_admin_password`       | `changeme`               | Admin password (**must override**)                  |
+| `grafana_root_url`             | `""`                     | External URL (set when behind a reverse proxy)      |
+| `grafana_anonymous_enabled`    | `true`                   | Enable anonymous access to public org               |
+| `grafana_provision_dashboards` | `true`                   | Auto-provision dashboards from horde-exporters repo |
+| `grafana_dashboards_repo_ref`  | `main`                   | Git ref for dashboard source                        |
 
 ### Offsite Backup
 
@@ -128,46 +128,47 @@ Backup is **enabled by default**. You must configure a remote S3 target or
 explicitly set `mimir_backup_enabled: false`. See [docs/BACKUP.md](../../docs/BACKUP.md)
 for RPO/RTO details and restore procedures.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `mimir_backup_enabled` | `true` | Enable offsite backup |
-| `mimir_backup_schedule` | `*-*-* 02:00:00` | systemd calendar spec |
-| `mimir_backup_target_endpoint` | `""` | Remote S3 endpoint |
-| `mimir_backup_target_bucket` | `""` | Remote bucket name |
-| `mimir_backup_target_access_key` | `""` | Remote access key |
-| `mimir_backup_target_secret_key` | `""` | Remote secret key |
-| `mimir_backup_grafana_db` | `false` | Include Grafana SQLite DB in backup |
+| Variable                         | Default          | Description                         |
+| -------------------------------- | ---------------- | ----------------------------------- |
+| `mimir_backup_enabled`           | `true`           | Enable offsite backup               |
+| `mimir_backup_schedule`          | `*-*-* 02:00:00` | systemd calendar spec               |
+| `mimir_backup_target_endpoint`   | `""`             | Remote S3 endpoint                  |
+| `mimir_backup_target_bucket`     | `""`             | Remote bucket name                  |
+| `mimir_backup_target_access_key` | `""`             | Remote access key                   |
+| `mimir_backup_target_secret_key` | `""`             | Remote secret key                   |
+| `mimir_backup_grafana_db`        | `false`          | Include Grafana SQLite DB in backup |
 
 ### Loki (Opt-in)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `monitoring_install_loki` | `false` | Enable Loki |
-| `loki_image` | `grafana/loki:3.4.2` | Loki image (pinned) |
-| `loki_port` | `3100` | HTTP API port |
-| `loki_retention_period` | `2160h` | Log retention (90 days) |
+| Variable                  | Default              | Description             |
+| ------------------------- | -------------------- | ----------------------- |
+| `monitoring_install_loki` | `false`              | Enable Loki             |
+| `loki_image`              | `grafana/loki:3.4.2` | Loki image (pinned)     |
+| `loki_port`               | `3100`               | HTTP API port           |
+| `loki_retention_period`   | `2160h`              | Log retention (90 days) |
 
 ### Tempo (Opt-in)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `monitoring_install_tempo` | `false` | Enable Tempo |
-| `tempo_image` | `grafana/tempo:2.7.1` | Tempo image (pinned) |
-| `tempo_http_port` | `3200` | HTTP API port |
-| `tempo_trace_retention` | `168h` | Trace retention (7 days) |
-| `tempo_metrics_generator_enabled` | `true` | Generate metrics from traces |
+| Variable                          | Default               | Description                  |
+| --------------------------------- | --------------------- | ---------------------------- |
+| `monitoring_install_tempo`        | `false`               | Enable Tempo                 |
+| `tempo_image`                     | `grafana/tempo:2.7.1` | Tempo image (pinned)         |
+| `tempo_http_port`                 | `3200`                | HTTP API port                |
+| `tempo_trace_retention`           | `168h`                | Trace retention (7 days)     |
+| `tempo_metrics_generator_enabled` | `true`                | Generate metrics from traces |
 
 ### Pyroscope (Opt-in)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `monitoring_install_pyroscope` | `false` | Enable Pyroscope |
-| `pyroscope_image` | `grafana/pyroscope:1.19.0` | Pyroscope image (pinned) |
-| `pyroscope_port` | `4040` | HTTP API port |
+| Variable                       | Default                    | Description              |
+| ------------------------------ | -------------------------- | ------------------------ |
+| `monitoring_install_pyroscope` | `false`                    | Enable Pyroscope         |
+| `pyroscope_image`              | `grafana/pyroscope:1.19.0` | Pyroscope image (pinned) |
+| `pyroscope_port`               | `4040`                     | HTTP API port            |
 
 ### HAProxy Integration
 
 When `monitoring_configure_haproxy: true`, the role:
+
 1. Creates a timestamped backup of the current HAProxy config
 2. Inserts `grafana_backend` and `mimir_backend` into a working copy
 3. Validates with `haproxy -c`

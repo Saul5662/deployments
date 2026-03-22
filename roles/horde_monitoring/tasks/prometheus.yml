@@ -5,23 +5,23 @@
 - name: Build default scrape configs
   set_fact:
     _monitoring_scrape_configs:
-      - job_name: 'prometheus'
+      - job_name: "prometheus"
         static_configs:
           - targets:
               - "localhost:{{ prometheus_port }}"
-      - job_name: 'mimir'
+      - job_name: "mimir"
         static_configs:
           - targets:
               - "localhost:{{ mimir_port }}"
-      - job_name: 'horde-exporter'
+      - job_name: "horde-exporter"
         scrape_interval: 15s
         static_configs:
           - targets:
-              - 'localhost:9100'
-      - job_name: 'node'
+              - "localhost:9100"
+      - job_name: "node"
         static_configs:
           - targets:
-              - 'localhost:9300'
+              - "localhost:9300"
 
 - name: Append extra scrape configs
   set_fact:

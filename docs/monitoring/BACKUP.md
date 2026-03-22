@@ -12,19 +12,19 @@ configure a remote S3 target or explicitly disable backup.
 
 ## RPO / RTO Characteristics
 
-| Scenario | RPO (data loss) | RTO (recovery time) | Notes |
-|----------|----------------|---------------------|-------|
-| Disk failure, daily backup | ≤ 24h of metrics | Hours (depends on data volume + bandwidth) | Restore via `mc mirror` from remote |
-| Disk failure, no backup | **Total loss** | N/A — data is gone | Only Prometheus's local WAL (~2h) survives |
-| Mimir WAL corruption | ~2h of inflight data | Minutes (restart Mimir) | Blocks already flushed to MinIO are safe |
-| Host failure | Same as disk failure | Same + host provisioning time | Full stack redeploy + data restore |
+| Scenario                   | RPO (data loss)      | RTO (recovery time)                        | Notes                                      |
+| -------------------------- | -------------------- | ------------------------------------------ | ------------------------------------------ |
+| Disk failure, daily backup | ≤ 24h of metrics     | Hours (depends on data volume + bandwidth) | Restore via `mc mirror` from remote        |
+| Disk failure, no backup    | **Total loss**       | N/A — data is gone                         | Only Prometheus's local WAL (~2h) survives |
+| Mimir WAL corruption       | ~2h of inflight data | Minutes (restart Mimir)                    | Blocks already flushed to MinIO are safe   |
+| Host failure               | Same as disk failure | Same + host provisioning time              | Full stack redeploy + data restore         |
 
 ## Backup Configuration
 
 ### Required variables
 
 ```yaml
-mimir_backup_enabled: true                          # default
+mimir_backup_enabled: true # default
 mimir_backup_target_endpoint: "https://s3.example.com"
 mimir_backup_target_bucket: "mimir-backup"
 mimir_backup_target_access_key: "{{ vault_backup_access_key }}"
@@ -34,9 +34,9 @@ mimir_backup_target_secret_key: "{{ vault_backup_secret_key }}"
 ### Optional variables
 
 ```yaml
-mimir_backup_schedule: "*-*-* 02:00:00"     # systemd calendar spec (default: daily 02:00 UTC)
-mimir_backup_target_insecure: false          # allow non-TLS endpoint
-mimir_backup_remove_deleted: false           # see "Divergence Strategies" below
+mimir_backup_schedule: "*-*-* 02:00:00" # systemd calendar spec (default: daily 02:00 UTC)
+mimir_backup_target_insecure: false # allow non-TLS endpoint
+mimir_backup_remove_deleted: false # see "Divergence Strategies" below
 ```
 
 ### Disabling backup
@@ -49,11 +49,11 @@ a target endpoint, the deploy will **fail** with an actionable error message.
 
 ## What Gets Backed Up
 
-| Bucket | Contents | Backed up? |
-|--------|----------|-----------|
-| `mimir-blocks` | Compacted TSDB blocks (long-term metric storage) | ✔ |
-| `mimir-ruler` | Recording and alerting rules stored in Mimir | ✔ |
-| `mimir-ruler/grafana-backup/` | Grafana SQLite database (`grafana.db`) | ✔ (opt-in) |
+| Bucket                        | Contents                                         | Backed up? |
+| ----------------------------- | ------------------------------------------------ | ---------- |
+| `mimir-blocks`                | Compacted TSDB blocks (long-term metric storage) | ✔          |
+| `mimir-ruler`                 | Recording and alerting rules stored in Mimir     | ✔          |
+| `mimir-ruler/grafana-backup/` | Grafana SQLite database (`grafana.db`)           | ✔ (opt-in) |
 
 The backup service mirrors both buckets to the remote target as
 `<target-bucket>-blocks` and `<target-bucket>-ruler` respectively.
@@ -116,15 +116,18 @@ journalctl -u mimir-backup --since "24 hours ago" --no-pager
 
 1. **systemd timer status:** The simplest check — if the timer is active
    and the service isn't in a `failed` state, backups are working:
+
    ```bash
    systemctl is-active mimir-backup.timer && ! systemctl is-failed mimir-backup
    ```
 
 2. **Timestamp staleness:** Alert if `.backup-last-success` is older than
    your backup interval plus a margin. Example cron/monitoring check:
+
    ```bash
    find /var/lib/minio-data/.backup-last-success -mmin +1500 -exec echo "STALE" \;
    ```
+
    (1500 minutes ≈ 25 hours, appropriate for a daily schedule)
 
 3. **node_exporter systemd collector:** If node_exporter is configured
@@ -137,11 +140,11 @@ journalctl -u mimir-backup --since "24 hours ago" --no-pager
 The role defaults to **append-only** mode (`--overwrite` without `--remove`).
 This has important implications:
 
-| Strategy | Variable | Remote growth | Propagates deletions? |
-|----------|----------|--------------|----------------------|
-| **Append-only** (default) | `mimir_backup_remove_deleted: false` | Unbounded — remote retains blocks deleted locally by the compactor | No — safest option |
-| **Parity** | `mimir_backup_remove_deleted: true` | Matches local — compactor deletions propagate | Yes — accidental deletions also propagate |
-| **Versioned** (ideal) | `mimir_backup_remove_deleted: false` + S3 versioning on remote target | Bounded by version policy | Soft — versions retained |
+| Strategy                  | Variable                                                              | Remote growth                                                      | Propagates deletions?                     |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+| **Append-only** (default) | `mimir_backup_remove_deleted: false`                                  | Unbounded — remote retains blocks deleted locally by the compactor | No — safest option                        |
+| **Parity**                | `mimir_backup_remove_deleted: true`                                   | Matches local — compactor deletions propagate                      | Yes — accidental deletions also propagate |
+| **Versioned** (ideal)     | `mimir_backup_remove_deleted: false` + S3 versioning on remote target | Bounded by version policy                                          | Soft — versions retained                  |
 
 **Recommendation:** Use append-only (the default) unless your remote target
 has S3 object versioning enabled. With append-only + bounded local retention

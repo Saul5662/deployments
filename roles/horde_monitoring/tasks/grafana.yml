@@ -11,7 +11,7 @@
     # 0600: secureJsonData contains Mimir tenant IDs which control write
     # access to tenant data. Grafana (UID 472) is the owner so can still
     # read the file. Consistent with Plan 003's posture for secret files.
-    mode: '0600'
+    mode: "0600"
   become: true
   notify: restart monitoring stack
 
@@ -21,7 +21,7 @@
     dest: "{{ grafana_provisioning_dir }}/dashboards/default.yml"
     owner: "472"
     group: "472"
-    mode: '0600'
+    mode: "0600"
   become: true
   notify: restart monitoring stack
 
