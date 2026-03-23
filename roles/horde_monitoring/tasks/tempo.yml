@@ -25,6 +25,7 @@
     - "{{ tempo_data_dir }}/blocks"
     - "{{ tempo_data_dir }}/generator"
     - "{{ tempo_data_dir }}/generator/wal"
+    - "{{ tempo_data_dir }}/generator/traces"
 
 - name: Template Tempo configuration
   template:

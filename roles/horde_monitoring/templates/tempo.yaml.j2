@@ -72,6 +72,8 @@ metrics_generator:
         headers:
           X-Scope-OrgID: {{ tempo_metrics_generator_tenant_id }}
         send_exemplars: true
+  traces_storage:
+    path: /var/tempo/generator/traces
 
 overrides:
   defaults:
