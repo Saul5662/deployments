@@ -1,0 +1,10 @@
+---
+# Collection dependencies for CI and local development.
+# Mirrors the 'dependencies' section of galaxy.yml so ansible-galaxy
+# collection install -r requirements.yml works correctly.
+# (galaxy.yml is the collection manifest and cannot be used as a requirements file.)
+collections:
+  - name: prometheus.prometheus
+    version: ">=0.16.0,<1.0.0"
+  - name: grafana.grafana
+    version: ">=6.0.0,<7.0.0"

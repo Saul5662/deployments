@@ -74,7 +74,7 @@ jobs:
         run: pip install ansible
 
       - name: Install collection dependencies
-        run: ansible-galaxy collection install -r galaxy.yml --force
+        run: ansible-galaxy collection install -r requirements.yml --force
 
       - name: Cache test Docker image
         uses: actions/cache@v4
@@ -114,7 +114,7 @@ jobs:
         run: pip install ansible
 
       - name: Install collection dependencies
-        run: ansible-galaxy collection install -r galaxy.yml --force
+        run: ansible-galaxy collection install -r requirements.yml --force
 
       - name: Syntax check all test playbooks
         run: |
