@@ -36,7 +36,6 @@
   become: true
 
 - name: Validate and promote HAProxy config
-  listen: Validate and promote HAProxy config
   block:
     - name: Validate working copy with HAProxy config checker
       ansible.builtin.command: haproxy -c -f {{ _haproxy_working_file.path }}
