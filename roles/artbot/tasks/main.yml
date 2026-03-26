@@ -59,7 +59,7 @@
   changed_when: true
   tags: artbot_app
 
-- name: Clone Artbot github repository # noqa: latest[git]
+- name: Clone Artbot github repository  # noqa: latest[git]
   ansible.builtin.git:
     repo: https://github.com/Haidra-Org/artbot
     dest: /home/artbot/artbot
