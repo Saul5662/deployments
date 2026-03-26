@@ -50,7 +50,7 @@ jobs:
       - name: yamllint
         run: |
           yamllint -d '{extends: default, rules: {line-length: {max: 200}, truthy: {check-keys: false}}}' \
-            roles/ tests/*.yml examples/
+            roles/ tests/**/*.yml examples/
 
       - name: ansible-lint
         run: ansible-lint roles/ tests/test_*.yml examples/

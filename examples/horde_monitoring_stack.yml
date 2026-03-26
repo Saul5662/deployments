@@ -70,18 +70,18 @@
 
     # -- Loki (log aggregation — opt-in) --
     monitoring_install_loki: true
-    loki_retention_period: "2160h" # 90 days
+    loki_retention_period: "2160h"  # 90 days
 
     # -- Tempo (distributed tracing — opt-in) --
     monitoring_install_tempo: true
-    tempo_trace_retention: "168h" # 7 days
+    tempo_trace_retention: "168h"  # 7 days
     tempo_metrics_generator_enabled: true
     tempo_metrics_generator_tenant_id: "infrastructure"
 
     # -- Pyroscope (continuous profiling — opt-in) --
     monitoring_install_pyroscope: true
-    pyroscope_retention_period: "0s" # global default (infinite)
-    pyroscope_application_retention: "0" # per-tenant: infinite
+    pyroscope_retention_period: "0s"  # global default (infinite)
+    pyroscope_application_retention: "0"  # per-tenant: infinite
     pyroscope_infrastructure_retention: "30d"
     pyroscope_public_retention: "90d"
     pyroscope_self_profiling: true

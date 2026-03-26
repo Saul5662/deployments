@@ -28,7 +28,7 @@
     monitoring_install_pyroscope: true
     monitoring_configure_haproxy: false
     monitoring_configure_firewall: false
-    monitoring_start_services: false # script starts compose directly
+    monitoring_start_services: false  # script starts compose directly
 
     mimir_config_dir: "{{ _local_root }}/mimir/config"
     mimir_data_dir: "{{ _local_root }}/mimir/data"
@@ -53,8 +53,8 @@
     monitoring_public_tenant_id: "ai-horde-public"
 
     # Loki / Tempo local settings
-    loki_retention_period: "168h" # 7 days for local dev
-    tempo_trace_retention: "24h" # 1 day for local dev
+    loki_retention_period: "168h"  # 7 days for local dev
+    tempo_trace_retention: "24h"  # 1 day for local dev
     tempo_metrics_generator_enabled: true
     tempo_metrics_generator_tenant_id: "infrastructure"
 

@@ -2,12 +2,12 @@
 all:
   hosts:
     artbot_server:
-      ansible_host: 10.0.0.1 # Put your artbot server IP here
+      ansible_host: 10.0.0.1  # Put your artbot server IP here
       ansible_become: true
     regen_worker:
-      ansible_host: 10.0.0.2 # Put your regen worker IP here. You can use `localhost` for your current PC
+      ansible_host: 10.0.0.2  # Put your regen worker IP here. You can use `localhost` for your current PC
       ansible_become: true
-      worker_username: hworker # You can use your own username if you run on `localhost`
+      worker_username: hworker  # You can use your own username if you run on `localhost`
       api_key: "abcdefg012345"
       dreamer_name: My Asible Dreamer
       max_power: 32
