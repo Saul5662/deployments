@@ -8,6 +8,7 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  become: true
   vars:
     aihorde_frontpage_start_services: false
     aihorde_frontpage_deploy_mode: docker
@@ -127,6 +128,7 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  become: true
   vars:
     aihorde_frontpage_start_services: false
     aihorde_frontpage_deploy_mode: native

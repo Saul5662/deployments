@@ -8,6 +8,7 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  become: true
   vars:
     # Override base dirs to output under temp directories
     ai_horde_base_dir: /tmp/fullstack-test/ai-horde
