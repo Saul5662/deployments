@@ -42,6 +42,13 @@ jobs:
       - name: Install galaxy dependencies
         run: ansible-galaxy collection install -r examples/requirements.yml
 
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Run render tests
         run: ./tests/run_tests.sh "${{ matrix.suite }}"
         timeout-minutes: 15
@@ -64,6 +71,13 @@ jobs:
 
       - name: Install galaxy dependencies
         run: ansible-galaxy collection install -r examples/requirements.yml
+
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Run integration smoke test
         run: ./tests/run_tests.sh integration
@@ -88,6 +102,13 @@ jobs:
 
       - name: Install galaxy dependencies
         run: ansible-galaxy collection install -r examples/requirements.yml
+
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Deploy AI-Horde + probe
         run: ./tests/integration/local_deploy.sh up
