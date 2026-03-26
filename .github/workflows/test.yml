@@ -74,6 +74,13 @@ jobs:
       - name: Install collection dependencies
         run: ansible-galaxy collection install -r requirements.yml --force
 
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Cache test Docker image
         uses: actions/cache@v4
         with:
