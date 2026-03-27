@@ -151,7 +151,7 @@
     cmd: npm ci
     chdir: "{{ aihorde_frontpage_base_dir }}/src"
   become: true
-  changed_when: true
+  changed_when: _frontpage_needs_build | default(false)
   when:
     - aihorde_frontpage_start_services | bool
     - _frontpage_needs_build | default(false)
@@ -161,7 +161,7 @@
     cmd: "npm run build -- --configuration={{ aihorde_frontpage_build_config }}"
     chdir: "{{ aihorde_frontpage_base_dir }}/src"
   become: true
-  changed_when: true
+  changed_when: _frontpage_needs_build | default(false)
   when:
     - aihorde_frontpage_start_services | bool
     - _frontpage_needs_build | default(false)

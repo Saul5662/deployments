@@ -96,7 +96,8 @@
     --python {{ exporter_install_dir }}/venv/bin/python
     "ai-horde-stats-exporter @ git+{{ exporter_repo_url }}@{{ exporter_repo_ref }}#subdirectory=packages/ai-horde-stats-exporter"
   become: true
-  changed_when: true
+  register: _exporter_install
+  changed_when: _exporter_install.rc == 0
   when:
     - not ansible_check_mode
     - _exporter_ref_current != exporter_repo_ref

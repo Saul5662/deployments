@@ -16,9 +16,10 @@
 
 - name: Execute the nvm installer
   ansible.builtin.command: /tmp/install.sh
+  args:
+    creates: /home/artbot/.nvm/nvm.sh
   become: true
   become_user: artbot
-  changed_when: true
   tags: artbot_app
 
 - name: Install nvm
@@ -35,10 +36,10 @@
   ansible.builtin.shell: source /home/artbot/.nvm/nvm.sh && npm install -g pm2
   args:
     executable: /bin/bash
-  register: nvm_out
+  register: _pm2_install
   become: true
   become_user: artbot
-  changed_when: true
+  changed_when: "'added' in _pm2_install.stdout or 'updated' in _pm2_install.stdout"
   tags: artbot_app
 
 - name: Setup pm2 service
@@ -47,16 +48,16 @@
     startup systemd -u artbot --hp /home/artbot
   args:
     executable: /bin/bash
-  changed_when: true
+    creates: /home/artbot/.config/systemd/user/pm2-artbot.service
   tags: artbot_app
 
 - name: Install pm2-logrotate
   ansible.builtin.shell: source /home/artbot/.nvm/nvm.sh && pm2 install pm2-logrotate
   args:
     executable: /bin/bash
+    creates: /home/artbot/.pm2/modules/pm2-logrotate
   become: true
   become_user: artbot
-  changed_when: true
   tags: artbot_app
 
 - name: Clone Artbot github repository  # noqa: latest[git]
@@ -81,7 +82,7 @@
     chdir: /home/artbot/artbot
   become: true
   become_user: artbot
-  changed_when: true
+  changed_when: git.changed is true or force_build
   tags:
     - artbot_app
     - update
@@ -96,7 +97,7 @@
     ARTBOT_STATUS_API: "{{ artbot_status_api }}"
   become: true
   become_user: artbot
-  changed_when: true
+  changed_when: git.changed is true
   when: git.changed is true or force_build
   tags:
     - artbot_app
@@ -144,9 +145,9 @@
     chdir: /home/artbot/builds/latest
   become: true
   become_user: artbot
-  changed_when: true
   when: git.changed is true or force_build
   register: artbot_stop
+  changed_when: artbot_stop.rc == 0
   failed_when:
     - artbot_stop.rc != 0
     - "not 'Process or Namespace artbot not found' in artbot_stop.stderr"
@@ -161,7 +162,7 @@
     chdir: /home/artbot/builds/latest
   become: true
   become_user: artbot
-  changed_when: true
+  changed_when: git.changed is true
   when: git.changed is true or force_build
   tags:
     - artbot_app
