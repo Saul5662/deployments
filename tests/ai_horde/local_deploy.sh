@@ -16,6 +16,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy/ai-horde"
+
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 USE_LATEST_REF=false
 AI_HORDE_REF="${AI_HORDE_REF:-af0a85a78613cdba9863e16bbec0c179a4b2b132}"
@@ -74,8 +77,7 @@ find_ansible() {
 render_configs() {
   find_ansible
   log "Rendering AI-Horde configs into $LOCAL_ROOT ..."
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
-    "$ANSIBLE_PLAYBOOK" \
+  "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
       --become \

@@ -23,6 +23,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 COMPOSE_DIR="$LOCAL_ROOT/compose"
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
@@ -86,8 +89,7 @@ find_ansible() {
 render_configs() {
   find_ansible
   log "Rendering monitoring stack configs into $LOCAL_ROOT ..."
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
-    "$ANSIBLE_PLAYBOOK" \
+  "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
       --become \

@@ -16,6 +16,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy/frontpage"
+
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
 USE_LATEST_REF=false
 FRONTPAGE_REF="${FRONTPAGE_REF:-a56aec53f46470ca3796e1a7eabbe029e32563d3}"
 
@@ -79,8 +82,7 @@ render_configs() {
   find_ansible
   log "Rendering AiHordeFrontpage configs into $LOCAL_ROOT ..."
   log "  Host port: $FRONTPAGE_PORT  Listen: $FRONTPAGE_LISTEN"
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
-    "$ANSIBLE_PLAYBOOK" \
+  "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
       --become \

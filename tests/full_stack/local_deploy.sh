@@ -23,6 +23,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
+
 
 WITH_MONITORING=false
 WITH_WORKER=false
@@ -183,8 +186,7 @@ render_configs() {
 
   # Render backend + frontpage configs
   log "Rendering backend + frontpage configs via Ansible ..."
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
-    "$ANSIBLE_PLAYBOOK" \
+  "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
       --become \
@@ -194,11 +196,9 @@ render_configs() {
   # Render monitoring configs if requested
   if [ "$WITH_MONITORING" = true ]; then
     local mon_playbook="$REPO_ROOT/tests/monitoring/local_deploy.yml"
-    local mon_ansible_cfg="$REPO_ROOT/tests/monitoring/ansible.cfg"
     if [ -f "$mon_playbook" ]; then
       log "Rendering monitoring stack configs via Ansible ..."
-      ANSIBLE_CONFIG="$mon_ansible_cfg" \
-        "$ANSIBLE_PLAYBOOK" \
+      "$ANSIBLE_PLAYBOOK" \
           -i "localhost," \
           "$mon_playbook" \
           --become \
@@ -385,7 +385,6 @@ deploy_worker() {
     return 1
   fi
   log "Rendering worker bridgeData.yaml ..."
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
   "$ANSIBLE_PLAYBOOK" -i "localhost," -c local --become \
     -e "worker_username=root" \
     -e "worker_runtime_dir=$worker_dir/horde-worker-regen" \

@@ -25,6 +25,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
+
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
+
 AI_HORDE_DIR="$LOCAL_ROOT/ai-horde"
 INTEGRATION_DIR="$LOCAL_ROOT/integration"
 WORKER_DIR="$LOCAL_ROOT/worker"
@@ -99,8 +103,7 @@ find_ansible() {
 render_configs() {
   find_ansible
   log "Rendering integration configs ..."
-  ANSIBLE_CONFIG="$SCRIPT_DIR/ansible.cfg" \
-    "$ANSIBLE_PLAYBOOK" \
+  "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
       --become \
