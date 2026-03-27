@@ -50,14 +50,7 @@
   loop:
     - /opt/rocm/lib
     - /opt/rocm/lib64
-  register: _rocm_ldconfig
-  tags:
-    - rocm
-
-- name: Run ldconfig
-  ansible.builtin.command: ldconfig
-  changed_when: false
-  when: _rocm_ldconfig is changed
+  notify: Run ldconfig
   tags:
     - rocm
 
