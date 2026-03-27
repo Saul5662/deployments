@@ -57,13 +57,13 @@ jobs:
         run: ansible-galaxy collection install -r examples/requirements.yml
 
       - name: Syntax check test playbooks
+        env:
+          ANSIBLE_ROLES_PATH: ${{ github.workspace }}/roles
+          ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
-          suite="tests/${{ matrix.suite }}"
-          cfg="${suite}/ansible.cfg"
-          [ -f "$cfg" ] || cfg="tests/ansible.cfg"
-          for pb in ${suite}/test_*.yml; do
+          for pb in tests/${{ matrix.suite }}/test_*.yml; do
             echo "--- Syntax-checking $pb ---"
-            ANSIBLE_CONFIG="$cfg" ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
+            ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
           done
 
   # Full render via run_tests.sh (--privileged containers).

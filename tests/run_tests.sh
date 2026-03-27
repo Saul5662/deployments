@@ -20,6 +20,9 @@ IMAGE_NAME="horde-test-systemd"
 TEMP_DOCKER_CONFIG=""
 LOG_DIR=""
 
+export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
+export ANSIBLE_HOST_KEY_CHECKING=False
+
 # Colours (disabled when not a terminal)
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
@@ -245,18 +248,6 @@ if [ -z "$ANSIBLE_PLAYBOOK" ]; then
 fi
 
 
-# If the playbook's directory has its own ansible.cfg, use it.
-# Otherwise fall back to the shared one at tests/ansible.cfg.
-resolve_ansible_cfg() {
-  local playbook_dir="$1"
-  if [ -f "$playbook_dir/ansible.cfg" ]; then
-    echo "$playbook_dir/ansible.cfg"
-  else
-    echo "$SCRIPT_DIR/ansible.cfg"
-  fi
-}
-
-
 run_playbook() {
   local playbook_path="$1"
   local pb_label="$2"
@@ -266,10 +257,6 @@ run_playbook() {
     return 1
   fi
 
-  local playbook_dir
-  playbook_dir="$(dirname "$playbook_path")"
-  local cfg
-  cfg="$(resolve_ansible_cfg "$playbook_dir")"
   local playbook_name
   playbook_name="$(basename "$playbook_path")"
 
@@ -290,25 +277,23 @@ run_playbook() {
     logfile="${LOG_DIR}/$(log_filename "$pb_label").log"
   fi
 
-  log "Running playbook: ${playbook_name} (config: ${cfg})"
+  log "Running playbook: ${playbook_name}"
 
   # Run the playbook, teeing to both console and log file
   local rc=0
   if [ -n "$logfile" ]; then
     set +e
-    ANSIBLE_CONFIG="$cfg" \
-      "$ANSIBLE_PLAYBOOK" \
-        -i "$SCRIPT_DIR/inventory_docker.ini" \
-        "$playbook_path" \
-        -v 2>&1 | tee "$logfile"
+    "$ANSIBLE_PLAYBOOK" \
+      -i "$SCRIPT_DIR/inventory_docker.ini" \
+      "$playbook_path" \
+      -v 2>&1 | tee "$logfile"
     rc="${PIPESTATUS[0]}"
     set -e
   else
-    ANSIBLE_CONFIG="$cfg" \
-      "$ANSIBLE_PLAYBOOK" \
-        -i "$SCRIPT_DIR/inventory_docker.ini" \
-        "$playbook_path" \
-        -v || rc=$?
+    "$ANSIBLE_PLAYBOOK" \
+      -i "$SCRIPT_DIR/inventory_docker.ini" \
+      "$playbook_path" \
+      -v || rc=$?
   fi
 
   if [ "$rc" -ne 0 ]; then
@@ -340,25 +325,15 @@ run_playbook() {
 
   local idem_rc=0
   local idem_output
+  set +e
+  idem_output=$("$ANSIBLE_PLAYBOOK" \
+    -i "$SCRIPT_DIR/inventory_docker.ini" \
+    "$playbook_path" \
+    -v 2>&1)
+  idem_rc=$?
+  set -e
   if [ -n "$idem_logfile" ]; then
-    set +e
-    idem_output=$(ANSIBLE_CONFIG="$cfg" \
-      "$ANSIBLE_PLAYBOOK" \
-        -i "$SCRIPT_DIR/inventory_docker.ini" \
-        "$playbook_path" \
-        -v 2>&1)
-    idem_rc=$?
-    set -e
     echo "$idem_output" > "$idem_logfile"
-  else
-    set +e
-    idem_output=$(ANSIBLE_CONFIG="$cfg" \
-      "$ANSIBLE_PLAYBOOK" \
-        -i "$SCRIPT_DIR/inventory_docker.ini" \
-        "$playbook_path" \
-        -v 2>&1)
-    idem_rc=$?
-    set -e
   fi
 
   if [ "$idem_rc" -ne 0 ]; then

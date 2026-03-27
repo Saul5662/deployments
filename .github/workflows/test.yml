@@ -123,6 +123,9 @@ jobs:
         run: ansible-galaxy collection install -r requirements.yml --force
 
       - name: Syntax check all test playbooks
+        env:
+          ANSIBLE_ROLES_PATH: ${{ github.workspace }}/roles
+          ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
           shopt -s globstar
           for pb in tests/**/test_*.yml; do
