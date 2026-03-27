@@ -38,11 +38,13 @@
     - haproxy
 
 - name: Create merged certificate
-  ansible.builtin.shell: >
-    cat /etc/haproxy/cert/{{ artbot_domain }}.key
-    /etc/haproxy/cert/{{ artbot_domain }}.crt
-    > /etc/haproxy/cert/{{ artbot_domain }}.pem
-  changed_when: true
+  ansible.builtin.assemble:
+    src: /etc/haproxy/cert
+    dest: /etc/haproxy/cert/{{ artbot_domain }}.pem
+    regexp: "{{ artbot_domain }}\\.(key|crt)$"
+    owner: root
+    group: root
+    mode: "0600"
   when: self_signed_cert
   tags:
     - haproxy
@@ -54,21 +56,25 @@
     --keep-until-expiring --agree-tos --standalone
     --http-01-port 60001 --email {{ email }}
     --standalone -n --expand
-  changed_when: true
+  register: _certbot_result
+  changed_when: "'no action taken' not in _certbot_result.stdout"
   tags:
     - cert
     - haproxy
   when: not self_signed_cert
 
 - name: Merge certbot certificates for {{ artbot_domain }}
-  ansible.builtin.shell:
-    cat /etc/letsencrypt/live/{{ artbot_domain }}/privkey.pem /etc/letsencrypt/live/{{ artbot_domain }}/fullchain.pem >
-    /etc/haproxy/cert/{{ artbot_domain }}.pem
-  changed_when: true
+  ansible.builtin.assemble:
+    src: /etc/letsencrypt/live/{{ artbot_domain }}
+    dest: /etc/haproxy/cert/{{ artbot_domain }}.pem
+    regexp: '(privkey|fullchain)\.pem$'
+    owner: root
+    group: root
+    mode: "0600"
+  when: not self_signed_cert
   tags:
     - cert
     - haproxy
-  when: not self_signed_cert
 
 - name: Ensure Haproxy Configuration
   ansible.builtin.template:
