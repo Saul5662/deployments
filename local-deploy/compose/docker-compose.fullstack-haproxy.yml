@@ -1,0 +1,29 @@
+# HAProxy for the complete local Horde stack.
+# Started by tests/full_stack/local_deploy.sh.
+services:
+  haproxy:
+    image: haproxy:3.1-alpine
+    container_name: horde-haproxy
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+      - "127.0.0.1:8404:8404"
+    volumes:
+      - ../haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - horde-stack
+    logging:
+      driver: local
+      options:
+        max-size: "25m"
+        max-file: "3"
+    depends_on: []
+
+networks:
+  horde-stack:
+    external: true

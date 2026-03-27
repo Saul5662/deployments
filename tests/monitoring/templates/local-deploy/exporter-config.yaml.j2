@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# Exporter config for local-deploy stack.
+# Port must match the Docker Compose port mapping.
+scrape_intervals:
+  models: 8
+  workers: 300
+  performance: 2
+  stats: 120
+  modes: 30
+  teams: 300
+
+api:
+  base_url: "https://aihorde.net/api/v2"
+  user_agent: "horde_prometheus_exporter/local-dev"
+  timeout: 10
+
+exporter:
+  port: {{ _local_exporter_port }}
+  log_level: INFO

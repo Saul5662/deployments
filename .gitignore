@@ -3,7 +3,24 @@
 
 .ansible/
 .tmp-collections/
-local-deploy/
+# Ignore local-deploy contents (runtime data, generated configs, conda, etc.)
+# but track specific static infrastructure configs that CI tests depend on.
+local-deploy/*
+!local-deploy/ai-horde/
+local-deploy/ai-horde/*
+!local-deploy/ai-horde/docker-compose.network-overlay.yml
+!local-deploy/frontpage/
+local-deploy/frontpage/*
+!local-deploy/frontpage/docker-compose.network-overlay.yml
+!local-deploy/exporter/
+local-deploy/exporter/*
+!local-deploy/exporter/docker-compose.network-overlay.yml
+!local-deploy/haproxy/
+local-deploy/haproxy/*
+!local-deploy/haproxy/haproxy.cfg
+!local-deploy/compose/
+local-deploy/compose/*
+!local-deploy/compose/docker-compose.fullstack-haproxy.yml
 
 
 .vscode/

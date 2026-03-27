@@ -1,0 +1,100 @@
+// {{ ansible_managed }}
+//
+// Local-deploy Alloy configuration.
+// Collects Docker container logs and forwards to Loki.
+// Exposes OTLP receiver for traces → Tempo.
+// Prometheus scrapes Alloy's own metrics via its HTTP endpoint.
+
+logging {
+  level = "info"
+}
+
+// ── LOG PIPELINE ────────────────────────────────────────────────────
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_containers.output
+  forward_to = [loki.process.docker.receiver]
+  labels     = {
+    "source"   = "docker",
+    "instance" = "local-deploy",
+  }
+}
+
+loki.process "docker" {
+  stage.docker {}
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url       = "http://loki:{{ loki_port }}/loki/api/v1/push"
+    tenant_id = "{{ monitoring_infrastructure_tenant_id }}"
+  }
+
+  external_labels = {
+    "instance" = "local-deploy",
+  }
+}
+
+// ── TRACE PIPELINE ──────────────────────────────────────────────────
+otelcol.receiver.otlp "local" {
+  grpc {
+    endpoint = "0.0.0.0:{{ _local_otlp_grpc_port }}"
+  }
+
+  http {
+    endpoint = "0.0.0.0:{{ _local_otlp_http_port }}"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  timeout             = "5s"
+  send_batch_max_size = 8192
+
+  output {
+    metrics = [otelcol.exporter.prometheus.mimir.input]
+    traces  = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+otelcol.exporter.prometheus "mimir" {
+  forward_to = [prometheus.remote_write.otlp_metrics.receiver]
+}
+
+prometheus.remote_write "otlp_metrics" {
+  external_labels = {
+    "instance" = "local-deploy",
+  }
+
+  endpoint {
+    url = "http://mimir:{{ mimir_port }}/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "{{ monitoring_application_tenant_id }}",
+    }
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = "http://tempo:{{ tempo_otlp_http_port }}"
+  }
+}

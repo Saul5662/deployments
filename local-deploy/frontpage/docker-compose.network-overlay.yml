@@ -1,0 +1,13 @@
+# Overlay: connects the frontpage to the shared horde-stack network.
+# Used with: docker compose -f docker-compose.yml -f docker-compose.network-overlay.yml
+services:
+  frontpage:
+    networks:
+      - frontpage_network
+      - horde-stack
+
+networks:
+  frontpage_network:
+    driver: bridge
+  horde-stack:
+    external: true

@@ -1,0 +1,14 @@
+# Overlay: connects the stats exporter to the shared horde-stack network.
+# The horde-exporter service is defined in docker-compose.local.yml.
+# Used with: docker compose -f ../compose/docker-compose.yml -f ../compose/docker-compose.local.yml -f docker-compose.network-overlay.yml
+services:
+  horde-exporter:
+    networks:
+      - monitoring
+      - horde-stack
+
+networks:
+  monitoring:
+    driver: bridge
+  horde-stack:
+    external: true

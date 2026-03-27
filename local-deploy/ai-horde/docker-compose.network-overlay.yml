@@ -1,0 +1,13 @@
+# Overlay: connects the AI-Horde API to the shared horde-stack network.
+# Used with: docker compose -f docker-compose.yml -f docker-compose.network-overlay.yml
+services:
+  aihorde:
+    networks:
+      - aihorde_network
+      - horde-stack
+
+networks:
+  aihorde_network:
+    driver: bridge
+  horde-stack:
+    external: true

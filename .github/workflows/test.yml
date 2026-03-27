@@ -53,7 +53,9 @@ jobs:
             roles/ tests/**/*.yml examples/
 
       - name: ansible-lint
-        run: ansible-lint roles/ tests/test_*.yml examples/
+        run: |
+          shopt -s globstar
+          ansible-lint roles/ tests/**/test_*.yml examples/
 
   integration:
     name: Integration tests
@@ -122,7 +124,8 @@ jobs:
 
       - name: Syntax check all test playbooks
         run: |
-          for pb in tests/test_*.yml; do
+          shopt -s globstar
+          for pb in tests/**/test_*.yml; do
             echo "--- Syntax-checking $pb ---"
             ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
           done
