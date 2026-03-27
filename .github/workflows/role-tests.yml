@@ -58,10 +58,12 @@ jobs:
 
       - name: Syntax check test playbooks
         run: |
-          shopt -s globstar
-          for pb in tests/${{ matrix.suite }}/test_*.yml; do
+          suite="tests/${{ matrix.suite }}"
+          cfg="${suite}/ansible.cfg"
+          [ -f "$cfg" ] || cfg="tests/ansible.cfg"
+          for pb in ${suite}/test_*.yml; do
             echo "--- Syntax-checking $pb ---"
-            ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
+            ANSIBLE_CONFIG="$cfg" ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
           done
 
   # Full render via run_tests.sh (--privileged containers).
