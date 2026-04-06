@@ -40,7 +40,7 @@ loki.process "docker" {
 
 loki.write "loki" {
   endpoint {
-    url       = "http://loki:3100/loki/api/v1/push"
+    url       = "http://loki:{{ loki_port }}/loki/api/v1/push"
     tenant_id = "{{ monitoring_infrastructure_tenant_id }}"
   }
 
@@ -85,7 +85,7 @@ prometheus.remote_write "otlp_metrics" {
   }
 
   endpoint {
-    url = "http://mimir:9009/api/v1/push"
+    url = "http://mimir:{{ mimir_port }}/api/v1/push"
 
     headers = {
       "X-Scope-OrgID" = "{{ monitoring_application_tenant_id }}",
@@ -95,6 +95,6 @@ prometheus.remote_write "otlp_metrics" {
 
 otelcol.exporter.otlphttp "tempo" {
   client {
-    endpoint = "http://tempo:{{ _local_otlp_http_port }}"
+    endpoint = "http://tempo:{{ tempo_otlp_http_port }}"
   }
 }

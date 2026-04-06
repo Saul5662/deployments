@@ -52,6 +52,7 @@
     status_code: [200, 409]
   register: org_create_result
   changed_when: org_create_result.status == 200
+  no_log: true
   when:
     - grafana_anonymous_enabled | bool
     - monitoring_start_services | bool

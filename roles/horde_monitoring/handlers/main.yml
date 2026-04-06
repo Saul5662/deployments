@@ -9,7 +9,6 @@
 
 - name: Restart monitoring stack
   ansible.builtin.shell: >
-    docker compose pull --quiet &&
     docker compose up -d
   args:
     chdir: "{{ mimir_compose_dir }}"
@@ -28,29 +27,3 @@
   register: _reload_prometheus
   failed_when: false
   changed_when: _reload_prometheus.status is defined and _reload_prometheus.status.ActiveState == 'active'
-
-- name: Reload haproxy
-  ansible.builtin.systemd:
-    name: haproxy
-    state: reloaded
-  become: true
-
-- name: Validate working copy with HAProxy config checker
-  listen: Validate and promote HAProxy config
-  ansible.builtin.command: haproxy -c -f {{ _haproxy_working_file.path }}
-  become: true
-  register: _haproxy_validation
-  changed_when: false
-  failed_when:
-    - _haproxy_validation.rc != 0
-    - "'has no error' not in (_haproxy_validation.stdout | default(''))"
-
-- name: Promote validated config to live
-  listen: Validate and promote HAProxy config
-  ansible.builtin.copy:
-    src: "{{ _haproxy_working_file.path }}"
-    dest: "{{ haproxy_config_path }}"
-    remote_src: true
-    mode: "0644"
-  become: true
-  notify: Reload haproxy

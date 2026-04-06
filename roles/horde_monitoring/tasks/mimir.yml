@@ -141,6 +141,7 @@
     mode: "0600"
     backup: true
   become: true
+  no_log: true
   notify: Restart monitoring stack
 
 - name: Template systemd service for monitoring stack
@@ -220,6 +221,7 @@
     mode: "0600"
     backup: true
   become: true
+  no_log: true
   notify: Reload systemd
   when:
     - mimir_backup_enabled | bool
@@ -264,17 +266,16 @@
 - name: Verify backup target is reachable
   ansible.builtin.command: >
     docker run --rm --network host
+    -e MC_HOST_remote
     {{ minio_mc_image }}
-    /bin/sh -c "
-      mc alias set remote {{ mimir_backup_target_endpoint }}
-        {{ mimir_backup_target_access_key }}
-        {{ mimir_backup_target_secret_key }}
-        {{ '--insecure' if (mimir_backup_target_insecure | bool) else '' }} &&
-      mc ls remote/{{ mimir_backup_target_bucket }}-blocks 2>/dev/null;
-      exit 0
-    "
+    mc ls remote/{{ mimir_backup_target_bucket }}-blocks
+  environment:
+    MC_HOST_remote: "{{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{ mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{ mimir_backup_target_endpoint | regex_replace('^https?://', '') }}"
+  environment:
+    MC_HOST_remote: "{{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{ mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{ mimir_backup_target_endpoint | regex_replace('^https?://', '') }}"
   become: true
   changed_when: false
+  no_log: true
   register: _backup_target_check
   failed_when: false
   when:
