@@ -26,24 +26,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 
+# shellcheck source=../lib.sh
+source "$REPO_ROOT/tests/lib.sh"
+
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 
 AI_HORDE_DIR="$LOCAL_ROOT/ai-horde"
 INTEGRATION_DIR="$LOCAL_ROOT/integration"
 WORKER_DIR="$LOCAL_ROOT/worker"
-
-# Colours
-if [ -t 1 ]; then
-  GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-else
-  GREEN=''; RED=''; YELLOW=''; CYAN=''; NC=''
-fi
-
-log()  { printf "${GREEN}[+]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[!]${NC} %s\n" "$*"; }
-err()  { printf "${RED}[x]${NC} %s\n" "$*" >&2; }
-info() { printf "${CYAN}[i]${NC} %s\n" "$*"; }
 
 WITH_WORKER=false
 USE_LATEST_REF=false
@@ -55,48 +46,16 @@ dc() {
 }
 
 
-check_prerequisites() {
-  local missing=0
-  for cmd in docker curl git; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      err "Required command not found: $cmd"
-      missing=$((missing + 1))
-    fi
-  done
-  if ! docker compose version >/dev/null 2>&1; then
-    err "Docker Compose V2 plugin is required."
-    missing=$((missing + 1))
-  fi
-  if [ $missing -gt 0 ]; then
-    err "$missing prerequisite(s) missing — cannot continue."
+check_gpu_prerequisites() {
+  if ! nvidia-smi >/dev/null 2>&1; then
+    err "--with-worker requires an NVIDIA GPU (nvidia-smi not found)."
     exit 1
   fi
-  log "Prerequisites verified."
-
-  if [ "$WITH_WORKER" = true ]; then
-    if ! nvidia-smi >/dev/null 2>&1; then
-      err "--with-worker requires an NVIDIA GPU (nvidia-smi not found)."
-      exit 1
-    fi
-    if ! docker info 2>/dev/null | grep -q "nvidia"; then
-      err "--with-worker requires the Docker nvidia runtime."
-      exit 1
-    fi
-    log "GPU prerequisites verified (nvidia-smi + Docker nvidia runtime)."
-  fi
-}
-
-
-find_ansible() {
-  if [ -x "$REPO_ROOT/.venv/bin/ansible-playbook" ]; then
-    ANSIBLE_PLAYBOOK="$REPO_ROOT/.venv/bin/ansible-playbook"
-  else
-    ANSIBLE_PLAYBOOK="$(command -v ansible-playbook 2>/dev/null || true)"
-  fi
-  if [ -z "${ANSIBLE_PLAYBOOK:-}" ]; then
-    err "ansible-playbook not found."
+  if ! docker info 2>/dev/null | grep -q "nvidia"; then
+    err "--with-worker requires the Docker nvidia runtime."
     exit 1
   fi
+  log "GPU prerequisites verified (nvidia-smi + Docker nvidia runtime)."
 }
 
 
@@ -112,72 +71,20 @@ render_configs() {
 }
 
 
-# Fixes two known issues:
-#   1) Docker Desktop can cache corrupt layers for unqualified slim tags
-#      (e.g. python:3.10-slim resolves to bullseye with broken binaries).
-#   2) The run stage uses --no-index but needs pytest-runner from PyPI to
-#      build the patreon git dependency.
-_patch_dockerfile() {
-  local dockerfile="$1"
-  [ -f "$dockerfile" ] || return 0
-
-  # Fix 1: broken base image
-  local base_img
-  base_img=$(grep -m1 '^FROM.*python.*slim' "$dockerfile" | awk '{print $2}' || true)
-  if [ -n "$base_img" ]; then
-    if ! docker run --rm "$base_img" true >/dev/null 2>&1; then
-      local fixed_img="${base_img}-bookworm"
-      warn "Base image $base_img is broken (exec format error). Switching to $fixed_img."
-      sed -i "s|FROM ${base_img}|FROM ${fixed_img}|g" "$dockerfile"
-    fi
-  fi
-
-  # Fix 2: run-stage pip needs network access for git+https dependencies
-  if grep -q '\-\-no-index' "$dockerfile" && grep -q 'git+https' "$(dirname "$dockerfile")/requirements.txt" 2>/dev/null; then
-    warn "Removing --no-index from run-stage pip install (git deps need PyPI)."
-    sed -i 's/--no-cache-dir --no-index --find-links=\/wheels\//--no-cache-dir --find-links=\/wheels\//' "$dockerfile"
-  fi
-}
-
-
 clone_source() {
-  local src_dir="$AI_HORDE_DIR/src"
   local ref="$AI_HORDE_REF"
   if [ "$USE_LATEST_REF" = true ]; then
     ref="main"
   fi
 
-  if [ -d "$src_dir/.git" ]; then
-    log "Updating AI-Horde source to ref: $ref ..."
-    git -C "$src_dir" fetch --quiet --tags origin
-    git -C "$src_dir" checkout --quiet "$ref"
-    git -C "$src_dir" reset --hard "$ref" >/dev/null
-  else
-    log "Cloning AI-Horde source (ref: $ref) ..."
-    git clone https://github.com/Haidra-Org/AI-Horde.git "$src_dir"
-    git -C "$src_dir" checkout --quiet "$ref"
-  fi
+  clone_or_update_source \
+    "https://github.com/Haidra-Org/AI-Horde.git" \
+    "$AI_HORDE_DIR/src" \
+    "$ref"
 
-  
   if [ "$USE_LATEST_REF" = true ]; then
-    _patch_dockerfile "$src_dir/Dockerfile"
+    _patch_dockerfile "$AI_HORDE_DIR/src/Dockerfile"
   fi
-}
-
-
-wait_for_url() {
-  local url="$1" label="$2" timeout="${3:-60}"
-  local retries=$(( timeout / 2 ))
-  while [ $retries -gt 0 ]; do
-    if curl -sf "$url" >/dev/null 2>&1; then
-      log "$label is ready."
-      return 0
-    fi
-    retries=$((retries - 1))
-    sleep 2
-  done
-  warn "$label did not become ready within ${timeout}s"
-  return 1
 }
 
 
@@ -348,7 +255,7 @@ stop_worker() {
 }
 
 
-compose_down() {
+integration_down() {
   stop_worker
 
   if [ -f "$AI_HORDE_DIR/docker-compose.yml" ]; then
@@ -371,7 +278,7 @@ compose_down() {
 }
 
 
-compose_status() {
+integration_status() {
   if [ ! -f "$AI_HORDE_DIR/docker-compose.yml" ]; then
     info "No integration deployment found."
     return
@@ -386,15 +293,6 @@ compose_status() {
       info "Worker not running (stale PID file)"
     fi
   fi
-}
-
-
-compose_logs() {
-  if [ ! -f "$AI_HORDE_DIR/docker-compose.yml" ]; then
-    err "No integration deployment found."
-    exit 1
-  fi
-  dc logs -f --tail=100
 }
 
 
@@ -446,7 +344,10 @@ main() {
 
   case "$cmd" in
     up)
-      check_prerequisites
+      check_prerequisites git
+      if [ "$WITH_WORKER" = true ]; then
+        check_gpu_prerequisites
+      fi
       render_configs
       clone_source
       start_aihorde
@@ -457,13 +358,17 @@ main() {
       print_banner
       ;;
     down)
-      compose_down
+      integration_down
       ;;
     status)
-      compose_status
+      integration_status
       ;;
     logs)
-      compose_logs
+      if [ ! -f "$AI_HORDE_DIR/docker-compose.yml" ]; then
+        err "No integration deployment found."
+        exit 1
+      fi
+      dc logs -f --tail=100
       ;;
     *)
       echo "Usage: $0 {up|down|status|logs} [--with-worker] [--latest]"
