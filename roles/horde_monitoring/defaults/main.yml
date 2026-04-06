@@ -147,7 +147,7 @@ grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
 # Pin to a release tag for reproducible deployments (e.g., "v1.2.0").
 # Using "main" always fetches the latest dashboards but may break if the
 # repo layout changes.
-grafana_dashboards_repo_ref: "main"
+grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
 grafana_provision_dashboards: true
 
 # Alertmanager datasource in Grafana
@@ -299,7 +299,7 @@ pyroscope_self_profiling: true
 
 # Ingestion rate limit (MB/s per tenant)
 pyroscope_ingestion_rate_mb: 4
-pyroscope_ingestion_burst_size_mb: 2
+pyroscope_ingestion_burst_size_mb: 8
 
 # HAProxy configuration (safe edit with permanent rolling backups)
 haproxy_config_path: "/etc/haproxy/haproxy.cfg"

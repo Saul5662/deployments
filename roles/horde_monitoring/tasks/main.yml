@@ -4,6 +4,38 @@
 # Prometheus is NOT part of this role — deploy it directly in your playbook
 # using the prometheus.prometheus.prometheus community role.
 
+# ── Flag-combination validation ────────────────────────────
+- name: Warn when backup is enabled but MinIO is disabled
+  ansible.builtin.debug:
+    msg: >-
+      mimir_backup_enabled=true has no effect because mimir_enable_minio=false.
+      Backups require MinIO as the object-storage backend.
+      Set mimir_backup_enabled=false to silence this warning,
+      or enable MinIO with mimir_enable_minio=true.
+  when:
+    - mimir_backup_enabled | default(false) | bool
+    - not (mimir_enable_minio | default(true) | bool)
+
+- name: Warn when Grafana anonymous access is enabled but Grafana is disabled
+  ansible.builtin.debug:
+    msg: >-
+      grafana_anonymous_enabled=true has no effect because
+      monitoring_install_grafana=false. Either enable Grafana or
+      set grafana_anonymous_enabled=false.
+  when:
+    - grafana_anonymous_enabled | default(false) | bool
+    - not (monitoring_install_grafana | default(true) | bool)
+
+- name: Warn when Tempo metrics generator is enabled but Tempo is disabled
+  ansible.builtin.debug:
+    msg: >-
+      tempo_metrics_generator_enabled=true has no effect because
+      monitoring_install_tempo=false. Either enable Tempo or
+      set tempo_metrics_generator_enabled=false.
+  when:
+    - tempo_metrics_generator_enabled | default(false) | bool
+    - not (monitoring_install_tempo | default(true) | bool)
+
 - name: Deploy Mimir + Grafana monitoring stack
   ansible.builtin.include_tasks: mimir.yml
   when: monitoring_install_mimir | bool

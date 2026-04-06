@@ -86,7 +86,6 @@
   loop: "{{ _app_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  notify: Restart monitoring stack
 
 - name: Copy app dashboards for Org 2 (public)
   ansible.builtin.copy:
@@ -100,7 +99,6 @@
   loop: "{{ _app_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  notify: Restart monitoring stack
 
 - name: Copy infra dashboards for Org 1 (admin)
   ansible.builtin.copy:
@@ -114,57 +112,23 @@
   loop: "{{ _infra_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  notify: Restart monitoring stack
 
 # --- Patch datasource UIDs in each set of dashboards --------------------
-# The upstream JSON files may reference arbitrary datasource UIDs.  We
-# normalise them to the UIDs provisioned by this role so that Grafana
-# resolves the correct tenant-scoped Mimir datasource.
-
-- name: Patch datasource UID in Org 1 app dashboards (mimir-app)
-  ansible.builtin.replace:
-    path: "{{ grafana_dashboard_dir }}/app/{{ item.path | basename }}"
-    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
-    replace: '"uid": "mimir-app"'
-  become: true
-  loop: "{{ _app_dashboard_files.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
-
-- name: Patch datasource UID in Org 2 public dashboards (mimir-public)
-  ansible.builtin.replace:
-    path: "{{ grafana_dashboard_dir }}/app-public/{{ item.path | basename }}"
-    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
-    replace: '"uid": "mimir-public"'
-  become: true
-  loop: "{{ _app_dashboard_files.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
-
-- name: Patch datasource UID in infra dashboards (mimir-infra)
-  ansible.builtin.replace:
-    path: "{{ grafana_dashboard_dir }}/infra/{{ item.path | basename }}"
-    regexp: '"uid"\s*:\s*"\$\{DS_[^"]*\}"'
-    replace: '"uid": "mimir-infra"'
-  become: true
-  loop: "{{ _infra_dashboard_files.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
-
-# Also patch any hardcoded datasource objects (type + uid pattern):
-#   { "type": "prometheus", "uid": "..." }
-# This catches dashboards that embed a literal UID rather than a variable.
+# The upstream JSON files may reference arbitrary datasource UIDs (either
+# variable-style ${DS_*} or hardcoded literal UIDs).  We normalise them
+# all to match the UIDs provisioned by this role using a single Python
+# script that handles both patterns.
 
 - name: Deploy dashboard UID patching script
   ansible.builtin.copy:
     src: patch_dashboard_uid.py
-    dest: /usr/local/bin/patch_dashboard_uid.py
+    dest: /tmp/patch_dashboard_uid.py
     mode: "0755"
   become: true
 
-- name: Patch hardcoded datasource objects in all dashboard sets
+- name: Patch datasource UIDs in all dashboard sets
   ansible.builtin.command: >
-    python3 /usr/local/bin/patch_dashboard_uid.py
+    python3 /tmp/patch_dashboard_uid.py
     "{{ grafana_dashboard_dir }}/{{ item.0 }}/{{ item.1.path | basename }}"
     "{{ item.2 }}"
   become: true
@@ -184,6 +148,12 @@
          | product(['mimir-infra']) | map('flatten') | list)
       }}
   changed_when: false
+
+- name: Remove temporary patching script
+  ansible.builtin.file:
+    path: /tmp/patch_dashboard_uid.py
+    state: absent
+  become: true
 
 - name: Clean up cloned repository
   ansible.builtin.file:

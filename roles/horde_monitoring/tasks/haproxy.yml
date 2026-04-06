@@ -1,61 +1,9 @@
 ---
-# HAProxy safe configuration management for monitoring backends
-# Deploys a safe edit utility and optionally inserts monitoring backend definitions
+# HAProxy safe configuration management for monitoring backends.
+# Delegates the copy → blockinfile → validate → promote pipeline to
+# the shared _haproxy_safe_edit micro-role.
 
-- name: Create HAProxy backup directory
-  ansible.builtin.file:
-    path: "{{ haproxy_backup_dir }}"
-    state: directory
-    mode: "0755"
-  become: true
-
-- name: Deploy HAProxy safe edit script
-  ansible.builtin.template:
-    src: haproxy_safe_edit.sh.j2
-    dest: /usr/local/bin/haproxy_safe_edit.sh
-    mode: "0755"
-  become: true
-
-- name: Check if HAProxy config exists
-  ansible.builtin.stat:
-    path: "{{ haproxy_config_path }}"
-  register: _haproxy_config
-  become: true
-
-- name: Warn if HAProxy config not found
-  ansible.builtin.fail:
-    msg: >-
-      monitoring_configure_haproxy is true but {{ haproxy_config_path }}
-      does not exist. HAProxy must be installed and configured before this
-      role can inject monitoring backends. Install HAProxy first, or set
-      monitoring_configure_haproxy: false to skip.
-  when: not _haproxy_config.stat.exists
-
-- name: Create permanent timestamped backup
-  ansible.builtin.copy:
-    src: "{{ haproxy_config_path }}"
-    dest: "{{ haproxy_backup_dir }}/haproxy.cfg.{{ ansible_date_time.iso8601_basic_short }}"
-    remote_src: true
-    mode: "0644"
-  become: true
-
-- name: Create temporary working file for HAProxy config
-  ansible.builtin.tempfile:
-    state: file
-    path: /tmp
-    prefix: haproxy_working.
-    suffix: .cfg
-  register: _haproxy_working_file
-  become: true
-
-- name: Create working copy of HAProxy config
-  ansible.builtin.copy:
-    src: "{{ haproxy_config_path }}"
-    dest: "{{ _haproxy_working_file.path }}"
-    remote_src: true
-    mode: "0644"
-  become: true
-
+# ── Build monitoring backends block ────────────────────────
 - name: Build monitoring backends block content
   ansible.builtin.set_fact:
     _haproxy_backends_lines: >-
@@ -106,20 +54,14 @@
   ansible.builtin.set_fact:
     _haproxy_backends_block: "{{ _haproxy_backends_lines | join('\n') }}"
 
-- name: Insert monitoring backends into working copy
-  ansible.builtin.blockinfile:
-    path: "{{ _haproxy_working_file.path }}"
-    marker: "# {mark} ANSIBLE MANAGED - MONITORING BACKENDS"
-    block: "{{ _haproxy_backends_block }}"
-  become: true
-  register: _haproxy_modified
-  notify: Validate and promote HAProxy config
-
-- name: Run pending handlers before cleanup
-  ansible.builtin.meta: flush_handlers
-
-- name: Clean up working copy
-  ansible.builtin.file:
-    path: "{{ _haproxy_working_file.path }}"
-    state: absent
-  become: true
+# ── Delegate to shared safe-edit pipeline ──────────────────
+- name: Apply monitoring backends via shared safe-edit pipeline
+  ansible.builtin.include_role:
+    name: _haproxy_safe_edit
+  vars:
+    _hse_config_path: "{{ haproxy_config_path }}"
+    _hse_backup_dir: "{{ haproxy_backup_dir }}"
+    _hse_marker: "MONITORING BACKENDS"
+    _hse_block: "{{ _haproxy_backends_block }}"
+    _hse_backup_retention: "{{ haproxy_backup_retention_count | default(20) }}"
+    _hse_apply: "{{ monitoring_start_services | default(true) | bool }}"

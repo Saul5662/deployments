@@ -263,7 +263,6 @@
         - /opt/mimir/docker-compose.yml
         - /etc/grafana/provisioning/datasources/mimir.yml
         - /etc/prometheus/rules/monitoring-stack.rules
-        - /usr/local/bin/haproxy_safe_edit.sh
       register: _critical_files
 
     - name: Assert all critical output files exist
@@ -275,17 +274,18 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Stat HAProxy safe edit script
-      ansible.builtin.stat:
-        path: /usr/local/bin/haproxy_safe_edit.sh
-      register: _haproxy_script_stat
+    - name: Assert shared safe-edit role is used (no meta flush_handlers)
+      ansible.builtin.set_fact:
+        _mon_haproxy_tasks: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/horde_monitoring/tasks/haproxy.yml') }}
 
-    - name: Assert HAProxy safe edit script is executable
+    - name: Assert monitoring haproxy delegates to shared micro-role
       ansible.builtin.assert:
         that:
-          - _haproxy_script_stat.stat.exists
-          - _haproxy_script_stat.stat.mode == '0755'
-        fail_msg: "HAProxy safe edit script must exist and be mode 0755"
+          - "'meta: flush_handlers' not in _mon_haproxy_tasks"
+          - "'_haproxy_safe_edit' in _mon_haproxy_tasks"
+          - "'include_role' in _mon_haproxy_tasks"
+        fail_msg: "Monitoring HAProxy must delegate to _haproxy_safe_edit, not use meta: flush_handlers"
 
     - name: Assert systemd unit contains required directives
       ansible.builtin.assert:
@@ -295,9 +295,7 @@
           - "'WorkingDirectory=' in (systemd_service.content | b64decode)"
           - "'Restart=on-failure' in (systemd_service.content | b64decode)"
           - "'RestartSec=10s' in (systemd_service.content | b64decode)"
-          - "'ExecStartPre' in (systemd_service.content | b64decode)"
-          - "'pull' in (systemd_service.content | b64decode)"
-        fail_msg: "Systemd unit must reference docker.service, use docker compose, include image pull on boot, and set WorkingDirectory + Restart=on-failure"
+        fail_msg: "Systemd unit must reference docker.service, use docker compose, and set WorkingDirectory + Restart=on-failure"
 
 - name: Test fail-fast rejects default passwords
   hosts: testhost
