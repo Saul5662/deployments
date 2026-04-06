@@ -1,8 +1,18 @@
 # Per-suite role tests for haidra.deployments collection.
 #
+# Division of responsibility (see also: test.yml):
+#   - role-tests.yml (this file): Per-suite render checks, policy-contract
+#     enforcement, and per-role integration smoke tests. Owns the per-role
+#     test matrix and fork-safe PR gates.
+#   - test.yml: Collection-level lint, Ansible syntax-check, and Docker-in-Docker
+#     integration tests (push only).
+#
 # Security model:
-#   - render-check (PRs): lightweight ansible-playbook --syntax-check only.
-#     No Docker, no --privileged. Safe for fork PRs.
+#   - policy-contract: always-on semantic policy checks (no Docker).
+#   - render-check (fork PRs): lightweight ansible-playbook --syntax-check only.
+#     No Docker, no --privileged.
+#   - render-pr-trusted (same-repo PRs): full run_tests.sh behavioral render
+#     checks.
 #   - render (push/dispatch): full run_tests.sh with --privileged systemd
 #     containers. Restricted to trusted events only.
 #   - integration-smoke: runs after whichever gate job succeeded.
@@ -27,10 +37,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lightweight syntax-check for PRs — no Docker, no --privileged.
+  # Always-on fast semantic checks for reproducibility and example contracts.
+  policy-contract:
+    name: policy-contract / ai_horde
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Run AI-Horde policy/contract checks
+        env:
+          ANSIBLE_CONFIG: ${{ github.workspace }}/tests/ansible.cfg
+        run: ansible-playbook tests/ai_horde/test_ai_horde_policy_contracts.yml -i localhost, -c local
+
+  # Lightweight syntax-check for untrusted PRs — no Docker, no --privileged.
   render-check:
     name: "render-check / ${{ matrix.suite }}"
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -41,6 +75,8 @@ jobs:
           - ai_horde
           - regen_worker
           - artbot
+          - frontpage
+          - full_stack
 
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +90,7 @@ jobs:
         run: pip install ansible
 
       - name: Install galaxy dependencies
-        run: ansible-galaxy collection install -r examples/requirements.yml
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Syntax check test playbooks
         env:
@@ -66,20 +102,30 @@ jobs:
             ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
           done
 
-  # Full render via run_tests.sh (--privileged containers).
-  # Restricted to push/dispatch — fork PRs cannot trigger this.
-  render:
-    name: "render / ${{ matrix.suite }}"
-    if: github.event_name != 'pull_request'
+  # Full behavioral render checks for trusted same-repo PRs.
+  render-pr-trusted:
+    name: "render-pr-trusted / ${{ matrix.suite }}"
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        suite:
-          - monitoring
-          - ai_horde
-          - regen_worker
-          - artbot
+        include:
+          - suite: monitoring
+            timeout_minutes: 15
+          - suite: ai_horde
+            timeout_minutes: 30
+          - suite: regen_worker
+            timeout_minutes: 15
+          - suite: artbot
+            timeout_minutes: 15
+          - suite: frontpage
+            timeout_minutes: 10
+          - suite: full_stack
+            timeout_minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +139,7 @@ jobs:
         run: pip install ansible
 
       - name: Install galaxy dependencies
-        run: ansible-galaxy collection install -r examples/requirements.yml
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Log in to Docker Hub
         if: vars.DOCKERHUB_USERNAME != ''
@@ -104,13 +150,31 @@ jobs:
 
       - name: Run render tests
         run: ./tests/run_tests.sh "${{ matrix.suite }}"
-        timeout-minutes: 15
+        timeout-minutes: ${{ matrix.timeout_minutes }}
 
-  integration-smoke:
-    name: integration / smoke
+  # Full render via run_tests.sh (--privileged containers).
+  # Restricted to push/dispatch — fork PRs cannot trigger this.
+  render:
+    name: "render / ${{ matrix.suite }}"
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: render
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: monitoring
+            timeout_minutes: 15
+          - suite: ai_horde
+            timeout_minutes: 30
+          - suite: regen_worker
+            timeout_minutes: 15
+          - suite: artbot
+            timeout_minutes: 15
+          - suite: frontpage
+            timeout_minutes: 10
+          - suite: full_stack
+            timeout_minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -124,7 +188,40 @@ jobs:
         run: pip install ansible
 
       - name: Install galaxy dependencies
-        run: ansible-galaxy collection install -r examples/requirements.yml
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Run render tests
+        run: ./tests/run_tests.sh "${{ matrix.suite }}"
+        timeout-minutes: ${{ matrix.timeout_minutes }}
+
+  integration-smoke:
+    name: integration / smoke
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs:
+      - render
+      - policy-contract
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install galaxy dependencies
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Log in to Docker Hub
         if: vars.DOCKERHUB_USERNAME != ''
@@ -135,12 +232,14 @@ jobs:
 
       - name: Run integration smoke test
         run: ./tests/run_tests.sh integration
-        timeout-minutes: 15
+        timeout-minutes: 20
 
   integration-live:
     name: integration / live
     runs-on: ubuntu-latest
-    needs: render
+    needs:
+      - render
+      - policy-contract
     if: github.event_name == 'workflow_dispatch'
 
     steps:
@@ -155,7 +254,7 @@ jobs:
         run: pip install ansible
 
       - name: Install galaxy dependencies
-        run: ansible-galaxy collection install -r examples/requirements.yml
+        run: ansible-galaxy collection install -r requirements.yml
 
       - name: Log in to Docker Hub
         if: vars.DOCKERHUB_USERNAME != ''

@@ -1,6 +1,13 @@
 # CI for haidra.deployments collection
 # Runs linting and integration tests on PRs and pushes to protected branches.
 #
+# Division of responsibility (see also: role-tests.yml):
+#   - test.yml (this file): Collection-level lint, Ansible syntax-check,
+#     and Docker-in-Docker integration tests (push only). Covers all roles
+#     collectively.
+#   - role-tests.yml: Per-suite render checks, policy-contract enforcement,
+#     and per-role integration smoke tests. Owns the per-role test matrix.
+#
 # Security model:
 #   - Lint and syntax-check jobs run on all triggers (no privileges needed).
 #   - Integration tests use --privileged Docker containers (systemd-in-Docker)
