@@ -1,0 +1,194 @@
+---
+# Shared HAProxy safe-edit pipeline.
+#
+# Injects a marker-bounded block into an existing HAProxy config using
+# a copy → blockinfile → validate → promote pattern.  Both the ai_horde
+# and horde_monitoring roles delegate here via include_role.
+#
+# Required caller variables:
+#   _hse_config_path          – path to the live haproxy.cfg
+#   _hse_backup_dir           – directory for timestamped backups
+#   _hse_marker               – blockinfile marker label (e.g. "AI-HORDE BACKENDS")
+#   _hse_block                – rendered block content to inject
+#   _hse_backup_retention     – number of backups to keep (0 = no pruning)
+#   _hse_apply                – true to mutate live config, false to skip
+#
+# Handler contract:
+#   This role carries its own "Reload HAProxy" handler.  Callers do not
+#   need to define one — the micro-role's handler is resolved first when
+#   included via include_role.
+
+# ── Preflight ───────────────────────────────────────────────
+- name: "safe-edit [{{ _hse_marker }}] — Check HAProxy config exists"
+  ansible.builtin.stat:
+    path: "{{ _hse_config_path }}"
+  register: _hse_config_stat
+  become: true
+  when: _hse_apply | bool
+
+- name: "safe-edit [{{ _hse_marker }}] — Fail if config missing"
+  ansible.builtin.fail:
+    msg: >-
+      safe-edit requires {{ _hse_config_path }} to exist.
+      Install HAProxy and create the base config first.
+  when:
+    - _hse_apply | bool
+    - not (_hse_config_stat.stat.exists | default(false))
+
+- name: "safe-edit [{{ _hse_marker }}] — Check haproxy binary"
+  ansible.builtin.command: which haproxy
+  changed_when: false
+  failed_when: false
+  register: _hse_haproxy_binary
+  become: true
+  when: _hse_apply | bool
+
+- name: "safe-edit [{{ _hse_marker }}] — Fail if haproxy binary missing"
+  ansible.builtin.fail:
+    msg: >-
+      safe-edit requires the haproxy binary for config validation.
+      Ensure HAProxy is installed.
+  when:
+    - _hse_apply | bool
+    - _hse_haproxy_binary.rc | default(1) != 0
+
+- name: "safe-edit [{{ _hse_marker }}] — Require gathered facts"
+  ansible.builtin.assert:
+    that:
+      - ansible_date_time is defined
+    fail_msg: >-
+      safe-edit requires Ansible gathered facts (ansible_date_time) for
+      timestamped backups. Add gather_facts: true to your play or run
+      the setup module before including this role.
+  when: _hse_apply | bool
+
+# ── Backup directory ────────────────────────────────────────
+- name: "safe-edit [{{ _hse_marker }}] — Ensure backup directory"
+  ansible.builtin.file:
+    path: "{{ _hse_backup_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  when: _hse_apply | bool
+
+# ── Working-copy → blockinfile → validate → promote ────────
+- name: "safe-edit [{{ _hse_marker }}] — Apply block"
+  when: _hse_apply | bool
+  block:
+    - name: "safe-edit [{{ _hse_marker }}] — Create working copy"
+      ansible.builtin.tempfile:
+        state: file
+        path: /tmp
+        prefix: "haproxy_{{ _hse_marker | lower | regex_replace('[^a-z0-9]', '_') }}_."
+        suffix: .cfg
+      register: _hse_working_file
+      become: true
+
+    - name: "safe-edit [{{ _hse_marker }}] — Copy live config to working file"
+      ansible.builtin.copy:
+        src: "{{ _hse_config_path }}"
+        dest: "{{ _hse_working_file.path }}"
+        remote_src: true
+        mode: "0644"
+      become: true
+
+    - name: "safe-edit [{{ _hse_marker }}] — Insert block via blockinfile"
+      ansible.builtin.blockinfile:
+        path: "{{ _hse_working_file.path }}"
+        marker: "# {mark} ANSIBLE MANAGED - {{ _hse_marker }}"
+        block: "{{ _hse_block }}"
+      become: true
+
+    - name: "safe-edit [{{ _hse_marker }}] — Checksum live config"
+      ansible.builtin.stat:
+        path: "{{ _hse_config_path }}"
+        checksum_algorithm: sha256
+      register: _hse_live_stat
+      become: true
+
+    - name: "safe-edit [{{ _hse_marker }}] — Checksum candidate"
+      ansible.builtin.stat:
+        path: "{{ _hse_working_file.path }}"
+        checksum_algorithm: sha256
+      register: _hse_candidate_stat
+      become: true
+
+    - name: "safe-edit [{{ _hse_marker }}] — Determine promotion required"
+      ansible.builtin.set_fact:
+        _hse_requires_promotion: >-
+          {{
+            (_hse_live_stat.stat.checksum | default(''))
+            !=
+            (_hse_candidate_stat.stat.checksum | default(''))
+          }}
+
+    - name: "safe-edit [{{ _hse_marker }}] — Validate candidate config"
+      ansible.builtin.command: haproxy -c -f {{ _hse_working_file.path }}
+      become: true
+      changed_when: false
+      when: _hse_requires_promotion | bool
+
+    - name: "safe-edit [{{ _hse_marker }}] — Timestamped backup"
+      ansible.builtin.copy:
+        src: "{{ _hse_config_path }}"
+        dest: "{{ _hse_backup_dir }}/haproxy.cfg.{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: true
+        mode: "0644"
+      become: true
+      when: _hse_requires_promotion | bool
+
+    - name: "safe-edit [{{ _hse_marker }}] — Promote candidate to live"
+      ansible.builtin.copy:
+        src: "{{ _hse_working_file.path }}"
+        dest: "{{ _hse_config_path }}"
+        remote_src: true
+        mode: "0644"
+      become: true
+      when: _hse_requires_promotion | bool
+      notify: Reload HAProxy
+
+    - name: "safe-edit [{{ _hse_marker }}] — Discover backups for pruning"
+      ansible.builtin.find:
+        paths: "{{ _hse_backup_dir }}"
+        patterns: "haproxy.cfg.*"
+        file_type: file
+      register: _hse_backups
+      become: true
+      when:
+        - _hse_requires_promotion | bool
+        - _hse_backup_retention | int > 0
+
+    - name: "safe-edit [{{ _hse_marker }}] — Build prune list"
+      ansible.builtin.set_fact:
+        _hse_backups_to_prune: >-
+          {{
+            (
+              _hse_backups.files
+              | sort(attribute='mtime', reverse=true)
+            )[_hse_backup_retention | int:]
+            | map(attribute='path')
+            | list
+          }}
+      when:
+        - _hse_requires_promotion | bool
+        - _hse_backup_retention | int > 0
+
+    - name: "safe-edit [{{ _hse_marker }}] — Prune old backups"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      become: true
+      loop: "{{ _hse_backups_to_prune | default([]) }}"
+      when:
+        - _hse_requires_promotion | bool
+        - _hse_backup_retention | int > 0
+
+  always:
+    - name: "safe-edit [{{ _hse_marker }}] — Clean up working copy"
+      ansible.builtin.file:
+        path: "{{ _hse_working_file.path }}"
+        state: absent
+      become: true
+      when:
+        - _hse_working_file is defined
+        - _hse_working_file.path is defined
