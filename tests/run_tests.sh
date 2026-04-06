@@ -8,20 +8,30 @@
 #   ./tests/run_tests.sh ai_horde                     # run tests/ai_horde/test_*.yml
 #   ./tests/run_tests.sh monitoring/test_full_stack   # run a specific test (without .yml)
 #   ./tests/run_tests.sh --list                       # list discoverable tests
+#   ./tests/run_tests.sh --jobs 4                     # run tests in parallel (max 4 concurrent)
+#   ./tests/run_tests.sh --jobs 3 monitoring          # parallel within a suite
 #
 # Logs are written to tests/test-results/<timestamp>/ with one file per
 # playbook, plus a summary.txt for scripted analysis.
+#
+# Failure semantics (parallel mode):
+#   - Each background worker writes a placeholder result file at job start.
+#   - The placeholder is atomically replaced on completion with actual status.
+#   - After all jobs finish, expected result count is compared to collected count.
+#   - The run exits non-zero if: any test fails, any worker process exits
+#     non-zero, or collected results do not match the expected count.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONTAINER_NAME="test-container"
 IMAGE_NAME="horde-test-systemd"
 TEMP_DOCKER_CONFIG=""
 LOG_DIR=""
+MAX_JOBS=1
 
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
+export ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-$SCRIPT_DIR/ansible.cfg}"
 
 # Colours (disabled when not a terminal)
 if [ -t 1 ]; then
@@ -48,6 +58,18 @@ init_log_dir() {
 log_filename() {
   local label="$1"
   echo "${label//\//__}" | sed 's/\.yml$//' | sed 's/[^a-zA-Z0-9_-]/_/g'
+}
+
+# Check whether a playbook uses only localhost/local connections and therefore
+# does not need a Docker container.  Returns 0 (true) when every play in the
+# file targets localhost with connection: local.
+is_localhost_only() {
+  local playbook_path="$1"
+  # Count total plays and plays that declare connection: local on localhost
+  local total_plays local_plays
+  total_plays=$(grep -cE '^\s*hosts:\s' "$playbook_path" || true)
+  local_plays=$(grep -cE '^\s*connection:\s*local' "$playbook_path" || true)
+  [ "$total_plays" -gt 0 ] && [ "$total_plays" -eq "$local_plays" ]
 }
 
 # Extract a one-line failure reason from an Ansible log file.
@@ -174,8 +196,15 @@ print_summary() {
 }
 
 cleanup() {
-  log "Cleaning up container ${CONTAINER_NAME}..."
-  docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+  log "Cleaning up test containers..."
+  # Remove any containers created by this run (test-container-*)
+  local containers
+  containers=$(docker ps -a --filter "name=test-container-" --format '{{.Names}}' 2>/dev/null || true)
+  for c in $containers; do
+    docker rm -f "$c" 2>/dev/null || true
+  done
+  # Also remove the legacy single container name
+  docker rm -f "test-container" 2>/dev/null || true
   if [ -n "$TEMP_DOCKER_CONFIG" ] && [ -d "$TEMP_DOCKER_CONFIG" ]; then
     rm -rf "$TEMP_DOCKER_CONFIG"
   fi
@@ -201,13 +230,14 @@ build_image() {
 
 
 start_container() {
+  local container_name="${1:-test-container}"
   # Remove stale container
-  docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+  docker rm -f "$container_name" 2>/dev/null || true
 
-  log "Starting container ${CONTAINER_NAME}..."
+  log "Starting container ${container_name}..."
   docker run -d \
-    --name "$CONTAINER_NAME" \
-    --hostname "$CONTAINER_NAME" \
+    --name "$container_name" \
+    --hostname "$container_name" \
     --privileged \
     --cgroupns=host \
     --memory=2g \
@@ -219,7 +249,7 @@ start_container() {
   local retries=30
   while [ $retries -gt 0 ]; do
     local state
-    state="$(docker exec "$CONTAINER_NAME" systemctl is-system-running 2>/dev/null || true)"
+    state="$(docker exec "$container_name" systemctl is-system-running 2>/dev/null || true)"
     if echo "$state" | grep -qE "running|degraded"; then
       break
     fi
@@ -231,7 +261,7 @@ start_container() {
     warn "systemd did not reach 'running' — continuing anyway (may be 'degraded' in container)"
   fi
 
-  log "Container ready (systemd running)"
+  log "Container ready: ${container_name}"
 }
 
 
@@ -251,6 +281,8 @@ fi
 run_playbook() {
   local playbook_path="$1"
   local pb_label="$2"
+  local container_name="${3:-}"        # empty for localhost-only tests
+  local is_local="${4:-false}"         # "true" when running without a container
 
   if [ ! -f "$playbook_path" ]; then
     err "Playbook not found: ${playbook_path}"
@@ -263,9 +295,9 @@ run_playbook() {
   # Skip playbooks that require a running Docker daemon when none is
   # available inside the test container (e.g. test_runtime_services
   # — the container only ships the Docker CLI, not the daemon).
-  if head -5 "$playbook_path" | grep -qi '# requires: docker-daemon'; then
-    if ! docker exec "$CONTAINER_NAME" docker info >/dev/null 2>&1; then
-      log "SKIP ${playbook_name}: requires a Docker daemon inside ${CONTAINER_NAME}"
+  if [ "$is_local" != "true" ] && head -5 "$playbook_path" | grep -qi '# requires: docker-daemon'; then
+    if ! docker exec "$container_name" docker info >/dev/null 2>&1; then
+      log "SKIP ${playbook_name}: requires a Docker daemon inside ${container_name}"
       record_result "$pb_label" "SKIP" "Docker daemon unavailable in container" ""
       return 0
     fi
@@ -279,19 +311,33 @@ run_playbook() {
 
   log "Running playbook: ${playbook_name}"
 
+  # Build inventory/connection args
+  local inv_args=()
+  if [ "$is_local" = "true" ]; then
+    inv_args=(-i "localhost," -c local)
+  else
+    inv_args=(-i "$SCRIPT_DIR/inventory_docker.ini")
+    # Override container target for parallel execution (inventory
+    # defaults to "test-container"; ansible_host tells the docker
+    # connection plugin which container to exec into).
+    if [ -n "$container_name" ]; then
+      inv_args+=(-e "ansible_host=${container_name}")
+    fi
+  fi
+
   # Run the playbook, teeing to both console and log file
   local rc=0
   if [ -n "$logfile" ]; then
     set +e
     "$ANSIBLE_PLAYBOOK" \
-      -i "$SCRIPT_DIR/inventory_docker.ini" \
+      "${inv_args[@]}" \
       "$playbook_path" \
       -v 2>&1 | tee "$logfile"
     rc="${PIPESTATUS[0]}"
     set -e
   else
     "$ANSIBLE_PLAYBOOK" \
-      -i "$SCRIPT_DIR/inventory_docker.ini" \
+      "${inv_args[@]}" \
       "$playbook_path" \
       -v || rc=$?
   fi
@@ -327,7 +373,7 @@ run_playbook() {
   local idem_output
   set +e
   idem_output=$("$ANSIBLE_PLAYBOOK" \
-    -i "$SCRIPT_DIR/inventory_docker.ini" \
+    "${inv_args[@]}" \
     "$playbook_path" \
     -v 2>&1)
   idem_rc=$?
@@ -359,14 +405,81 @@ run_playbook() {
 }
 
 
-main() {
-  # --list: print discoverable test playbooks and exit (no container needed)
-  if [ "${1:-}" = "--list" ]; then
-    while IFS= read -r -d '' f; do
-      printf '%s\n' "$(realpath --relative-to="$SCRIPT_DIR" "$f")"
-    done < <(find "$SCRIPT_DIR" -name 'test_*.yml' -type f -print0 | sort -z)
-    exit 0
+# Run a single container-based test.  Designed to be called as a background
+# job in parallel mode.  Writes a small result file instead of appending to
+# in-memory arrays (which don't survive subshells).
+run_container_test() {
+  local pb="$1" pb_label="$2" container_name="$3"
+  local result_file="${LOG_DIR}/.result_$(log_filename "$pb_label")"
+  # Write placeholder so a crash before completion is detectable.
+  printf '%s\n' "${pb_label}|INCOMPLETE|Worker did not finish|" > "$result_file"
+  start_container "$container_name"
+  local rc=0
+  run_playbook "$pb" "$pb_label" "$container_name" "false" || rc=$?
+  docker rm -f "$container_name" 2>/dev/null || true
+  if [ "$rc" -eq 0 ]; then
+    log "PASSED: ${pb_label}"
+  else
+    err "FAILED: ${pb_label}"
   fi
+  # Atomically replace placeholder with actual result.
+  local tmp_result="${result_file}.tmp"
+  if [ ${#RESULT_LABELS[@]} -gt 0 ]; then
+    printf '%s\n' "${RESULT_LABELS[-1]}|${RESULT_STATUSES[-1]}|${RESULT_REASONS[-1]}|${RESULT_LOGFILES[-1]}" > "$tmp_result"
+  else
+    printf '%s\n' "${pb_label}|FAIL|Playbook setup failed|" > "$tmp_result"
+  fi
+  mv -f "$tmp_result" "$result_file"
+  return $rc
+}
+
+# Collect result files written by parallel jobs into the RESULT_* arrays.
+# Returns non-zero if any result is INCOMPLETE (worker crashed before finishing).
+collect_parallel_results() {
+  local result_files incomplete=0
+  result_files=$(find "$LOG_DIR" -name '.result_*' -type f 2>/dev/null | sort || true)
+  for rf in $result_files; do
+    local line
+    line="$(cat "$rf")"
+    local label status reason logfile
+    IFS='|' read -r label status reason logfile <<< "$line"
+    if [ "$status" = "INCOMPLETE" ]; then
+      err "INCOMPLETE: ${label} — worker did not finish (likely crashed)"
+      status="FAIL"
+      reason="Worker process did not complete — ${reason}"
+      incomplete=1
+    fi
+    RESULT_LABELS+=("$label")
+    RESULT_STATUSES+=("$status")
+    RESULT_REASONS+=("$reason")
+    RESULT_LOGFILES+=("$logfile")
+    rm -f "$rf"
+  done
+  return $incomplete
+}
+
+
+main() {
+  # Parse flags
+  local suite_args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --list)
+        while IFS= read -r -d '' f; do
+          printf '%s\n' "$(realpath --relative-to="$SCRIPT_DIR" "$f")"
+        done < <(find "$SCRIPT_DIR" -name 'test_*.yml' -type f -print0 | sort -z)
+        exit 0
+        ;;
+      --jobs|-j)
+        MAX_JOBS="${2:?--jobs requires a number}"
+        shift 2
+        ;;
+      *)
+        suite_args+=("$1")
+        shift
+        ;;
+    esac
+  done
 
   trap cleanup EXIT
 
@@ -374,12 +487,10 @@ main() {
 
   init_log_dir
 
-  build_image
-
   # Determine which playbooks to run
   local playbooks=()
-  if [ $# -gt 0 ]; then
-    local arg="$1"; shift
+  if [ ${#suite_args[@]} -gt 0 ]; then
+    local arg="${suite_args[0]}"
     if [[ "$arg" == *"/"* ]]; then
       # Specific test: e.g. "monitoring/test_full_stack"
       playbooks+=("$SCRIPT_DIR/${arg}.yml")
@@ -413,19 +524,124 @@ main() {
 
   log "Found ${#playbooks[@]} test playbook(s)"
 
+  # Partition playbooks into localhost-only and container-based
+  local local_playbooks=()
+  local container_playbooks=()
   for pb in "${playbooks[@]}"; do
-    local pb_label
-    pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
-    # Each test gets a fresh container to avoid state leaking between runs
-    start_container
-    if run_playbook "$pb" "$pb_label"; then
-      log "PASSED: ${pb_label}"
+    if is_localhost_only "$pb"; then
+      local_playbooks+=("$pb")
     else
-      err "FAILED: ${pb_label}"
+      container_playbooks+=("$pb")
     fi
   done
 
+  if [ ${#local_playbooks[@]} -gt 0 ]; then
+    log "Localhost-only tests (no container needed): ${#local_playbooks[@]}"
+  fi
+  if [ ${#container_playbooks[@]} -gt 0 ]; then
+    log "Container-based tests: ${#container_playbooks[@]}"
+  fi
+
+  # ── Phase 1: Run localhost-only tests (fast, no Docker image needed) ──
+  local any_failed=0
+  for pb in "${local_playbooks[@]}"; do
+    local pb_label
+    pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
+    log "Running localhost test: ${pb_label}"
+    if run_playbook "$pb" "$pb_label" "" "true"; then
+      log "PASSED: ${pb_label}"
+    else
+      err "FAILED: ${pb_label}"
+      any_failed=1
+    fi
+  done
+
+  # ── Phase 2: Run container-based tests ──
+  if [ ${#container_playbooks[@]} -gt 0 ]; then
+    build_image
+
+    if [ "$MAX_JOBS" -gt 1 ] && [ ${#container_playbooks[@]} -gt 1 ]; then
+      # Parallel execution
+      log "Running ${#container_playbooks[@]} container tests with --jobs ${MAX_JOBS}"
+      local running_jobs=0
+      local pids=()
+      local pid_labels=()
+      local idx=0
+
+      for pb in "${container_playbooks[@]}"; do
+        local pb_label
+        pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
+        local container_name="test-container-${idx}"
+
+        # Wait for a slot to open if at max capacity
+        while [ "$running_jobs" -ge "$MAX_JOBS" ]; do
+          # Wait for any child to finish
+          local waited_pid=""
+          for pi in "${!pids[@]}"; do
+            if ! kill -0 "${pids[$pi]}" 2>/dev/null; then
+              wait "${pids[$pi]}" || any_failed=1
+              waited_pid="$pi"
+              break
+            fi
+          done
+          if [ -n "$waited_pid" ]; then
+            unset 'pids['"$waited_pid"']'
+            running_jobs=$((running_jobs - 1))
+          else
+            sleep 1
+          fi
+        done
+
+        # Launch test in background
+        run_container_test "$pb" "$pb_label" "$container_name" &
+        pids+=($!)
+        pid_labels+=("$pb_label")
+        running_jobs=$((running_jobs + 1))
+        idx=$((idx + 1))
+      done
+
+      # Wait for remaining jobs
+      for pid in "${pids[@]}"; do
+        wait "$pid" || any_failed=1
+      done
+
+      # Collect results from files written by background jobs
+      collect_parallel_results || any_failed=1
+
+      # Validate expected vs collected result count
+      local expected_count=${#container_playbooks[@]}
+      local collected_count
+      collected_count=$(( ${#RESULT_LABELS[@]} - ${#local_playbooks[@]} ))
+      if [ "$collected_count" -ne "$expected_count" ]; then
+        err "Result count mismatch: expected ${expected_count} container results, collected ${collected_count}"
+        any_failed=1
+      fi
+    else
+      # Sequential execution (default)
+      for pb in "${container_playbooks[@]}"; do
+        local pb_label
+        pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
+        local container_name="test-container-0"
+        # Each test gets a fresh container to avoid state leaking between runs
+        start_container "$container_name"
+        if run_playbook "$pb" "$pb_label" "$container_name" "false"; then
+          log "PASSED: ${pb_label}"
+        else
+          err "FAILED: ${pb_label}"
+          any_failed=1
+        fi
+        docker rm -f "$container_name" 2>/dev/null || true
+      done
+    fi
+  fi
+
+  # Exit non-zero if any test failed, any worker crashed, or result
+  # accounting detected missing results — regardless of what print_summary
+  # reports from the RESULT arrays alone.
   print_summary
+  if [ "$any_failed" -ne 0 ]; then
+    exit 1
+  fi
 }
 
 main "$@"
