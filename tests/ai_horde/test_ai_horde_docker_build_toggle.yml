@@ -1,0 +1,52 @@
+---
+# idempotency: skip
+# Test playbook: AI-Horde Docker build-on-start toggle
+#
+# Canonical owner of the build-on-start toggle contract.
+# Both disabled and enabled cases are covered here.
+# This test re-renders the systemd unit with ai_horde_docker_build_on_service_start
+# toggled, which is inherently non-idempotent (the unit changes between plays).
+
+- name: Test AI-Horde docker service defaults to fast start (no build)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: docker
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-pg-password"
+    ai_horde_secret_key: "test-secret-key-12345"
+    ai_horde_docker_build_on_service_start: false
+  roles:
+    - ai_horde
+  post_tasks:
+    - name: Read systemd unit with build-on-start disabled
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ai-horde.service
+      register: _service_content_no_build
+
+    - name: Assert systemd unit does not include build pre-start by default
+      ansible.builtin.assert:
+        that:
+          - "'ExecStartPre=/usr/bin/docker compose build --pull' not in _service_content_no_build.content | b64decode"
+
+- name: Test AI-Horde docker service build-on-start toggle
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: docker
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-pg-password"
+    ai_horde_secret_key: "test-secret-key-12345"
+    ai_horde_docker_build_on_service_start: true
+  roles:
+    - ai_horde
+  post_tasks:
+    - name: Read systemd unit with build-on-start enabled
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ai-horde.service
+      register: _service_content_build_on_start
+
+    - name: Assert systemd unit includes build pre-start when enabled
+      ansible.builtin.assert:
+        that:
+          - "'ExecStartPre=/usr/bin/docker compose build --pull' in _service_content_build_on_start.content | b64decode"

@@ -4,11 +4,14 @@
 # Play 1: Positive test — render with valid inputs, assert on output files
 # Play 2: Negative test — missing postgres password triggers fail-fast
 # Play 3: Negative test — missing secret key triggers fail-fast
+#
+# Build-on-start toggle contract is owned by test_ai_horde_docker_build_toggle.yml.
 
 - name: Test AI-Horde role render (positive)
   hosts: testhost
   become: true
   vars:
+    ai_horde_deploy_mode: docker
     ai_horde_start_services: false
     ai_horde_postgres_password: "test-pg-password"
     ai_horde_secret_key: "test-secret-key-12345"
@@ -45,6 +48,16 @@
           - "'redis-cli' in _compose_content.content | b64decode"
           - "'heartbeat' in _compose_content.content | b64decode"
 
+    - name: Assert AI-Horde healthcheck uses Python stdlib (not curl)
+      ansible.builtin.assert:
+        that:
+          - "'python' in _compose_content.content | b64decode"
+          - "'urllib.request' in _compose_content.content | b64decode"
+          - "'curl' not in _compose_content.content | b64decode"
+        fail_msg: >-
+          AI-Horde compose healthcheck must use Python stdlib urllib
+          (available in runtime image), not curl (not installed).
+
     - name: Assert compose has log rotation
       ansible.builtin.assert:
         that:
@@ -55,6 +68,13 @@
       ansible.builtin.assert:
         that:
           - "'service_healthy' in _compose_content.content | b64decode"
+
+    - name: Assert compose does not publish DB/Redis ports to host
+      ansible.builtin.assert:
+        that:
+          - "'5432:5432' not in _compose_content.content | b64decode"
+          - "'6379:6379' not in _compose_content.content | b64decode"
+        fail_msg: "Compose must keep PostgreSQL and Redis internal-only in docker mode"
 
     - name: Assert compose does not enable Postgres trust auth
       ansible.builtin.assert:
@@ -97,15 +117,15 @@
           - "'PROFILE=docker' in _env_content.content | b64decode"
           - "'REDIS_IP=redis' in _env_content.content | b64decode"
           - "'USE_SQLITE=0' in _env_content.content | b64decode"
-          - "'POSTGRES_URL=postgres' in _env_content.content | b64decode"
-          - "'POSTGRES_PASS=test-pg-password' in _env_content.content | b64decode"
-          - "'secret_key=test-secret-key-12345' in _env_content.content | b64decode"
+          - "'POSTGRES_URL=postgres/postgres' in _env_content.content | b64decode"
+          - "'POSTGRES_PASS=\"test-pg-password\"' in _env_content.content | b64decode"
+          - "'secret_key=\"test-secret-key-12345\"' in _env_content.content | b64decode"
           - "'test_admin#1' in _env_content.content | b64decode"
 
     - name: Assert env overrides are merged
       ansible.builtin.assert:
         that:
-          - "'KUDOS_TRUST_THRESHOLD=100' in _env_content.content | b64decode"
+          - "'KUDOS_TRUST_THRESHOLD=\"100\"' in _env_content.content | b64decode"
 
     - name: Stat systemd unit
       ansible.builtin.stat:
@@ -125,12 +145,16 @@
     - name: Assert systemd unit has correct directives
       ansible.builtin.assert:
         that:
-          - "'docker compose build' in _service_content.content | b64decode"
           - "'docker compose up' in _service_content.content | b64decode"
           - "'docker compose down' in _service_content.content | b64decode"
           - "'TimeoutStartSec=300' in _service_content.content | b64decode"
           - "'Restart=on-failure' in _service_content.content | b64decode"
           - "'Requires=docker.service' in _service_content.content | b64decode"
+
+    - name: Assert systemd unit defaults to fast start path (no implicit build)
+      ansible.builtin.assert:
+        that:
+          - "'ExecStartPre=/usr/bin/docker compose build --pull' not in _service_content.content | b64decode"
 
 - name: Test AI-Horde role fail-fast (missing postgres password)
   hosts: testhost

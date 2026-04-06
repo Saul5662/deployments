@@ -1,0 +1,503 @@
+---
+# Test playbook: AI-Horde role native mode (config rendering only, no service start)
+# idempotency: skip  (multiple plays intentionally overwrite .env with different variable sets)
+# Risk categories: deploy-safety, security, fail-fast
+# Coverage map: docs/plans/maintainability-gaps/test-coverage-map.md
+#
+# Play 1: Positive test — render native mode with 3 instances, assert on output files
+# Play 2: Positive test — render native mode with optional local services
+
+- name: Test AI-Horde role native render (multi-instance)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-pg-password"
+    ai_horde_secret_key: "test-secret-key-12345"
+    ai_horde_port: 7001
+    ai_horde_instance_count: 3
+    ai_horde_listen: "127.0.0.1"
+    ai_horde_admins: ["test_admin#1"]
+    ai_horde_postgres_host: "db.example.com"
+    ai_horde_redis_host: "redis.example.com"
+    ai_horde_env_overrides:
+      KUDOS_TRUST_THRESHOLD: "100"
+  roles:
+    - ai_horde
+  post_tasks:
+    - name: Stat systemd template unit
+      ansible.builtin.stat:
+        path: /etc/systemd/system/ai-horde@.service
+      register: _service_template
+
+    - name: Assert systemd template unit exists
+      ansible.builtin.assert:
+        that:
+          - _service_template.stat.exists
+          - _service_template.stat.mode == "0644"
+
+    - name: Read systemd template unit
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/ai-horde@.service
+      register: _service_content
+
+    - name: Assert systemd template unit has correct directives
+      ansible.builtin.assert:
+        that:
+          - "'server.py' in _service_content.content | b64decode"
+          - "'--port %i' in _service_content.content | b64decode"
+          - "'--horde stable' in _service_content.content | b64decode"
+          - "'User=aihorde' in _service_content.content | b64decode"
+          - "'ProtectSystem=strict' in _service_content.content | b64decode"
+          - "'ProtectHome=true' in _service_content.content | b64decode"
+          - "'NoNewPrivileges=true' in _service_content.content | b64decode"
+
+    - name: Assert waitress runtime tunables are passed via CLI args
+      ansible.builtin.assert:
+        that:
+          - "'--waitress_threads' in _service_content.content | b64decode"
+          - "'--waitress_connection_limit' in _service_content.content | b64decode"
+        fail_msg: >-
+          Native systemd unit must pass --waitress_threads and
+          --waitress_connection_limit to server.py for runtime tuning.
+
+    - name: Stat .env file
+      ansible.builtin.stat:
+        path: /opt/ai-horde/.env
+      register: _env
+
+    - name: Assert .env has correct permissions for native mode
+      ansible.builtin.assert:
+        that:
+          - _env.stat.exists
+          - _env.stat.mode == "0640"
+          - _env.stat.pw_name == "root"
+          - _env.stat.gr_name == "aihorde"
+
+    - name: Stat native base directory
+      ansible.builtin.stat:
+        path: /opt/ai-horde
+      register: _base_dir
+
+    - name: Assert native base directory ownership and mode
+      ansible.builtin.assert:
+        that:
+          - _base_dir.stat.exists
+          - _base_dir.stat.mode == "0750"
+          - _base_dir.stat.pw_name == "root"
+          - _base_dir.stat.gr_name == "aihorde"
+
+    - name: Stat native source directory
+      ansible.builtin.stat:
+        path: /opt/ai-horde/src
+      register: _src_dir
+
+    - name: Assert native source directory ownership
+      ansible.builtin.assert:
+        that:
+          - _src_dir.stat.exists
+          - _src_dir.stat.pw_name == "aihorde"
+          - _src_dir.stat.gr_name == "aihorde"
+
+    - name: Stat native venv directory
+      ansible.builtin.stat:
+        path: /opt/ai-horde/venv
+      register: _venv_dir
+
+    - name: Assert native venv directory ownership
+      ansible.builtin.assert:
+        that:
+          - _venv_dir.stat.exists
+          - _venv_dir.stat.pw_name == "aihorde"
+          - _venv_dir.stat.gr_name == "aihorde"
+
+    - name: Verify base directory is traversable by service user
+      ansible.builtin.command:
+        cmd: test -x /opt/ai-horde
+      become: true
+      become_user: aihorde
+      changed_when: false
+
+    - name: Verify .env is readable by service user
+      ansible.builtin.command:
+        cmd: test -r /opt/ai-horde/.env
+      become: true
+      become_user: aihorde
+      changed_when: false
+
+    - name: Read .env file
+      ansible.builtin.slurp:
+        src: /opt/ai-horde/.env
+      register: _env_content
+
+    - name: Assert .env has native-mode values
+      ansible.builtin.assert:
+        that:
+          - "'REDIS_IP=redis.example.com' in _env_content.content | b64decode"
+          - "'POSTGRES_URL=db.example.com/postgres' in _env_content.content | b64decode"
+          - "'POSTGRES_URL=db.example.com:5432/postgres' not in _env_content.content | b64decode"
+          - "'POSTGRES_PASS=\"test-pg-password\"' in _env_content.content | b64decode"
+          - "'secret_key=\"test-secret-key-12345\"' in _env_content.content | b64decode"
+          - "'KUDOS_TRUST_THRESHOLD=\"100\"' in _env_content.content | b64decode"
+          - "'PROFILE' not in _env_content.content | b64decode"
+
+    - name: Assert .env does NOT have Docker-mode values
+      ansible.builtin.assert:
+        that:
+          - "'PROFILE=docker' not in _env_content.content | b64decode"
+          - _env_content.content | b64decode is not regex('(?m)^REDIS_IP=redis$')
+          - _env_content.content | b64decode is not regex('(?m)^POSTGRES_URL=postgres$')
+
+    - name: Assert no docker-compose.yml was rendered
+      ansible.builtin.stat:
+        path: /opt/ai-horde/docker-compose.yml
+      register: _compose_native
+
+    - name: Verify docker-compose.yml is absent in native mode
+      ansible.builtin.assert:
+        that:
+          - not _compose_native.stat.exists
+
+- name: Test AI-Horde native POSTGRES_URL rendering (non-default port)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_group: "aihorde"
+    ai_horde_redis_host: "redis.example.com"
+    ai_horde_postgres_user: "postgres"
+    ai_horde_postgres_password: "test-pg-password"
+    ai_horde_secret_key: "test-secret-key-12345"
+    ai_horde_admins: []
+    ai_horde_env_overrides: {}
+    ai_horde_postgres_host: "db.example.com"
+    ai_horde_postgres_port: 6543
+    ai_horde_postgres_db: "horde_native"
+  tasks:
+    - name: Build expected POSTGRES_URL fragment for non-default port
+      ansible.builtin.set_fact:
+        _ai_horde_postgres_url: "{{ ai_horde_postgres_host }}:{{ ai_horde_postgres_port }}/{{ ai_horde_postgres_db }}"
+
+    - name: Render native environment template with non-default port
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/ai_horde/templates/ai-horde-native.env.j2"
+        dest: /tmp/ai-horde-native-porttest.env
+        mode: "0644"
+
+    - name: Read .env file for non-default port test
+      ansible.builtin.slurp:
+        src: /tmp/ai-horde-native-porttest.env
+      register: _env_ported
+
+    - name: Assert POSTGRES_URL includes non-default port and db
+      ansible.builtin.assert:
+        that:
+          - "'POSTGRES_URL=db.example.com:6543/horde_native' in _env_ported.content | b64decode"
+
+- name: Test AI-Horde role accepts local PostgreSQL loopback host variants
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_postgres: true
+  tasks:
+    - name: Apply role with accepted local PostgreSQL host value
+      ansible.builtin.include_role:
+        name: ai_horde
+      vars:
+        ai_horde_postgres_host: "{{ item }}"
+      loop:
+        - "127.0.0.1"
+        - "localhost"
+        - "::1"
+      loop_control:
+        label: "{{ item }}"
+
+- name: Test AI-Horde role fail-fast (unsupported Redis port)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_redis_port: 6380
+  tasks:
+    - name: Expect role to fail on unsupported Redis port
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to unsupported ai_horde_redis_port"
+      rescue:
+        - name: Assert failure was about redis port support
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'Redis port' in ansible_failed_result.msg or '6379' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected unsupported Redis port failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected unsupported ai_horde_redis_port"
+
+- name: Test AI-Horde role fail-fast (local postgres with remote host)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_postgres: true
+    ai_horde_postgres_host: "db.example.com"
+  tasks:
+    - name: Expect role to fail on invalid local PostgreSQL contract
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to invalid local PostgreSQL contract"
+      rescue:
+        - name: Assert failure was about local PostgreSQL contract
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'ai_horde_install_postgres=true' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected local PostgreSQL contract failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected invalid local PostgreSQL host"
+
+- name: Test AI-Horde role fail-fast (local redis with remote host)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_redis: true
+    ai_horde_redis_host: "redis.example.com"
+  tasks:
+    - name: Expect role to fail on invalid local Redis contract
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to invalid local Redis contract"
+      rescue:
+        - name: Assert failure was about local Redis contract
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'ai_horde_install_redis=true' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected local Redis contract failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected invalid local Redis host"
+
+- name: Test AI-Horde role native render (invalid deploy mode)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: invalid
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+  tasks:
+    - name: Expect role to fail on invalid deploy mode
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to invalid ai_horde_deploy_mode"
+      rescue:
+        - name: Assert failure was about invalid deploy mode
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'ai_horde_deploy_mode' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected invalid deploy mode failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected invalid ai_horde_deploy_mode"
+
+# ── Config contract negative tests ──────────────────────────
+
+- name: Test AI-Horde role fail-fast (POSTGRES_URL override with scheme)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_postgres_url_override: "postgresql://user:pass@db.internal/postgres"
+  tasks:
+    - name: Expect role to fail on POSTGRES_URL override with scheme
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to POSTGRES_URL override containing scheme"
+      rescue:
+        - name: Assert failure was about POSTGRES_URL override shape
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'POSTGRES_URL' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected POSTGRES_URL override shape failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected POSTGRES_URL override with scheme"
+
+# ── HAProxy mode tests (Tier 1: safe_edit, Tier 2: standalone) ──
+
+- name: Test AI-Horde role native render — Tier 2 standalone HAProxy mode
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_base_dir: "/tmp/ai-horde-standalone-render"
+    ai_horde_postgres_password: "test-pg-password"
+    ai_horde_secret_key: "test-secret-key-12345"
+    ai_horde_port: 7001
+    ai_horde_instance_count: 2
+    ai_horde_install_haproxy: true
+    ai_horde_haproxy_mode: standalone
+    ai_horde_haproxy_port: 18080
+    ai_horde_haproxy_config_path: "/tmp/standalone-live-haproxy-test.cfg"
+  pre_tasks:
+    - name: Ensure standalone live HAProxy config path is absent before role run
+      ansible.builtin.file:
+        path: /tmp/standalone-live-haproxy-test.cfg
+        state: absent
+  roles:
+    - ai_horde
+  post_tasks:
+    - name: Assert standalone render-only mode did not touch live config path
+      ansible.builtin.stat:
+        path: /tmp/standalone-live-haproxy-test.cfg
+      register: _haproxy_standalone_live
+
+    - name: Verify live standalone HAProxy config path remains untouched
+      ansible.builtin.assert:
+        that:
+          - not _haproxy_standalone_live.stat.exists
+
+    - name: Read rendered standalone HAProxy preview config
+      ansible.builtin.slurp:
+        src: /tmp/ai-horde-standalone-render/rendered/haproxy.cfg
+      register: _haproxy_standalone
+
+    - name: Assert standalone mode rendered full HAProxy preview config
+      ansible.builtin.assert:
+        that:
+          - "'global' in _haproxy_standalone.content | b64decode"
+          - "'defaults' in _haproxy_standalone.content | b64decode"
+          - "'frontend ai_horde_front' in _haproxy_standalone.content | b64decode"
+          - "'bind *:18080' in _haproxy_standalone.content | b64decode"
+          - "'backend ai_horde_back' in _haproxy_standalone.content | b64decode"
+          - "'server aihorde-7001' in _haproxy_standalone.content | b64decode"
+          - "'server aihorde-7002' in _haproxy_standalone.content | b64decode"
+
+- name: Test AI-Horde role fail-fast (invalid HAProxy mode)
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_haproxy: true
+    ai_horde_haproxy_mode: invalid_mode
+  tasks:
+    - name: Expect role to fail on invalid HAProxy mode
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: ai_horde
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed due to invalid ai_horde_haproxy_mode"
+      rescue:
+        - name: Assert failure was about invalid HAProxy mode
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'ai_horde_haproxy_mode' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected invalid HAProxy mode failure, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast was correctly enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected invalid ai_horde_haproxy_mode"
+
+- name: Test AI-Horde role safe_edit render mode — Tier 1 safe_edit without existing config
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_haproxy: true
+    ai_horde_haproxy_mode: safe_edit
+    ai_horde_haproxy_config_path: "/tmp/nonexistent-haproxy-test.cfg"
+  tasks:
+    - name: Ensure test config file does not exist
+      ansible.builtin.file:
+        path: /tmp/nonexistent-haproxy-test.cfg
+        state: absent
+
+    - name: Apply role in safe_edit render mode (should not fail)
+      ansible.builtin.include_role:
+        name: ai_horde
+
+    - name: Assert live HAProxy config path was not touched in render mode
+      ansible.builtin.stat:
+        path: /tmp/nonexistent-haproxy-test.cfg
+      register: _safe_edit_render_cfg
+
+    - name: Verify safe_edit render mode skipped live config promotion
+      ansible.builtin.assert:
+        that:
+          - not _safe_edit_render_cfg.stat.exists
+
+

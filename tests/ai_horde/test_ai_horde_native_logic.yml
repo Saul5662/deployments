@@ -1,0 +1,434 @@
+---
+# Test playbook: AI-Horde native-mode logic checks (no service startup)
+# idempotency: skip  (safe-edit tests intentionally create/modify/clean temp files)
+# Risk categories: deploy-safety, data-integrity, operational
+# Coverage map: docs/plans/maintainability-gaps/test-coverage-map.md
+# Validates stale instance detection, HAProxy backend rendering, safe-edit
+# mode logic, and validation failure → non-promotion.
+
+- name: Test AI-Horde native stale-instance and HAProxy logic
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_port: 7001
+    ai_horde_instance_count: 3
+    ai_horde_backend_host: "127.0.0.42"
+    ai_horde_haproxy_port: 18080
+    ai_horde_haproxy_listen: "*"
+    ai_horde_haproxy_timeout_server: 300000
+  tasks:
+    - name: Build desired instance port list
+      ansible.builtin.set_fact:
+        _ai_horde_ports: >-
+          {{ range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) | list }}
+
+    - name: Define sample existing systemd unit list
+      ansible.builtin.set_fact:
+        _ai_horde_existing_units:
+          stdout_lines:
+            - ai-horde@7001.service
+            - ai-horde@7002.service
+            - ai-horde@7010.service
+            - ai-horde@x.service
+            - random.service
+
+    - name: Build stale port list using role expression
+      ansible.builtin.set_fact:
+        _ai_horde_stale_ports: >-
+          {{
+            (
+              _ai_horde_existing_units.stdout_lines
+              | select('match', '^ai-horde@[0-9]+[.]service$')
+              | map('regex_replace', '^ai-horde@', '')
+              | map('replace', '.service', '')
+              | map('int')
+              | list
+            ) | difference(_ai_horde_ports)
+          }}
+
+    - name: Assert stale instance detection is correct
+      ansible.builtin.assert:
+        that:
+          - _ai_horde_ports == [7001, 7002, 7003]
+          - _ai_horde_stale_ports == [7010]
+
+    - name: Read ai_horde HAProxy task file for regression guards
+      ansible.builtin.set_fact:
+        _haproxy_tasks_file_content: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/ai_horde/tasks/haproxy.yml') }}
+
+    - name: Read shared safe-edit micro-role for regression guards
+      ansible.builtin.set_fact:
+        _shared_safe_edit_content: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/_haproxy_safe_edit/tasks/main.yml') }}
+
+    - name: Assert safe-edit flow does not use global handler flush
+      ansible.builtin.assert:
+        that:
+          - "'meta: flush_handlers' not in _haproxy_tasks_file_content"
+          - "'meta: flush_handlers' not in _shared_safe_edit_content"
+          - "'_hse_requires_promotion' in _shared_safe_edit_content"
+          - "'Fail if safe-edit ingress port conflicts with unmanaged listeners' in _haproxy_tasks_file_content"
+          - "'include_role' in _haproxy_tasks_file_content"
+          - "'_haproxy_safe_edit' in _haproxy_tasks_file_content"
+        fail_msg: >-
+          Safe-edit flow regression detected: it must not use meta: flush_handlers,
+          must preserve preflight safety checks, and must delegate to _haproxy_safe_edit.
+
+    - name: Read ai_horde native task file for ownership-performance guards
+      ansible.builtin.set_fact:
+        _native_tasks_file_content: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/ai_horde/tasks/native.yml') }}
+
+    - name: Assert recursive native ownership normalization is change-gated
+      ansible.builtin.assert:
+        that:
+          - "'Determine whether recursive source ownership normalization is required' in _native_tasks_file_content"
+          - "'_ai_horde_source_reownership_required' in _native_tasks_file_content"
+          - "'_ai_horde_source_reownership_required | default(false) | bool' in _native_tasks_file_content"
+          - "'Determine whether recursive venv ownership normalization is required' in _native_tasks_file_content"
+          - "'_ai_horde_venv_reownership_required' in _native_tasks_file_content"
+          - "'_ai_horde_venv_reownership_required | default(false) | bool' in _native_tasks_file_content"
+        fail_msg: >-
+          Native ownership regression detected: recursive source/venv ownership
+          normalization must remain gated on clone/venv change signals.
+
+    - name: Render HAProxy template with backend host override
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/ai_horde/templates/ai-horde-haproxy.cfg.j2"
+        dest: /tmp/ai-horde-haproxy-test.cfg
+        mode: "0644"
+
+    - name: Read rendered HAProxy config
+      ansible.builtin.slurp:
+        src: /tmp/ai-horde-haproxy-test.cfg
+      register: _haproxy_cfg
+
+    - name: Assert HAProxy config uses backend host for upstream servers
+      ansible.builtin.assert:
+        that:
+          - "'bind *:18080' in _haproxy_cfg.content | b64decode"
+          - "'server aihorde-7001 127.0.0.42:7001' in _haproxy_cfg.content | b64decode"
+          - "'server aihorde-7002 127.0.0.42:7002' in _haproxy_cfg.content | b64decode"
+          - "'server aihorde-7003 127.0.0.42:7003' in _haproxy_cfg.content | b64decode"
+          - "'0.0.0.0:7001' not in _haproxy_cfg.content | b64decode"
+
+# ── HAProxy safe-edit mode logic checks ─────────────────────
+
+- name: Test AI-Horde HAProxy safe-edit block rendering
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_port: 7001
+    ai_horde_instance_count: 3
+    ai_horde_backend_host: "127.0.0.42"
+    ai_horde_haproxy_port: 18080
+    ai_horde_haproxy_mode: "safe_edit"
+    ai_horde_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
+    ai_horde_haproxy_backup_dir: "/var/backups/haproxy"
+  tasks:
+    - name: Build AI-Horde HAProxy block content
+      ansible.builtin.set_fact:
+        _ai_horde_haproxy_block: |-
+          frontend ai_horde_front
+              bind *:{{ ai_horde_haproxy_port }}
+              default_backend ai_horde_back
+
+          backend ai_horde_back
+              balance roundrobin
+              option httpchk GET /api/v2/status/heartbeat
+              http-check expect status 200
+          {% for port in range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) %}
+              server aihorde-{{ port }} {{ ai_horde_backend_host }}:{{ port }} check inter 10s fall 3 rise 2
+          {% endfor %}
+
+    - name: Assert safe-edit block contains expected frontend/backend config
+      ansible.builtin.assert:
+        that:
+          - "'bind *:18080' in _ai_horde_haproxy_block"
+          - "'default_backend ai_horde_back' in _ai_horde_haproxy_block"
+          - "'server aihorde-7001 127.0.0.42:7001' in _ai_horde_haproxy_block"
+          - "'server aihorde-7002 127.0.0.42:7002' in _ai_horde_haproxy_block"
+          - "'server aihorde-7003 127.0.0.42:7003' in _ai_horde_haproxy_block"
+
+    - name: Create a stub pre-existing HAProxy config with unrelated content
+      ansible.builtin.copy:
+        content: |
+          global
+              log /dev/log local0
+              daemon
+
+          defaults
+              mode http
+
+          frontend unrelated_front
+              bind *:8080
+              default_backend unrelated_back
+
+          backend unrelated_back
+              server web1 10.0.0.1:80 check
+        dest: /tmp/haproxy-stub-test.cfg
+        mode: "0644"
+
+    - name: Insert AI-Horde block into stub config using blockinfile
+      ansible.builtin.blockinfile:
+        path: /tmp/haproxy-stub-test.cfg
+        marker: "# {mark} ANSIBLE MANAGED - AI-HORDE BACKENDS"
+        block: "{{ _ai_horde_haproxy_block }}"
+
+    - name: Read modified stub config
+      ansible.builtin.slurp:
+        src: /tmp/haproxy-stub-test.cfg
+      register: _safe_edit_result
+
+    - name: Assert unrelated config is preserved
+      ansible.builtin.assert:
+        that:
+          - "'frontend unrelated_front' in _safe_edit_result.content | b64decode"
+          - "'backend unrelated_back' in _safe_edit_result.content | b64decode"
+          - "'server web1 10.0.0.1:80' in _safe_edit_result.content | b64decode"
+
+    - name: Assert AI-Horde block is present within markers
+      ansible.builtin.assert:
+        that:
+          - "'# BEGIN ANSIBLE MANAGED - AI-HORDE BACKENDS' in _safe_edit_result.content | b64decode"
+          - "'# END ANSIBLE MANAGED - AI-HORDE BACKENDS' in _safe_edit_result.content | b64decode"
+          - "'frontend ai_horde_front' in _safe_edit_result.content | b64decode"
+          - "'backend ai_horde_back' in _safe_edit_result.content | b64decode"
+          - "'server aihorde-7001 127.0.0.42:7001' in _safe_edit_result.content | b64decode"
+
+    - name: Re-run blockinfile with updated instance count
+      ansible.builtin.set_fact:
+        _ai_horde_haproxy_block_updated: |-
+          frontend ai_horde_front
+              bind *:{{ ai_horde_haproxy_port }}
+              default_backend ai_horde_back
+
+          backend ai_horde_back
+              balance roundrobin
+              option httpchk GET /api/v2/status/heartbeat
+              http-check expect status 200
+              server aihorde-7001 {{ ai_horde_backend_host }}:7001 check inter 10s fall 3 rise 2
+
+    - name: Update AI-Horde block in stub config (idempotency check)
+      ansible.builtin.blockinfile:
+        path: /tmp/haproxy-stub-test.cfg
+        marker: "# {mark} ANSIBLE MANAGED - AI-HORDE BACKENDS"
+        block: "{{ _ai_horde_haproxy_block_updated }}"
+
+    - name: Read post-update stub config
+      ansible.builtin.slurp:
+        src: /tmp/haproxy-stub-test.cfg
+      register: _safe_edit_updated
+
+    - name: Assert updated block replaces old content within markers
+      ansible.builtin.assert:
+        that:
+          - "'server aihorde-7001 127.0.0.42:7001' in _safe_edit_updated.content | b64decode"
+          - "'server aihorde-7003' not in _safe_edit_updated.content | b64decode"
+          - "'frontend unrelated_front' in _safe_edit_updated.content | b64decode"
+
+    - name: Clean up stub config
+      ansible.builtin.file:
+        path: /tmp/haproxy-stub-test.cfg
+        state: absent
+
+
+
+# ── HAProxy safe-edit validation failure → non-promotion test ──
+
+- name: Test HAProxy validation failure prevents promotion
+  hosts: testhost
+  become: true
+  tasks:
+    - name: Install HAProxy for validation test
+      ansible.builtin.apt:
+        name: haproxy
+        state: present
+        update_cache: true
+
+    - name: Create a valid live HAProxy config
+      ansible.builtin.copy:
+        content: |
+          global
+              log /dev/log local0
+              daemon
+
+          defaults
+              mode http
+              timeout connect 5000
+              timeout client  50000
+              timeout server  50000
+
+          frontend existing_front
+              bind *:8080
+              default_backend existing_back
+
+          backend existing_back
+              server web1 10.0.0.1:80 check
+        dest: /tmp/haproxy-live-nonpromo.cfg
+        mode: "0644"
+
+    - name: Validate the live config is structurally valid
+      ansible.builtin.command: haproxy -c -f /tmp/haproxy-live-nonpromo.cfg
+      changed_when: false
+
+    - name: Record live config checksum before safe-edit attempt
+      ansible.builtin.stat:
+        path: /tmp/haproxy-live-nonpromo.cfg
+        checksum_algorithm: sha256
+      register: _live_checksum_before
+
+    - name: Create a working copy with intentionally invalid HAProxy syntax
+      ansible.builtin.copy:
+        content: |
+          global
+              log /dev/log local0
+              daemon
+
+          defaults
+              mode http
+              timeout connect 5000
+              timeout client  50000
+              timeout server  50000
+
+          frontend existing_front
+              bind *:8080
+              default_backend existing_back
+
+          backend existing_back
+              server web1 10.0.0.1:80 check
+
+          # BEGIN ANSIBLE MANAGED - AI-HORDE BACKENDS
+          frontend ai_horde_front
+              this_is_not_a_real_directive INVALID
+              bind_zzz_nonexistent *:99999
+
+          backend ai_horde_back
+              totally_invalid_keyword here
+          # END ANSIBLE MANAGED - AI-HORDE BACKENDS
+        dest: /tmp/haproxy-working-nonpromo.cfg
+        mode: "0644"
+
+    - name: Attempt validation of the bad working copy
+      ansible.builtin.command: haproxy -c -f /tmp/haproxy-working-nonpromo.cfg
+      register: _bad_validation
+      changed_when: false
+      failed_when: false
+
+    - name: Assert validation correctly rejects invalid config
+      ansible.builtin.assert:
+        that:
+          - _bad_validation.rc != 0
+        fail_msg: >-
+          haproxy -c should have rejected the invalid working copy but
+          returned rc={{ _bad_validation.rc }}
+
+    - name: Record live config checksum after failed validation
+      ansible.builtin.stat:
+        path: /tmp/haproxy-live-nonpromo.cfg
+        checksum_algorithm: sha256
+      register: _live_checksum_after
+
+    - name: Assert live config was never modified (non-promotion)
+      ansible.builtin.assert:
+        that:
+          - _live_checksum_before.stat.checksum == _live_checksum_after.stat.checksum
+        fail_msg: >-
+          Live HAProxy config was modified despite validation failure.
+          Before: {{ _live_checksum_before.stat.checksum }}
+          After: {{ _live_checksum_after.stat.checksum }}
+
+    - name: Read live config to verify content is untouched
+      ansible.builtin.slurp:
+        src: /tmp/haproxy-live-nonpromo.cfg
+      register: _live_content_after
+
+    - name: Assert live config still has original content only
+      ansible.builtin.assert:
+        that:
+          - "'frontend existing_front' in _live_content_after.content | b64decode"
+          - "'backend existing_back' in _live_content_after.content | b64decode"
+          - "'ANSIBLE MANAGED' not in _live_content_after.content | b64decode"
+          - "'ai_horde_front' not in _live_content_after.content | b64decode"
+
+    - name: Clean up test files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/haproxy-live-nonpromo.cfg
+        - /tmp/haproxy-working-nonpromo.cfg
+
+# ── Handler boundary test ───────────────────────────────────
+
+- name: Test safe-edit path does not execute unrelated handlers early
+  hosts: testhost
+  become: true
+  vars:
+    ai_horde_deploy_mode: native
+    ai_horde_start_services: false
+    ai_horde_postgres_password: "test-password"
+    ai_horde_secret_key: "test-secret-key"
+    ai_horde_install_haproxy: true
+    ai_horde_haproxy_mode: safe_edit
+    ai_horde_haproxy_config_path: "/tmp/haproxy-shared-boundary.cfg"
+  handlers:
+    - name: Unrelated sentinel handler
+      ansible.builtin.copy:
+        dest: /tmp/unrelated-handler-fired.txt
+        content: "handler-fired"
+        mode: "0644"
+  tasks:
+    - name: Reset sentinel files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/unrelated-handler-fired.txt
+        - /tmp/unrelated-handler-notify.txt
+
+    - name: Trigger unrelated handler notification
+      ansible.builtin.copy:
+        dest: /tmp/unrelated-handler-notify.txt
+        content: "trigger"
+        mode: "0644"
+      notify: Unrelated sentinel handler
+
+    - name: Run AI-Horde role safe-edit path
+      ansible.builtin.include_role:
+        name: ai_horde
+
+    - name: Check sentinel file before manual handler flush
+      ansible.builtin.stat:
+        path: /tmp/unrelated-handler-fired.txt
+      register: _handler_before_flush
+
+    - name: Assert unrelated handler did not run during role execution
+      ansible.builtin.assert:
+        that:
+          - not _handler_before_flush.stat.exists
+        fail_msg: >-
+          Unrelated handler executed before explicit flush. This indicates
+          role-internal handler flushing side effects.
+
+    - name: Flush handlers explicitly
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check sentinel file after manual handler flush
+      ansible.builtin.stat:
+        path: /tmp/unrelated-handler-fired.txt
+      register: _handler_after_flush
+
+    - name: Assert unrelated handler runs only at normal handler phase
+      ansible.builtin.assert:
+        that:
+          - _handler_after_flush.stat.exists
+
+    - name: Clean up handler boundary sentinel files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/unrelated-handler-fired.txt
+        - /tmp/unrelated-handler-notify.txt

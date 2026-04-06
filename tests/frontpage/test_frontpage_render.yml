@@ -114,12 +114,42 @@
         that: "'TimeoutStartSec=600' in (systemd_content.content | b64decode)"
         fail_msg: "systemd unit missing TimeoutStartSec=600"
 
-    - name: Assert systemd unit has ExecStartPre with docker compose build
+    - name: Assert systemd unit omits ExecStartPre build when toggle is off (default)
       ansible.builtin.assert:
-        that: "'docker compose build' in (systemd_content.content | b64decode)"
-        fail_msg: "systemd unit missing ExecStartPre docker compose build"
+        that: "'docker compose build' not in (systemd_content.content | b64decode)"
+        fail_msg: "systemd unit should not contain docker compose build when aihorde_frontpage_docker_build_on_service_start is false"
 
     - name: Clean up Docker test directory
+      ansible.builtin.file:
+        path: "{{ aihorde_frontpage_base_dir }}"
+        state: absent
+
+- name: Render AiHordeFrontpage Docker mode with build-on-start enabled
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+  vars:
+    aihorde_frontpage_start_services: false
+    aihorde_frontpage_deploy_mode: docker
+    aihorde_frontpage_base_dir: /tmp/frontpage-test-build-toggle
+    aihorde_frontpage_docker_build_on_service_start: true
+  tasks:
+    - name: Run aihorde_frontpage role with build-on-start enabled
+      ansible.builtin.include_role:
+        name: aihorde_frontpage
+
+    - name: Slurp systemd unit
+      ansible.builtin.slurp:
+        path: /etc/systemd/system/aihorde-frontpage.service
+      register: systemd_build_on
+
+    - name: Assert ExecStartPre docker compose build is present when toggle is on
+      ansible.builtin.assert:
+        that: "'docker compose build' in (systemd_build_on.content | b64decode)"
+        fail_msg: "systemd unit should contain docker compose build when aihorde_frontpage_docker_build_on_service_start is true"
+
+    - name: Clean up build-toggle test directory
       ansible.builtin.file:
         path: "{{ aihorde_frontpage_base_dir }}"
         state: absent

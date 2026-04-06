@@ -139,8 +139,8 @@
     - name: Assert .env has integration-compatible settings
       ansible.builtin.assert:
         that:
-          - "'POSTGRES_PASS=test-password' in _env_content.content | b64decode"
-          - "'secret_key=test-secret' in _env_content.content | b64decode"
+          - "'POSTGRES_PASS=\"test-password\"' in _env_content.content | b64decode"
+          - "'secret_key=\"test-secret\"' in _env_content.content | b64decode"
 
     - name: Render worker systemd unit
       ansible.builtin.template:
