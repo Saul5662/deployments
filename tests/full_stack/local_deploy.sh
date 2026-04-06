@@ -23,6 +23,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 
+# shellcheck source=../lib.sh
+source "$REPO_ROOT/tests/lib.sh"
+
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 
@@ -37,18 +40,6 @@ USE_LATEST_REFS=false
 AI_HORDE_REF="${AI_HORDE_REF:-af0a85a78613cdba9863e16bbec0c179a4b2b132}"
 FRONTPAGE_REF="${FRONTPAGE_REF:-a56aec53f46470ca3796e1a7eabbe029e32563d3}"
 ARTBOT_REF="${ARTBOT_REF:-main}"
-
-# Colours
-if [ -t 1 ]; then
-  GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-else
-  GREEN=''; RED=''; YELLOW=''; CYAN=''; NC=''
-fi
-
-log()  { printf "${GREEN}[+]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[!]${NC} %s\n" "$*"; }
-err()  { printf "${RED}[x]${NC} %s\n" "$*" >&2; }
-info() { printf "${CYAN}[i]${NC} %s\n" "$*"; }
 
 
 # Each tier has its own wrapper so that the compose project name and
@@ -107,23 +98,8 @@ dc_artbot() {
 }
 
 
-check_prerequisites() {
-  local missing=0
-  for cmd in docker curl git ss; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      err "Required command not found: $cmd"
-      missing=$((missing + 1))
-    fi
-  done
-  if ! docker compose version >/dev/null 2>&1; then
-    err "Docker Compose V2 plugin is required."
-    missing=$((missing + 1))
-  fi
-  if [ $missing -gt 0 ]; then
-    err "$missing prerequisite(s) missing — cannot continue."
-    exit 1
-  fi
-  log "Prerequisites verified (docker, curl, git, ss, docker compose)."
+check_fullstack_prerequisites() {
+  check_prerequisites git ss
 
   # Port conflict detection
   local core_ports=(80 7001 8006 8404)
@@ -164,19 +140,6 @@ check_prerequisites() {
         exit 1
       fi
     done
-  fi
-}
-
-
-find_ansible() {
-  if [ -x "$REPO_ROOT/.venv/bin/ansible-playbook" ]; then
-    ANSIBLE_PLAYBOOK="$REPO_ROOT/.venv/bin/ansible-playbook"
-  else
-    ANSIBLE_PLAYBOOK="$(command -v ansible-playbook 2>/dev/null || true)"
-  fi
-  if [ -z "${ANSIBLE_PLAYBOOK:-}" ]; then
-    err "ansible-playbook not found. Install Ansible or create a venv at $REPO_ROOT/.venv"
-    exit 1
   fi
 }
 
@@ -222,93 +185,28 @@ clone_sources() {
   fi
 
   # AI-Horde backend source
-  local ai_src="$LOCAL_ROOT/ai-horde/src"
-  if [ -d "$ai_src/.git" ]; then
-    log "Updating AI-Horde source to ref: $ai_ref"
-    git -C "$ai_src" fetch --quiet --tags origin
-    git -C "$ai_src" checkout --quiet "$ai_ref"
-    git -C "$ai_src" reset --hard "$ai_ref" >/dev/null
-  else
-    log "Cloning AI-Horde source (ref: $ai_ref) ..."
-    git clone https://github.com/Haidra-Org/AI-Horde.git "$ai_src"
-    git -C "$ai_src" checkout --quiet "$ai_ref"
-  fi
+  clone_or_update_source \
+    "https://github.com/Haidra-Org/AI-Horde.git" \
+    "$LOCAL_ROOT/ai-horde/src" \
+    "$ai_ref"
 
-  # Optional compatibility patching is only allowed in latest mode.
   if [ "${USE_LATEST_REFS:-false}" = true ]; then
-    _patch_dockerfile "$ai_src/Dockerfile"
+    _patch_dockerfile "$LOCAL_ROOT/ai-horde/src/Dockerfile"
   fi
 
   # AiHordeFrontpage source
-  local fp_src="$LOCAL_ROOT/frontpage/src"
-  if [ -d "$fp_src/.git" ]; then
-    log "Updating AiHordeFrontpage source to ref: $fp_ref"
-    git -C "$fp_src" fetch --quiet --tags origin
-    git -C "$fp_src" checkout --quiet "$fp_ref"
-    git -C "$fp_src" reset --hard "$fp_ref" >/dev/null
-  else
-    log "Cloning AiHordeFrontpage source (ref: $fp_ref) ..."
-    git clone https://github.com/Haidra-Org/AiHordeFrontpage.git "$fp_src"
-    git -C "$fp_src" checkout --quiet "$fp_ref"
-  fi
+  clone_or_update_source \
+    "https://github.com/Haidra-Org/AiHordeFrontpage.git" \
+    "$LOCAL_ROOT/frontpage/src" \
+    "$fp_ref"
 
   # Artbot source (only when --with-artbot)
   if [ "$WITH_ARTBOT" = true ]; then
-    local artbot_src="$LOCAL_ROOT/artbot/src"
-    if [ -d "$artbot_src/.git" ]; then
-      log "Updating Artbot source to ref: $artbot_ref"
-      git -C "$artbot_src" fetch --quiet --tags origin
-      git -C "$artbot_src" checkout --quiet "$artbot_ref"
-      git -C "$artbot_src" reset --hard "$artbot_ref" >/dev/null
-    else
-      log "Cloning Artbot source (ref: $artbot_ref) ..."
-      git clone https://github.com/Haidra-Org/artbot.git "$artbot_src"
-      git -C "$artbot_src" checkout --quiet "$artbot_ref"
-    fi
+    clone_or_update_source \
+      "https://github.com/Haidra-Org/artbot.git" \
+      "$LOCAL_ROOT/artbot/src" \
+      "$artbot_ref"
   fi
-}
-
-
-_patch_dockerfile() {
-  local dockerfile="$1"
-  [ -f "$dockerfile" ] || return 0
-
-  # Fix: Docker Desktop can cache corrupt layers for unqualified slim tags
-  local base_img
-  base_img=$(grep -m1 '^FROM.*python.*slim' "$dockerfile" | awk '{print $2}' || true)
-  if [ -n "$base_img" ]; then
-    if ! docker run --rm "$base_img" true >/dev/null 2>&1; then
-      local fixed_img="${base_img}-bookworm"
-      warn "Base image $base_img is broken. Switching to $fixed_img."
-      sed -i "s|FROM ${base_img}|FROM ${fixed_img}|g" "$dockerfile"
-    fi
-  fi
-
-  # Fix: run-stage pip needs network access for git+https dependencies
-  if grep -q '\-\-no-index' "$dockerfile" && grep -q 'git+https' "$(dirname "$dockerfile")/requirements.txt" 2>/dev/null; then
-    warn "Removing --no-index from run-stage pip install (git deps need PyPI)."
-    sed -i 's/--no-cache-dir --no-index --find-links=\/wheels\//--no-cache-dir --find-links=\/wheels\//' "$dockerfile"
-  fi
-}
-
-
-wait_for_health() {
-  local url="$1"
-  local name="$2"
-  local max_attempts="${3:-60}"
-  local delay="${4:-5}"
-
-  info "Waiting for $name at $url ..."
-  for i in $(seq 1 "$max_attempts"); do
-    if curl -sf --max-time 5 "$url" >/dev/null 2>&1; then
-      log "$name is healthy (attempt $i/$max_attempts)."
-      return 0
-    fi
-    sleep "$delay"
-  done
-  err "$name did not become healthy after $max_attempts attempts."
-  err "Last attempt: curl -sf $url"
-  return 1
 }
 
 
@@ -472,7 +370,7 @@ stop_worker() {
 
 
 cmd_up() {
-  check_prerequisites
+  check_fullstack_prerequisites
 
   # Tier 0: Infrastructure
   log "Creating external network: horde-stack"
@@ -488,7 +386,7 @@ cmd_up() {
   dc_backend build
   log "Starting AI-Horde backend ..."
   dc_backend up -d
-  wait_for_health "http://127.0.0.1:7001/api/v2/status/heartbeat" "AI-Horde" 60 5 || {
+  wait_for_url "http://127.0.0.1:7001/api/v2/status/heartbeat" "AI-Horde" 300 || {
     err "AI-Horde did not start. Dumping logs:"
     dc_backend logs --tail=50
     return 1
@@ -501,7 +399,7 @@ cmd_up() {
   dc_frontpage build
   log "Starting AiHordeFrontpage ..."
   dc_frontpage up -d
-  wait_for_health "http://127.0.0.1:8006/" "Frontpage" 60 5 || {
+  wait_for_url "http://127.0.0.1:8006/" "Frontpage" 300 || {
     err "Frontpage did not start. Dumping logs:"
     dc_frontpage logs --tail=50
     return 1
@@ -513,7 +411,7 @@ cmd_up() {
     log "═══ Tier 3: Monitoring Stack ═══"
     log "Starting monitoring stack ..."
     dc_monitoring up -d
-    wait_for_health "http://127.0.0.1:3000/api/health" "Grafana" 40 5 || {
+    wait_for_url "http://127.0.0.1:3000/api/health" "Grafana" 200 || {
       warn "Grafana did not become healthy."
     }
     echo ""
@@ -535,7 +433,7 @@ cmd_up() {
 
   log "Starting HAProxy ..."
   dc_haproxy up -d
-  wait_for_health "http://127.0.0.1:80/" "HAProxy" 30 3 || {
+  wait_for_url "http://127.0.0.1:80/" "HAProxy" 90 || {
     err "HAProxy did not start. Dumping logs:"
     dc_haproxy logs --tail=50
     return 1
@@ -557,7 +455,7 @@ cmd_up() {
     dc_artbot build
     log "Starting Artbot ..."
     dc_artbot up -d
-    wait_for_health "http://127.0.0.1:8080/" "Artbot" 60 5 || {
+    wait_for_url "http://127.0.0.1:8080/" "Artbot" 300 || {
       warn "Artbot did not become healthy — check logs with: $0 logs artbot"
     }
     echo ""

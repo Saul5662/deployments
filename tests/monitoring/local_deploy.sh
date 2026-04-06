@@ -24,23 +24,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# shellcheck source=../lib.sh
+source "$REPO_ROOT/tests/lib.sh"
+
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 LOCAL_ROOT="$REPO_ROOT/local-deploy"
 COMPOSE_DIR="$LOCAL_ROOT/compose"
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
-
-# Colours
-if [ -t 1 ]; then
-  GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-else
-  GREEN=''; RED=''; YELLOW=''; CYAN=''; NC=''
-fi
-
-log()  { printf "${GREEN}[+]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[!]${NC} %s\n" "$*"; }
-err()  { printf "${RED}[x]${NC} %s\n" "$*" >&2; }
-info() { printf "${CYAN}[i]${NC} %s\n" "$*"; }
 
 # Helper: run docker compose with all files
 dc() {
@@ -53,39 +44,6 @@ dc() {
 }
 
 
-check_prerequisites() {
-  local missing=0
-  for cmd in docker curl python3; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      err "Required command not found: $cmd"
-      missing=$((missing + 1))
-    fi
-  done
-  if ! docker compose version >/dev/null 2>&1; then
-    err "Docker Compose V2 plugin is required. Install it: https://docs.docker.com/compose/install/"
-    missing=$((missing + 1))
-  fi
-  if [ $missing -gt 0 ]; then
-    err "$missing prerequisite(s) missing — cannot continue."
-    exit 1
-  fi
-  log "Prerequisites verified (docker, curl, python3, docker compose)."
-}
-
-
-find_ansible() {
-  if [ -x "$REPO_ROOT/.venv/bin/ansible-playbook" ]; then
-    ANSIBLE_PLAYBOOK="$REPO_ROOT/.venv/bin/ansible-playbook"
-  else
-    ANSIBLE_PLAYBOOK="$(command -v ansible-playbook 2>/dev/null || true)"
-  fi
-  if [ -z "${ANSIBLE_PLAYBOOK:-}" ]; then
-    err "ansible-playbook not found. Install Ansible or create a venv at $REPO_ROOT/.venv"
-    exit 1
-  fi
-}
-
-
 render_configs() {
   find_ansible
   log "Rendering monitoring stack configs into $LOCAL_ROOT ..."
@@ -95,36 +53,6 @@ render_configs() {
       --become \
       -v
   log "Config rendering complete."
-}
-
-
-load_env() {
-  if [ ! -f "$ENV_FILE" ]; then
-    err "Environment file not found at $ENV_FILE — did render_configs fail?"
-    exit 1
-  fi
-  # Source only lines that look like VAR=value (skip comments / blanks).
-  # shellcheck disable=SC1090
-  set -a
-  source "$ENV_FILE"
-  set +a
-  log "Loaded environment from $ENV_FILE"
-}
-
-
-wait_for_url() {
-  local url="$1" label="$2" timeout="${3:-60}"
-  local retries=$(( timeout / 2 ))
-  while [ $retries -gt 0 ]; do
-    if curl -sf "$url" >/dev/null 2>&1; then
-      log "$label is ready."
-      return 0
-    fi
-    retries=$((retries - 1))
-    sleep 2
-  done
-  warn "$label did not become ready within ${timeout}s"
-  return 1
 }
 
 
@@ -195,50 +123,13 @@ with open(sys.argv[1], 'w') as f:
 
   # Phase 3 — Wait for the rest of the pipeline.
   wait_for_url "http://127.0.0.1:${PROMETHEUS_PORT}/-/ready" "Prometheus" 60 || true
-
   wait_for_url "http://127.0.0.1:${ALERTMANAGER_PORT}/-/ready" "Alertmanager" 60 || true
-
   wait_for_url "http://127.0.0.1:${LOKI_PORT}/ready" "Loki" 60 || true
-
   wait_for_url "http://127.0.0.1:${TEMPO_HTTP_PORT}/ready" "Tempo" 60 || true
-
   wait_for_url "http://127.0.0.1:${ALLOY_HTTP_PORT}/-/healthy" "Alloy" 60 || true
 
   log "Waiting for exporter to start (installs on first run) ..."
   wait_for_url "http://127.0.0.1:${EXPORTER_PORT}/metrics" "Exporter" 180 || true
-}
-
-
-compose_down() {
-  if [ -f "$COMPOSE_DIR/docker-compose.yml" ]; then
-    log "Stopping Docker Compose stack ..."
-    dc down -v --remove-orphans 2>/dev/null || true
-  fi
-
-  if [ -d "$LOCAL_ROOT" ]; then
-    log "Removing $LOCAL_ROOT ..."
-    sudo rm -rf "$LOCAL_ROOT"
-  fi
-
-  log "Local deployment cleaned up."
-}
-
-
-compose_status() {
-  if [ ! -f "$COMPOSE_DIR/docker-compose.yml" ]; then
-    info "No local deployment found."
-    return
-  fi
-  dc ps
-}
-
-
-compose_logs() {
-  if [ ! -f "$COMPOSE_DIR/docker-compose.yml" ]; then
-    err "No local deployment found."
-    exit 1
-  fi
-  dc logs -f --tail=100
 }
 
 
@@ -280,20 +171,20 @@ main() {
 
   case "$cmd" in
     up)
-      check_prerequisites
+      check_prerequisites python3
       render_configs
-      load_env
+      load_env "$ENV_FILE"
       compose_up
       print_banner
       ;;
     down)
-      compose_down
+      compose_down "$LOCAL_ROOT"
       ;;
     status)
-      compose_status
+      compose_status "$COMPOSE_DIR/docker-compose.yml"
       ;;
     logs)
-      compose_logs
+      compose_logs "$COMPOSE_DIR/docker-compose.yml"
       ;;
     *)
       echo "Usage: $0 {up|down|status|logs}"
