@@ -7,4 +7,7 @@ collections:
     version: ">=0.16.0,<1.0.0"
   - name: grafana.grafana
     version: ">=6.0.0,<7.0.0"
-  - git+https://github.com/Haidra-Org/deployments
+  - name: community.postgresql
+    version: ">=3.4.0,<4.0.0"
+  - name: haidra.deployments
+    source: https://github.com/Haidra-Org/deployments

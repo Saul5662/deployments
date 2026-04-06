@@ -5,10 +5,13 @@
 #   ansible-playbook -i inventory.yml full_horde_stack.yml -K
 #
 # This deploys:
-#   Play 1 — AI-Horde backend  (Docker Compose: Flask + PostgreSQL + Redis)
+#   Play 1 — AI-Horde backend  (native mode with HAProxy ingress)
 #   Play 2 — AiHordeFrontpage  (Angular SSR website, port 8006)
 #   Play 3 — Monitoring stack  (Mimir + Grafana + Prometheus + stats exporter)
 #   Play 4 — Regen worker      (connects to AI-Horde via horde_url)
+#
+# Baseline ingress in this example uses non-privileged port 8080.
+# For dedicated ingress hosts, see the commented production overrides in Play 1.
 #
 # Prerequisites:
 #   ansible-galaxy collection install -r requirements.yml
@@ -19,19 +22,45 @@
 #   [regen_workers]  — GPU-equipped hosts running image generation workers
 
 # ---------------------------------------------------------------------------
-# Play 1: AI-Horde backend
+# Play 1: AI-Horde backend (native mode, conservative baseline)
 # ---------------------------------------------------------------------------
 - name: Deploy AI-Horde backend
   hosts: horde_server
   become: true
+  vars:
+    horde_api_ingress_port: 8080
 
   roles:
     - role: haidra.deployments.ai_horde
       vars:
+        ai_horde_deploy_mode: native
+        # Pin source explicitly; bump only after validation in staging.
+        ai_horde_repo_version: "af0a85a78613cdba9863e16bbec0c179a4b2b132"
+        # Conservative baseline for initial deployment.
+        # Ramp gradually (for example 2 -> 4 -> 6+) with metrics-based checks
+        # on CPU, DB connection pressure, and request latency.
+        ai_horde_instance_count: 2
         ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
-        ai_horde_listen: "0.0.0.0"
+        ai_horde_postgres_host: "{{ vault_ai_horde_pg_host | default('127.0.0.1') }}"
+        # Optional advanced override for POSTGRES_URL fragment:
+        # ai_horde_postgres_url_override: "db.internal:5432/postgres?sslmode=require"
+        ai_horde_redis_host: "{{ vault_ai_horde_redis_host | default('127.0.0.1') }}"
+        # AI-Horde runtime currently assumes Redis port 6379.
+        # Do not set ai_horde_redis_port to a non-6379 value.
+        ai_horde_listen: "127.0.0.1"
+        ai_horde_backend_host: "127.0.0.1"
         ai_horde_admins: ["admin_user#1"]
+        ai_horde_install_haproxy: true
+        ai_horde_haproxy_mode: safe_edit
+        ai_horde_haproxy_port: "{{ horde_api_ingress_port }}"
+        # Production ingress override for dedicated ingress hosts:
+        # ai_horde_haproxy_mode: standalone
+        # ai_horde_haproxy_port: 80
+        # Preconditions:
+        #   - No conflicting listeners on 80/443.
+        #   - Firewall and security-group rules explicitly configured.
+        #   - TLS termination and certificate management configured.
       tags: [horde]
 
 # ---------------------------------------------------------------------------
@@ -53,6 +82,9 @@
 - name: Deploy monitoring stack
   hosts: horde_server
   become: true
+  vars:
+    horde_api_ingress_port: 8080
+    horde_api_host: "{{ hostvars[groups['horde_server'][0]].ansible_host | default(groups['horde_server'][0]) }}"
 
   roles:
     - role: haidra.deployments.horde_monitoring
@@ -64,7 +96,10 @@
 
     - role: haidra.deployments.horde_stats_exporter
       vars:
-        exporter_api_base_url: "http://localhost:7001/api/v2"
+        # Cross-host-safe endpoint derivation from inventory addressing.
+        # Use localhost only when exporter runs on the same host namespace
+        # as AI-Horde ingress.
+        exporter_api_base_url: "http://{{ horde_api_host }}:{{ horde_api_ingress_port }}/api/v2"
       tags: [exporter]
 
 # ---------------------------------------------------------------------------
@@ -73,12 +108,16 @@
 - name: Deploy regen worker
   hosts: regen_workers
   become: true
+  vars:
+    horde_api_ingress_port: 8080
+    horde_api_host: "{{ hostvars[groups['horde_server'][0]].ansible_host | default(groups['horde_server'][0]) }}"
 
   roles:
     - role: haidra.deployments.horde_regen_worker
       vars:
-        # Point workers at the AI-Horde backend
-        horde_url: "http://{{ hostvars[groups['horde_server'][0]].ansible_host }}:7001"
+        # Point workers at AI-Horde ingress using inventory-derived address.
+        # Use localhost only for same-host-only deployments.
+        horde_url: "http://{{ horde_api_host }}:{{ horde_api_ingress_port }}"
         api_key: "{{ vault_worker_api_key }}"
         dreamer_name: "{{ inventory_hostname }}-dreamer"
         max_power: 32

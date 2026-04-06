@@ -40,5 +40,5 @@ build/
 *.zip
 
 geerlingguy.swap/
-docs/plans/
 tests/test-results/
+docs/plans/
