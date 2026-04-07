@@ -270,9 +270,10 @@
     {{ minio_mc_image }}
     mc ls remote/{{ mimir_backup_target_bucket }}-blocks
   environment:
-    MC_HOST_remote: "{{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{ mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{ mimir_backup_target_endpoint | regex_replace('^https?://', '') }}"
-  environment:
-    MC_HOST_remote: "{{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{ mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{ mimir_backup_target_endpoint | regex_replace('^https?://', '') }}"
+    MC_HOST_remote: >-
+      {{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{
+      mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{
+      mimir_backup_target_endpoint | regex_replace('^https?://', '') }}
   become: true
   changed_when: false
   no_log: true
