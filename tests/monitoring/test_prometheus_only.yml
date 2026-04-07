@@ -7,16 +7,16 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: false
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: false
-    monitoring_application_tenant_id: "app-metrics"
-    monitoring_application_retention: "0"
-    monitoring_infrastructure_tenant_id: "infra-metrics"
-    monitoring_infrastructure_retention: "14d"
-    monitoring_start_services: false
-    mimir_backup_enabled: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_application_tenant_id: "app-metrics"
+    horde_monitoring_application_retention: "0"
+    horde_monitoring_infrastructure_tenant_id: "infra-metrics"
+    horde_monitoring_infrastructure_retention: "14d"
+    horde_monitoring_start_services: false
+    horde_monitoring_mimir_backup_enabled: false
 
   roles:
     - role: horde_monitoring
@@ -25,17 +25,17 @@
     - name: Read rendered Mimir config
       ansible.builtin.slurp:
         path: /etc/mimir/mimir.yaml
-      register: mimir_config
+      register: horde_monitoring_mimir_config
 
     - name: Read rendered Mimir runtime overrides
       ansible.builtin.slurp:
         path: /etc/mimir/runtime-overrides.yaml
-      register: mimir_runtime_overrides
+      register: horde_monitoring_mimir_runtime_overrides
 
     - name: Check Grafana datasource provisioning is absent
       ansible.builtin.stat:
         path: /etc/grafana/provisioning/datasources/mimir.yml
-      register: grafana_datasource_file
+      register: horde_monitoring_grafana_datasource_file
 
     - name: Read rendered Docker Compose
       ansible.builtin.slurp:
@@ -45,23 +45,23 @@
     - name: Assert Mimir-only multitenant config
       ansible.builtin.assert:
         that:
-          - "'multitenancy_enabled: true' in (mimir_config.content | b64decode)"
-          - "'app-metrics:' in (mimir_runtime_overrides.content | b64decode)"
-          - "'infra-metrics:' in (mimir_runtime_overrides.content | b64decode)"
-          - not grafana_datasource_file.stat.exists
+          - "'multitenancy_enabled: true' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'app-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'infra-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - not horde_monitoring_grafana_datasource_file.stat.exists
 
     - name: Assert S3 object storage config
       ansible.builtin.assert:
         that:
-          - "'backend: s3' in (mimir_config.content | b64decode)"
+          - "'backend: s3' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'minio' in (compose_config.content | b64decode)"
 
     - name: Assert performance and caching config
       ansible.builtin.assert:
         that:
-          - "'chunks_cache' in (mimir_config.content | b64decode)"
-          - "'metadata_cache' in (mimir_config.content | b64decode)"
-          - "'split_queries_by_interval' in (mimir_config.content | b64decode)"
+          - "'chunks_cache' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'metadata_cache' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'split_queries_by_interval' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'memcached' in (compose_config.content | b64decode)"
 
     - name: Assert no floating or latest image tags in Compose
@@ -121,13 +121,13 @@
       ansible.builtin.include_role:
         name: horde_monitoring
       vars:
-        monitoring_install_mimir: true
-        monitoring_install_grafana: false
-        monitoring_configure_firewall: false
-        monitoring_configure_haproxy: false
-        monitoring_start_services: false
-        mimir_enable_minio: false
-        mimir_backup_enabled: true
+        horde_monitoring_install_mimir: true
+        horde_monitoring_install_grafana: false
+        horde_monitoring_configure_firewall: false
+        horde_monitoring_configure_haproxy: false
+        horde_monitoring_start_services: false
+        horde_monitoring_mimir_enable_minio: false
+        horde_monitoring_mimir_backup_enabled: true
 
     - name: Check backup service was NOT rendered
       ansible.builtin.stat:
@@ -150,4 +150,4 @@
           - not _backup_svc_stat.stat.exists
           - not _backup_timer_stat.stat.exists
           - not _backup_env_stat.stat.exists
-        fail_msg: "Backup service/timer/env must not be rendered when mimir_enable_minio=false"
+        fail_msg: "Backup service/timer/env must not be rendered when horde_monitoring_mimir_enable_minio=false"

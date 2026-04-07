@@ -9,101 +9,101 @@
 # Installation
 # ---------------------------------------------------------------------------
 # Alloy version — pinned for reproducibility.
-alloy_version: "1.8.1"
+horde_alloy_version: "1.8.1"
 
 # Installation method: "package" uses Grafana's APT/RPM repo.
 # "binary" downloads from GitHub releases (no repo dependency).
-alloy_install_method: "package"
+horde_alloy_install_method: "package"
 
 # Config and data directories
-alloy_config_dir: "/etc/alloy"
-alloy_data_dir: "/var/lib/alloy"
-alloy_log_level: "warn"
+horde_alloy_config_dir: "/etc/alloy"
+horde_alloy_data_dir: "/var/lib/alloy"
+horde_alloy_log_level: "warn"
 
 # Alloy's built-in HTTP UI/health endpoint (/-/ready, /-/healthy, /graph)
-alloy_http_listen_address: "127.0.0.1"
-alloy_http_port: 12345
+horde_alloy_http_listen_address: "127.0.0.1"
+horde_alloy_http_port: 12345
 
 # Set to false in CI/test environments to skip service start.
-alloy_start_service: true
+horde_alloy_start_service: true
 
 # ---------------------------------------------------------------------------
 # Central stack endpoints (must be overridden in inventory)
 # ---------------------------------------------------------------------------
 # Mimir remote_write endpoint — receives Prometheus metrics.
 # Example: "https://mimir.example.com/api/v1/push"
-alloy_mimir_endpoint: ""
+horde_alloy_mimir_endpoint: ""
 
 # Loki push endpoint — receives log streams.
 # Example: "https://loki.example.com/loki/api/v1/push"
-alloy_loki_endpoint: ""
+horde_alloy_loki_endpoint: ""
 
 # Tempo OTLP HTTP endpoint — receives traces.
 # Example: "https://tempo.example.com:4318"
-alloy_tempo_endpoint: ""
+horde_alloy_tempo_endpoint: ""
 
 # X-Scope-OrgID tenant for this host's telemetry data.
-alloy_tenant_id: "infrastructure"
+horde_alloy_tenant_id: "infrastructure"
 
 # ---------------------------------------------------------------------------
 # TLS + Authentication
 # ---------------------------------------------------------------------------
 # Path to CA certificate on the Ansible controller — pushed to targets.
 # Uses the same CA infrastructure as node_exporter TLS.
-alloy_tls_ca_cert: ""
+horde_alloy_tls_ca_cert: ""
 
 # Basic auth credentials for talking to Loki/Tempo/Mimir through HAProxy.
-alloy_basic_auth_username: "alloy"
-alloy_basic_auth_password: "changeme-alloy"
+horde_alloy_basic_auth_username: "alloy"
+horde_alloy_basic_auth_password: "changeme-alloy"
 
 # ---------------------------------------------------------------------------
 # Metrics collection (replaces node_exporter on hosts where Alloy is deployed)
 # ---------------------------------------------------------------------------
-alloy_collect_metrics: true
-alloy_scrape_interval: "15s"
+horde_alloy_collect_metrics: true
+horde_alloy_scrape_interval: "15s"
 
 # Additional labels added to all metrics from this host.
 # Merged with auto-detected instance label (hostname).
 # Example: { "environment": "production", "region": "us-east-1" }
-alloy_external_labels: {}
+horde_alloy_external_labels: {}
 # Extra Prometheus scrape targets on the local host.
 # Each entry: { job: "name", address: "host:port", metrics_path: "/metrics" }
-alloy_extra_scrape_targets: []
+horde_alloy_extra_scrape_targets: []
 # ---------------------------------------------------------------------------
 # Log collection
 # ---------------------------------------------------------------------------
-alloy_collect_logs: true
+horde_alloy_collect_logs: true
 
 # Collect from systemd journal (recommended — captures all service output)
-alloy_collect_journal: true
+horde_alloy_collect_journal: true
 # Maximum age of journal entries to ship on first start
-alloy_journal_max_age: "24h"
+horde_alloy_journal_max_age: "24h"
 
 # Collect from specific log files (glob patterns).
 # Example: ["/var/log/app/*.log", "/var/log/syslog"]
-alloy_collect_log_files: []
+horde_alloy_collect_log_files: []
 # Collect Docker container logs (requires Docker on the host)
-alloy_collect_docker_logs: false
+horde_alloy_collect_docker_logs: false
 
 # Static labels added to all log streams from this host.
-alloy_log_labels: {}
+horde_alloy_log_labels: {}
 # ---------------------------------------------------------------------------
 # Trace forwarding (OTLP receiver for local app instrumentation)
 # ---------------------------------------------------------------------------
-alloy_collect_traces: true
+horde_alloy_collect_traces: true
 
 # Forward OTLP metrics from instrumented apps to Mimir via remote_write.
-# Reuses the same OTLP receiver — requires alloy_collect_traces: true.
-alloy_forward_otlp_metrics: true
+# Reuses the same OTLP receiver — requires horde_alloy_collect_traces: true.
+horde_alloy_forward_otlp_metrics: true
 # Tenant ID for OTLP-sourced metrics (may differ from scraped metrics).
-alloy_otlp_metrics_tenant_id: "{{ alloy_tenant_id }}"
+horde_alloy_otlp_metrics_tenant_id: "{{ horde_alloy_tenant_id }}"
 
 # Bind address for the OTLP receiver — apps on this host send traces here.
 # 127.0.0.1 restricts to local apps only. Use 0.0.0.0 if containers need access.
-alloy_otlp_listen_address: "127.0.0.1"
-alloy_otlp_grpc_port: 4317
-alloy_otlp_http_port: 4318
+horde_alloy_otlp_listen_address: "127.0.0.1"
+horde_alloy_otlp_grpc_port: 4317
+horde_alloy_otlp_http_port: 4318
 
 # Batch processor tuning
-alloy_trace_batch_timeout: "5s"
-alloy_trace_batch_size: 8192
+horde_alloy_trace_batch_timeout: "5s"
+horde_alloy_trace_batch_size: 8192

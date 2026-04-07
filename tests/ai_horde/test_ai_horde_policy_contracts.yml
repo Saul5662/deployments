@@ -53,22 +53,22 @@
       ansible.builtin.assert:
         that:
           - "'_uv_bootstrap' in (_native_tasks_raw.content | b64decode)"
-          - "'_uvb_version' in (_native_tasks_raw.content | b64decode)"
-          - "'_uvb_installer_checksum' in (_native_tasks_raw.content | b64decode)"
-          - "'_uvb_allow_unverified' in (_native_tasks_raw.content | b64decode)"
+          - "'_uv_bootstrap_version' in (_native_tasks_raw.content | b64decode)"
+          - "'_uv_bootstrap_installer_checksum' in (_native_tasks_raw.content | b64decode)"
+          - "'_uv_bootstrap_allow_unverified' in (_native_tasks_raw.content | b64decode)"
         fail_msg: >-
           Native tasks must delegate uv installation to the _uv_bootstrap
-          micro-role, passing _uvb_version, _uvb_installer_checksum, and
-          _uvb_allow_unverified.
+          micro-role, passing _uv_bootstrap_version, _uv_bootstrap_installer_checksum, and
+          _uv_bootstrap_allow_unverified.
 
     - name: Assert _uv_bootstrap enforces installer integrity by default
       ansible.builtin.assert:
         that:
           - "'Validate checksum policy' in (_uv_bootstrap_tasks_raw.content | b64decode)"
           - "'Download installer with checksum verification' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-          - (_uv_bootstrap_tasks_raw.content | b64decode) is regex('(?m)^\s*checksum:\s*"\{\{ _uvb_installer_checksum \}\}"\s*$')
+          - (_uv_bootstrap_tasks_raw.content | b64decode) is regex('(?m)^\s*checksum:\s*"\{\{ _uv_bootstrap_installer_checksum \}\}"\s*$')
           - "'Download installer without checksum verification (explicit opt-in)' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-          - "'_uvb_allow_unverified | bool' in (_uv_bootstrap_tasks_raw.content | b64decode)"
+          - "'_uv_bootstrap_allow_unverified | bool' in (_uv_bootstrap_tasks_raw.content | b64decode)"
         fail_msg: >-
           _uv_bootstrap must enforce verified-by-default download flow with
           explicit unverified opt-in.
@@ -161,7 +161,7 @@
         that:
           - _frontpage_defaults.aihorde_frontpage_repo_version is regex('^[0-9a-f]{40}$')
           - _regen_defaults.regen_worker_repo_version is regex('^[0-9a-f]{40}$')
-          - _monitoring_defaults.grafana_dashboards_repo_ref is regex('^[0-9a-f]{40}$')
+          - _monitoring_defaults.horde_monitoring_grafana_dashboards_repo_ref is regex('^[0-9a-f]{40}$')
           - _exporter_defaults.exporter_repo_ref is regex('^[0-9a-f]{40}$')
         fail_msg: >-
           All role defaults must pin source repos to full 40-char SHA commits
@@ -228,12 +228,12 @@
     - name: Assert flag-combination warnings exist
       ansible.builtin.assert:
         that:
-          - "'mimir_backup_enabled' in (_monitoring_main_raw.content | b64decode)"
-          - "'mimir_enable_minio' in (_monitoring_main_raw.content | b64decode)"
-          - "'grafana_anonymous_enabled' in (_monitoring_main_raw.content | b64decode)"
-          - "'monitoring_install_grafana' in (_monitoring_main_raw.content | b64decode)"
-          - "'tempo_metrics_generator_enabled' in (_monitoring_main_raw.content | b64decode)"
-          - "'monitoring_install_tempo' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_mimir_backup_enabled' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_mimir_enable_minio' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_grafana_anonymous_enabled' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_install_grafana' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_tempo_metrics_generator_enabled' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_install_tempo' in (_monitoring_main_raw.content | b64decode)"
           - (_monitoring_main_raw.content | b64decode) is search('Warn when backup is enabled but MinIO is disabled')
           - (_monitoring_main_raw.content | b64decode) is search('Warn when Grafana anonymous access is enabled')
           - (_monitoring_main_raw.content | b64decode) is search('Warn when Tempo metrics generator is enabled')

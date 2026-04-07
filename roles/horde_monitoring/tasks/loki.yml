@@ -4,7 +4,7 @@
 
 - name: Create Loki config directory
   ansible.builtin.file:
-    path: "{{ loki_config_dir }}"
+    path: "{{ horde_monitoring_loki_config_dir }}"
     state: directory
     owner: root
     group: root
@@ -20,17 +20,17 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ loki_data_dir }}"
-    - "{{ loki_data_dir }}/index"
-    - "{{ loki_data_dir }}/index_cache"
-    - "{{ loki_data_dir }}/retention"
-    - "{{ loki_data_dir }}/chunks"
-    - "{{ loki_data_dir }}/rules"
+    - "{{ horde_monitoring_loki_data_dir }}"
+    - "{{ horde_monitoring_loki_data_dir }}/index"
+    - "{{ horde_monitoring_loki_data_dir }}/index_cache"
+    - "{{ horde_monitoring_loki_data_dir }}/retention"
+    - "{{ horde_monitoring_loki_data_dir }}/chunks"
+    - "{{ horde_monitoring_loki_data_dir }}/rules"
 
 - name: Template Loki configuration
   ansible.builtin.template:
     src: loki.yaml.j2
-    dest: "{{ loki_config_dir }}/loki.yaml"
+    dest: "{{ horde_monitoring_loki_config_dir }}/loki.yaml"
     owner: root
     group: "10001"
     mode: "0640"

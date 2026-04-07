@@ -5,17 +5,17 @@ After=mimir-monitoring.service
 
 [Service]
 Type=oneshot
-EnvironmentFile={{ mimir_config_dir }}/mimir-backup.env
-{% if mimir_backup_grafana_db | bool %}
+EnvironmentFile={{ horde_monitoring_mimir_config_dir }}/mimir-backup.env
+{% if horde_monitoring_mimir_backup_grafana_db | bool %}
 ExecStartPre=/usr/bin/docker run --rm --network host \
-  -v {{ grafana_data_dir }}:/grafana-data:ro \
+  -v {{ horde_monitoring_grafana_data_dir }}:/grafana-data:ro \
   -e MINIO_LOCAL_ENDPOINT \
   -e MINIO_LOCAL_USER \
   -e MINIO_LOCAL_PASSWORD \
-  {{ minio_mc_image }} \
+  {{ horde_monitoring_minio_mc_image }} \
   /bin/sh -c "\
     mc alias set local $$MINIO_LOCAL_ENDPOINT $$MINIO_LOCAL_USER $$MINIO_LOCAL_PASSWORD; \
-    mc cp /grafana-data/grafana.db local/{{ minio_ruler_bucket }}/grafana-backup/grafana.db; \
+    mc cp /grafana-data/grafana.db local/{{ horde_monitoring_minio_ruler_bucket }}/grafana-backup/grafana.db; \
   "
 {% endif %}
 ExecStart=/usr/bin/docker run --rm --network host \
@@ -26,17 +26,17 @@ ExecStart=/usr/bin/docker run --rm --network host \
   -e BACKUP_REMOTE_ACCESS_KEY \
   -e BACKUP_REMOTE_SECRET_KEY \
   -e BACKUP_REMOTE_INSECURE \
-  {{ minio_mc_image }} \
+  {{ horde_monitoring_minio_mc_image }} \
   /bin/sh -c "\
     mc alias set local $$MINIO_LOCAL_ENDPOINT $$MINIO_LOCAL_USER $$MINIO_LOCAL_PASSWORD; \
-    mc alias set remote $$BACKUP_REMOTE_ENDPOINT $$BACKUP_REMOTE_ACCESS_KEY $$BACKUP_REMOTE_SECRET_KEY{% if mimir_backup_target_insecure | bool %} --insecure{% endif %}; \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_blocks_bucket }} remote/{{ mimir_backup_target_bucket }}-blocks && \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ minio_ruler_bucket }} remote/{{ mimir_backup_target_bucket }}-ruler{% if monitoring_install_loki | bool %} && \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ loki_chunks_bucket }} remote/{{ mimir_backup_target_bucket }}-loki-chunks{% endif %}{% if monitoring_install_tempo | bool %} && \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ tempo_traces_bucket }} remote/{{ mimir_backup_target_bucket }}-tempo-traces{% endif %}{% if monitoring_install_pyroscope | bool %} && \
-    mc mirror --overwrite{% if mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ pyroscope_blocks_bucket }} remote/{{ mimir_backup_target_bucket }}-pyroscope-data{% endif %}; \
+    mc alias set remote $$BACKUP_REMOTE_ENDPOINT $$BACKUP_REMOTE_ACCESS_KEY $$BACKUP_REMOTE_SECRET_KEY{% if horde_monitoring_mimir_backup_target_insecure | bool %} --insecure{% endif %}; \
+    mc mirror --overwrite{% if horde_monitoring_mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ horde_monitoring_minio_blocks_bucket }} remote/{{ horde_monitoring_mimir_backup_target_bucket }}-blocks && \
+    mc mirror --overwrite{% if horde_monitoring_mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ horde_monitoring_minio_ruler_bucket }} remote/{{ horde_monitoring_mimir_backup_target_bucket }}-ruler{% if horde_monitoring_install_loki | bool %} && \
+    mc mirror --overwrite{% if horde_monitoring_mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ horde_monitoring_loki_chunks_bucket }} remote/{{ horde_monitoring_mimir_backup_target_bucket }}-loki-chunks{% endif %}{% if horde_monitoring_install_tempo | bool %} && \
+    mc mirror --overwrite{% if horde_monitoring_mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ horde_monitoring_tempo_traces_bucket }} remote/{{ horde_monitoring_mimir_backup_target_bucket }}-tempo-traces{% endif %}{% if horde_monitoring_install_pyroscope | bool %} && \
+    mc mirror --overwrite{% if horde_monitoring_mimir_backup_remove_deleted | bool %} --remove{% endif %} local/{{ horde_monitoring_pyroscope_blocks_bucket }} remote/{{ horde_monitoring_mimir_backup_target_bucket }}-pyroscope-data{% endif %}; \
   "
-ExecStartPost=/usr/bin/touch {{ minio_data_dir }}/.backup-last-success
+ExecStartPost=/usr/bin/touch {{ horde_monitoring_minio_data_dir }}/.backup-last-success
 
 [Install]
 WantedBy=multi-user.target

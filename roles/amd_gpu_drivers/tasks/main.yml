@@ -11,7 +11,7 @@
     - packages
     - rocm
 
-- name: Ensure {{ ansible_user }} is in the right groups
+- name: Ensure user is in the right groups ({{ ansible_user }})
   ansible.builtin.user:
     name: "{{ ansible_user }}"
     groups:

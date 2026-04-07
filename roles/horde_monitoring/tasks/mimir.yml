@@ -6,19 +6,19 @@
   ansible.builtin.command: docker --version
   changed_when: false
   failed_when: false
-  register: _docker_check
+  register: horde_monitoring__docker_check
   become: true
 
 - name: Fail if Docker is not installed
   ansible.builtin.fail:
     msg: "Docker is required for the monitoring stack. Please install Docker first."
-  when: _docker_check.rc != 0
+  when: horde_monitoring__docker_check.rc != 0
 
 - name: Verify Docker Compose V2 is available
   ansible.builtin.command: docker compose version
   changed_when: false
-  failed_when: _compose_check.rc != 0
-  register: _compose_check
+  failed_when: horde_monitoring__compose_check.rc != 0
+  register: horde_monitoring__compose_check
   become: true
 
 - name: Fail if Docker Compose V2 is not available
@@ -27,42 +27,42 @@
       Docker Compose V2 plugin is required but 'docker compose version' failed.
       The standalone docker-compose (V1) is end-of-life. Please install the
       Docker Compose V2 plugin: https://docs.docker.com/compose/install/
-  when: _compose_check.rc != 0
+  when: horde_monitoring__compose_check.rc != 0
 
 # Prevents deploying with default placeholder credentials when services
-# would actually start. Skipped when monitoring_start_services is false
+# would actually start. Skipped when horde_monitoring_start_services is false
 # (CI/test environments) since passwords are irrelevant without running services.
 
 - name: Fail if default MinIO password is unchanged
   ansible.builtin.fail:
     msg: >-
-      minio_root_password is still set to the default placeholder
+      horde_monitoring_minio_root_password is still set to the default placeholder
       'changeme-minio-secret'. Override it in your inventory or vault.
       See examples/horde_monitoring_stack.yml for a reference.
   when:
-    - monitoring_start_services | bool
-    - mimir_enable_minio | bool
-    - minio_root_password == "changeme-minio-secret"
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_minio_root_password == "changeme-minio-secret"
 
 - name: Fail if default Grafana password is unchanged
   ansible.builtin.fail:
     msg: >-
-      grafana_admin_password is still set to the default placeholder
+      horde_monitoring_grafana_admin_password is still set to the default placeholder
       'changeme'. Override it in your inventory or vault.
   when:
-    - monitoring_start_services | bool
-    - monitoring_install_grafana | bool
-    - grafana_admin_password == "changeme"
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_grafana | bool
+    - horde_monitoring_grafana_admin_password == "changeme"
 
 - name: Create MinIO data directory
   ansible.builtin.file:
-    path: "{{ minio_data_dir }}"
+    path: "{{ horde_monitoring_minio_data_dir }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
-  when: mimir_enable_minio | bool
+  when: horde_monitoring_mimir_enable_minio | bool
 
 - name: Create Mimir directories
   ansible.builtin.file:
@@ -73,13 +73,13 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ mimir_config_dir }}"
-    - "{{ mimir_data_dir }}"
-    - "{{ mimir_data_dir }}/tsdb"
-    - "{{ mimir_data_dir }}/data"
-    - "{{ mimir_data_dir }}/data/tsdb-sync"
-    - "{{ mimir_data_dir }}/data/compactor"
-    - "{{ mimir_compose_dir }}"
+    - "{{ horde_monitoring_mimir_config_dir }}"
+    - "{{ horde_monitoring_mimir_data_dir }}"
+    - "{{ horde_monitoring_mimir_data_dir }}/tsdb"
+    - "{{ horde_monitoring_mimir_data_dir }}/data"
+    - "{{ horde_monitoring_mimir_data_dir }}/data/tsdb-sync"
+    - "{{ horde_monitoring_mimir_data_dir }}/data/compactor"
+    - "{{ horde_monitoring_mimir_compose_dir }}"
 
 - name: Create Mimir filesystem-only directories
   ansible.builtin.file:
@@ -90,9 +90,9 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ mimir_data_dir }}/data/tsdb"
-    - "{{ mimir_data_dir }}/data/rules"
-  when: not (mimir_enable_minio | bool)
+    - "{{ horde_monitoring_mimir_data_dir }}/data/tsdb"
+    - "{{ horde_monitoring_mimir_data_dir }}/data/rules"
+  when: not (horde_monitoring_mimir_enable_minio | bool)
 
 - name: Create Grafana directories
   ansible.builtin.file:
@@ -103,17 +103,17 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ grafana_data_dir }}"
-    - "{{ grafana_provisioning_dir }}"
-    - "{{ grafana_provisioning_dir }}/datasources"
-    - "{{ grafana_provisioning_dir }}/dashboards"
-    - "{{ grafana_dashboard_dir }}"
-  when: monitoring_install_grafana | bool
+    - "{{ horde_monitoring_grafana_data_dir }}"
+    - "{{ horde_monitoring_grafana_provisioning_dir }}"
+    - "{{ horde_monitoring_grafana_provisioning_dir }}/datasources"
+    - "{{ horde_monitoring_grafana_provisioning_dir }}/dashboards"
+    - "{{ horde_monitoring_grafana_dashboard_dir }}"
+  when: horde_monitoring_install_grafana | bool
 
 - name: Template Mimir configuration
   ansible.builtin.template:
     src: mimir.yaml.j2
-    dest: "{{ mimir_config_dir }}/mimir.yaml"
+    dest: "{{ horde_monitoring_mimir_config_dir }}/mimir.yaml"
     owner: root
     group: root
     mode: "0600"
@@ -124,7 +124,7 @@
 - name: Template Mimir runtime overrides
   ansible.builtin.template:
     src: mimir-runtime-overrides.yaml.j2
-    dest: "{{ mimir_config_dir }}/runtime-overrides.yaml"
+    dest: "{{ horde_monitoring_mimir_config_dir }}/runtime-overrides.yaml"
     owner: root
     group: root
     mode: "0600"
@@ -135,7 +135,7 @@
 - name: Template Docker Compose for monitoring stack
   ansible.builtin.template:
     src: docker-compose.monitoring.yml.j2
-    dest: "{{ mimir_compose_dir }}/docker-compose.yml"
+    dest: "{{ horde_monitoring_mimir_compose_dir }}/docker-compose.yml"
     owner: root
     group: root
     mode: "0600"
@@ -160,28 +160,28 @@
     state: started
     daemon_reload: true
   become: true
-  when: monitoring_start_services | bool
+  when: horde_monitoring_start_services | bool
 
 - name: Wait for MinIO to become ready
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ minio_api_port }}/minio/health/live"
+    url: "http://127.0.0.1:{{ horde_monitoring_minio_api_port }}/minio/health/live"
     method: GET
     status_code: 200
-  register: _minio_ready
-  until: _minio_ready.status == 200
-  when: monitoring_start_services | bool and mimir_enable_minio | bool
+  register: horde_monitoring__minio_ready
+  until: horde_monitoring__minio_ready.status == 200
+  when: horde_monitoring_start_services | bool and horde_monitoring_mimir_enable_minio | bool
   retries: 15
   delay: 3
   become: true
 
 - name: Wait for Mimir to become ready
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ mimir_port }}/ready"
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/ready"
     method: GET
     status_code: 200
-  register: _mimir_ready
-  until: _mimir_ready.status == 200
-  when: monitoring_start_services | bool
+  register: horde_monitoring__mimir_ready
+  until: horde_monitoring__mimir_ready.status == 200
+  when: horde_monitoring_start_services | bool
   retries: 20
   delay: 5
   become: true
@@ -191,31 +191,31 @@
 - name: Fail if backup enabled but no target configured
   ansible.builtin.fail:
     msg: >-
-      mimir_backup_enabled is true but mimir_backup_target_endpoint is empty.
+      horde_monitoring_mimir_backup_enabled is true but horde_monitoring_mimir_backup_target_endpoint is empty.
       MinIO runs in single-drive mode with zero redundancy — a disk failure
       means permanent data loss. Either configure a backup target or
-      explicitly set mimir_backup_enabled: false to acknowledge the risk.
+      explicitly set horde_monitoring_mimir_backup_enabled: false to acknowledge the risk.
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
-    - mimir_backup_target_endpoint | length == 0
-    - monitoring_start_services | bool
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_backup_target_endpoint | length == 0
+    - horde_monitoring_start_services | bool
 
 - name: Warn if backup is disabled
   ansible.builtin.debug:
     msg: >-
       WARNING: MinIO backup is disabled. MinIO is running in single-drive
       mode with no redundancy. A disk failure will result in permanent
-      data loss of all historical metrics. Set mimir_backup_enabled: true
+      data loss of all historical metrics. Set horde_monitoring_mimir_backup_enabled: true
       and configure a remote S3 target.
   when:
-    - not (mimir_backup_enabled | bool)
-    - mimir_enable_minio | bool
+    - not (horde_monitoring_mimir_backup_enabled | bool)
+    - horde_monitoring_mimir_enable_minio | bool
 
 - name: Template MinIO backup environment file
   ansible.builtin.template:
     src: mimir-backup.env.j2
-    dest: "{{ mimir_config_dir }}/mimir-backup.env"
+    dest: "{{ horde_monitoring_mimir_config_dir }}/mimir-backup.env"
     owner: root
     group: root
     mode: "0600"
@@ -224,8 +224,8 @@
   no_log: true
   notify: Reload systemd
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
 
 - name: Template MinIO backup service
   ansible.builtin.template:
@@ -237,8 +237,8 @@
   become: true
   notify: Reload systemd
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
 
 - name: Template MinIO backup timer
   ansible.builtin.template:
@@ -248,8 +248,8 @@
   become: true
   notify: Reload systemd
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
 
 - name: Enable and start MinIO backup timer
   ansible.builtin.systemd:
@@ -259,43 +259,43 @@
     daemon_reload: true
   become: true
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
-    - monitoring_start_services | bool
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_start_services | bool
 
 - name: Verify backup target is reachable
   ansible.builtin.command: >
     docker run --rm --network host
     -e MC_HOST_remote
-    {{ minio_mc_image }}
-    mc ls remote/{{ mimir_backup_target_bucket }}-blocks
+    {{ horde_monitoring_minio_mc_image }}
+    mc ls remote/{{ horde_monitoring_mimir_backup_target_bucket }}-blocks
   environment:
     MC_HOST_remote: >-
-      {{ 'https' if not (mimir_backup_target_insecure | bool) else 'http' }}://{{
-      mimir_backup_target_access_key }}:{{ mimir_backup_target_secret_key }}@{{
-      mimir_backup_target_endpoint | regex_replace('^https?://', '') }}
+      {{ 'https' if not (horde_monitoring_mimir_backup_target_insecure | bool) else 'http' }}://{{
+      horde_monitoring_mimir_backup_target_access_key }}:{{ horde_monitoring_mimir_backup_target_secret_key }}@{{
+      horde_monitoring_mimir_backup_target_endpoint | regex_replace('^https?://', '') }}
   become: true
   changed_when: false
   no_log: true
-  register: _backup_target_check
+  register: horde_monitoring__backup_target_check
   failed_when: false
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
-    - monitoring_start_services | bool
-    - mimir_backup_target_endpoint | length > 0
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_mimir_backup_target_endpoint | length > 0
 
 - name: Warn if backup target is unreachable
   ansible.builtin.debug:
     msg: >-
       WARNING: Backup target connectivity check failed. The backup timer
       is enabled but the first backup run may fail. Verify that
-      mimir_backup_target_endpoint ({{ mimir_backup_target_endpoint }})
+      horde_monitoring_mimir_backup_target_endpoint ({{ horde_monitoring_mimir_backup_target_endpoint }})
       is reachable and credentials are correct. Error:
-      {{ _backup_target_check.stderr | default('(no error output)') }}
+      {{ horde_monitoring__backup_target_check.stderr | default('(no error output)') }}
   when:
-    - mimir_backup_enabled | bool
-    - mimir_enable_minio | bool
-    - monitoring_start_services | bool
-    - mimir_backup_target_endpoint | length > 0
-    - _backup_target_check.rc | default(0) != 0
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_mimir_backup_target_endpoint | length > 0
+    - horde_monitoring__backup_target_check.rc | default(0) != 0

@@ -7,21 +7,21 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: true
-    grafana_admin_password: "testpass123"
-    monitoring_application_tenant_id: "app-metrics"
-    monitoring_application_retention: "0"
-    monitoring_infrastructure_tenant_id: "infra-metrics"
-    monitoring_infrastructure_retention: "14d"
-    monitoring_public_tenant_id: "public-metrics"
-    monitoring_public_retention: "90d"
-    grafana_anonymous_enabled: true
-    grafana_provision_dashboards: false
-    monitoring_start_services: false
-    mimir_backup_enabled: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: true
+    horde_monitoring_grafana_admin_password: "testpass123"
+    horde_monitoring_application_tenant_id: "app-metrics"
+    horde_monitoring_application_retention: "0"
+    horde_monitoring_infrastructure_tenant_id: "infra-metrics"
+    horde_monitoring_infrastructure_retention: "14d"
+    horde_monitoring_public_tenant_id: "public-metrics"
+    horde_monitoring_public_retention: "90d"
+    horde_monitoring_grafana_anonymous_enabled: true
+    horde_monitoring_grafana_provision_dashboards: false
+    horde_monitoring_start_services: false
+    horde_monitoring_mimir_backup_enabled: false
 
   pre_tasks:
     - name: Install HAProxy for config validation
@@ -56,17 +56,17 @@
     - name: Read rendered Mimir config
       ansible.builtin.slurp:
         path: /etc/mimir/mimir.yaml
-      register: mimir_config
+      register: horde_monitoring_mimir_config
 
     - name: Read rendered Mimir runtime overrides
       ansible.builtin.slurp:
         path: /etc/mimir/runtime-overrides.yaml
-      register: mimir_runtime_overrides
+      register: horde_monitoring_mimir_runtime_overrides
 
     - name: Read rendered Grafana datasources
       ansible.builtin.slurp:
         path: /etc/grafana/provisioning/datasources/mimir.yml
-      register: grafana_datasources
+      register: horde_monitoring_grafana_datasources
 
     - name: Read rendered Docker Compose
       ansible.builtin.slurp:
@@ -76,27 +76,27 @@
     - name: Assert multitenant monitoring config
       ansible.builtin.assert:
         that:
-          - "'multitenancy_enabled: true' in (mimir_config.content | b64decode)"
-          - "'runtime-overrides.yaml' in (mimir_config.content | b64decode)"
-          - "'app-metrics:' in (mimir_runtime_overrides.content | b64decode)"
-          - "'infra-metrics:' in (mimir_runtime_overrides.content | b64decode)"
-          - "'public-metrics:' in (mimir_runtime_overrides.content | b64decode)"
-          - "'max_total_query_length' in (mimir_runtime_overrides.content | b64decode)"
-          - "'max_fetched_series_per_query' in (mimir_runtime_overrides.content | b64decode)"
-          - "'AI Horde App' in (grafana_datasources.content | b64decode)"
-          - "'Infrastructure' in (grafana_datasources.content | b64decode)"
-          - "'orgId: 1' in (grafana_datasources.content | b64decode)"
-          - "'mimir-public' in (grafana_datasources.content | b64decode)"
+          - "'multitenancy_enabled: true' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'runtime-overrides.yaml' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'app-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'infra-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'public-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'max_total_query_length' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'max_fetched_series_per_query' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'AI Horde App' in (horde_monitoring_grafana_datasources.content | b64decode)"
+          - "'Infrastructure' in (horde_monitoring_grafana_datasources.content | b64decode)"
+          - "'orgId: 1' in (horde_monitoring_grafana_datasources.content | b64decode)"
+          - "'mimir-public' in (horde_monitoring_grafana_datasources.content | b64decode)"
           - "'ANONYMOUS_ENABLED=true' in (compose_config.content | b64decode)"
           - "'ANONYMOUS_ORG_NAME' in (compose_config.content | b64decode)"
 
     - name: Assert S3 object storage config (MinIO)
       ansible.builtin.assert:
         that:
-          - "'backend: s3' in (mimir_config.content | b64decode)"
-          - "'endpoint: minio:' in (mimir_config.content | b64decode)"
-          - "'bucket_name: mimir-blocks' in (mimir_config.content | b64decode)"
-          - "'common:' in (mimir_config.content | b64decode)"
+          - "'backend: s3' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'endpoint: minio:' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'bucket_name: mimir-blocks' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'common:' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'minio' in (compose_config.content | b64decode)"
           - "'minio-init' in (compose_config.content | b64decode)"
           - "'minio/health/live' in (compose_config.content | b64decode)"
@@ -104,13 +104,13 @@
     - name: Assert performance and caching config
       ansible.builtin.assert:
         that:
-          - "'activity_tracker' in (mimir_config.content | b64decode)"
-          - "'chunks_cache' in (mimir_config.content | b64decode)"
-          - "'metadata_cache' in (mimir_config.content | b64decode)"
-          - "'results_cache' in (mimir_config.content | b64decode)"
-          - "'split_queries_by_interval' in (mimir_config.content | b64decode)"
-          - "'deletion_delay' in (mimir_config.content | b64decode)"
-          - "'max_global_series_per_user' in (mimir_config.content | b64decode)"
+          - "'activity_tracker' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'chunks_cache' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'metadata_cache' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'results_cache' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'split_queries_by_interval' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'deletion_delay' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'max_global_series_per_user' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'memcached' in (compose_config.content | b64decode)"
 
     - name: Read rendered alerting rules
@@ -223,12 +223,12 @@
     # Run the role a second time with a changed value so Ansible
     # overwrites the config and creates a backup file.
 
-    - name: Re-run role with changed mimir_log_level to trigger backup
+    - name: Re-run role with changed horde_monitoring_mimir_log_level to trigger backup
       ansible.builtin.include_role:
         name: horde_monitoring
       vars:
-        mimir_log_level: "info"
-        monitoring_start_services: false
+        horde_monitoring_mimir_log_level: "info"
+        horde_monitoring_start_services: false
 
     - name: Find backup files for mimir.yaml
       ansible.builtin.find:
@@ -309,13 +309,13 @@
           ansible.builtin.include_role:
             name: horde_monitoring
           vars:
-            monitoring_install_mimir: true
-            monitoring_install_grafana: true
-            monitoring_configure_firewall: false
-            monitoring_configure_haproxy: false
-            monitoring_start_services: true
-            minio_root_password: "changeme-minio-secret"
-            grafana_admin_password: "changeme"
+            horde_monitoring_install_mimir: true
+            horde_monitoring_install_grafana: true
+            horde_monitoring_configure_firewall: false
+            horde_monitoring_configure_haproxy: false
+            horde_monitoring_start_services: true
+            horde_monitoring_minio_root_password: "changeme-minio-secret"
+            horde_monitoring_grafana_admin_password: "changeme"
 
         - name: Fail if role did not reject default passwords
           ansible.builtin.fail:
@@ -347,19 +347,19 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_install_loki: true
-    monitoring_install_tempo: true
-    monitoring_install_pyroscope: true
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: true
-    grafana_admin_password: "testpass123"
-    monitoring_application_tenant_id: "app-metrics"
-    monitoring_infrastructure_tenant_id: "infra-metrics"
-    monitoring_public_tenant_id: "public-metrics"
-    monitoring_start_services: false
-    mimir_backup_enabled: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_install_loki: true
+    horde_monitoring_install_tempo: true
+    horde_monitoring_install_pyroscope: true
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: true
+    horde_monitoring_grafana_admin_password: "testpass123"
+    horde_monitoring_application_tenant_id: "app-metrics"
+    horde_monitoring_infrastructure_tenant_id: "infra-metrics"
+    horde_monitoring_public_tenant_id: "public-metrics"
+    horde_monitoring_start_services: false
+    horde_monitoring_mimir_backup_enabled: false
 
   pre_tasks:
     - name: Install HAProxy for config validation
@@ -437,16 +437,16 @@
     - name: Read Loki config
       ansible.builtin.slurp:
         path: /etc/loki/loki.yaml
-      register: loki_config
+      register: horde_monitoring_loki_config
 
     - name: Assert Loki config content
       ansible.builtin.assert:
         that:
-          - "'auth_enabled: true' in (loki_config.content | b64decode)"
-          - "'schema_config' in (loki_config.content | b64decode)"
-          - "'tsdb' in (loki_config.content | b64decode)"
-          - "'loki-chunks' in (loki_config.content | b64decode)"
-          - "'retention_period' in (loki_config.content | b64decode)"
+          - "'auth_enabled: true' in (horde_monitoring_loki_config.content | b64decode)"
+          - "'schema_config' in (horde_monitoring_loki_config.content | b64decode)"
+          - "'tsdb' in (horde_monitoring_loki_config.content | b64decode)"
+          - "'loki-chunks' in (horde_monitoring_loki_config.content | b64decode)"
+          - "'retention_period' in (horde_monitoring_loki_config.content | b64decode)"
 
     - name: Stat Tempo config file
       ansible.builtin.stat:
@@ -463,33 +463,33 @@
     - name: Read Tempo config
       ansible.builtin.slurp:
         path: /etc/tempo/tempo.yaml
-      register: tempo_config
+      register: horde_monitoring_tempo_config
 
     - name: Assert Tempo config content
       ansible.builtin.assert:
         that:
-          - "'distributor' in (tempo_config.content | b64decode)"
-          - "'otlp' in (tempo_config.content | b64decode)"
-          - "'tempo-traces' in (tempo_config.content | b64decode)"
-          - "'block_retention' in (tempo_config.content | b64decode)"
+          - "'distributor' in (horde_monitoring_tempo_config.content | b64decode)"
+          - "'otlp' in (horde_monitoring_tempo_config.content | b64decode)"
+          - "'tempo-traces' in (horde_monitoring_tempo_config.content | b64decode)"
+          - "'block_retention' in (horde_monitoring_tempo_config.content | b64decode)"
 
     - name: Read Grafana datasources
       ansible.builtin.slurp:
         path: /etc/grafana/provisioning/datasources/mimir.yml
-      register: grafana_ds_lt
+      register: horde_monitoring_grafana_ds_lt
 
     - name: Assert Loki datasources are provisioned
       ansible.builtin.assert:
         that:
-          - "'loki-app' in (grafana_ds_lt.content | b64decode)"
-          - "'loki-infra' in (grafana_ds_lt.content | b64decode)"
-          - "'type: loki' in (grafana_ds_lt.content | b64decode)"
+          - "'loki-app' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
+          - "'loki-infra' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
+          - "'type: loki' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
         fail_msg: "Grafana must have Loki datasources provisioned"
 
     - name: Assert Tempo datasource is provisioned
       ansible.builtin.assert:
         that:
-          - "'type: tempo' in (grafana_ds_lt.content | b64decode)"
+          - "'type: tempo' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
         fail_msg: "Grafana must have Tempo datasource provisioned"
 
     - name: Read alerting rules
@@ -585,16 +585,16 @@
     - name: Read Pyroscope config
       ansible.builtin.slurp:
         path: /etc/pyroscope/pyroscope.yaml
-      register: pyroscope_config
+      register: horde_monitoring_pyroscope_config
 
     - name: Assert Pyroscope config content
       ansible.builtin.assert:
         that:
-          - "'multitenancy_enabled: true' in (pyroscope_config.content | b64decode)"
-          - "'pyroscope-data' in (pyroscope_config.content | b64decode)"
-          - "'backend: s3' in (pyroscope_config.content | b64decode)"
-          - "'runtime_config' in (pyroscope_config.content | b64decode)"
-          - "'runtime-overrides.yaml' in (pyroscope_config.content | b64decode)"
+          - "'multitenancy_enabled: true' in (horde_monitoring_pyroscope_config.content | b64decode)"
+          - "'pyroscope-data' in (horde_monitoring_pyroscope_config.content | b64decode)"
+          - "'backend: s3' in (horde_monitoring_pyroscope_config.content | b64decode)"
+          - "'runtime_config' in (horde_monitoring_pyroscope_config.content | b64decode)"
+          - "'runtime-overrides.yaml' in (horde_monitoring_pyroscope_config.content | b64decode)"
 
     - name: Stat Pyroscope runtime overrides
       ansible.builtin.stat:
@@ -611,23 +611,23 @@
     - name: Read Pyroscope runtime overrides
       ansible.builtin.slurp:
         path: /etc/pyroscope/runtime-overrides.yaml
-      register: pyroscope_overrides
+      register: horde_monitoring_pyroscope_overrides
 
     - name: Assert Pyroscope per-tenant overrides
       ansible.builtin.assert:
         that:
-          - "'app-metrics' in (pyroscope_overrides.content | b64decode)"
-          - "'infra-metrics' in (pyroscope_overrides.content | b64decode)"
-          - "'public-metrics' in (pyroscope_overrides.content | b64decode)"
-          - "'compactor_blocks_retention_period' in (pyroscope_overrides.content | b64decode)"
+          - "'app-metrics' in (horde_monitoring_pyroscope_overrides.content | b64decode)"
+          - "'infra-metrics' in (horde_monitoring_pyroscope_overrides.content | b64decode)"
+          - "'public-metrics' in (horde_monitoring_pyroscope_overrides.content | b64decode)"
+          - "'compactor_blocks_retention_period' in (horde_monitoring_pyroscope_overrides.content | b64decode)"
         fail_msg: "Pyroscope must have per-tenant retention overrides"
 
     - name: Assert Pyroscope datasources are provisioned
       ansible.builtin.assert:
         that:
-          - "'pyroscope-app' in (grafana_ds_lt.content | b64decode)"
-          - "'pyroscope-infra' in (grafana_ds_lt.content | b64decode)"
-          - "'grafana-pyroscope-datasource' in (grafana_ds_lt.content | b64decode)"
+          - "'pyroscope-app' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
+          - "'pyroscope-infra' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
+          - "'grafana-pyroscope-datasource' in (horde_monitoring_grafana_ds_lt.content | b64decode)"
         fail_msg: "Grafana must have Pyroscope datasources provisioned"
 
     - name: Assert Pyroscope data directory exists
@@ -650,15 +650,15 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_install_loki: false
-    monitoring_install_tempo: false
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: false
-    grafana_admin_password: "testpass123"
-    monitoring_start_services: false
-    mimir_backup_enabled: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_install_loki: false
+    horde_monitoring_install_tempo: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_grafana_admin_password: "testpass123"
+    horde_monitoring_start_services: false
+    horde_monitoring_mimir_backup_enabled: false
 
   roles:
     - role: horde_monitoring

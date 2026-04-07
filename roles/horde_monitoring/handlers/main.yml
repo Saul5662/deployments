@@ -5,16 +5,16 @@
   ansible.builtin.systemd:
     daemon_reload: true
   become: true
-  when: monitoring_start_services | bool
+  when: horde_monitoring_start_services | bool
 
 - name: Restart monitoring stack
   ansible.builtin.shell: >
     docker compose up -d
   args:
-    chdir: "{{ mimir_compose_dir }}"
+    chdir: "{{ horde_monitoring_mimir_compose_dir }}"
   become: true
   changed_when: true
-  when: monitoring_start_services | bool
+  when: horde_monitoring_start_services | bool
 
 # Prometheus is deployed by a separate role (prometheus.prometheus) and may
 # not be installed or running when this handler fires.  failed_when: false
@@ -24,6 +24,6 @@
     name: prometheus
     state: reloaded
   become: true
-  register: _reload_prometheus
+  register: horde_monitoring__reload_prometheus
   failed_when: false
-  changed_when: _reload_prometheus.status is defined and _reload_prometheus.status.ActiveState == 'active'
+  changed_when: horde_monitoring__reload_prometheus.status is defined and horde_monitoring__reload_prometheus.status.ActiveState == 'active'

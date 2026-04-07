@@ -3,9 +3,9 @@
 # into per-org directories with patched datasource UIDs.
 #
 # Layout on disk:
-#   {{ grafana_dashboard_dir }}/app/        -> app dashboards for Org 1 (uid: mimir-app)
-#   {{ grafana_dashboard_dir }}/app-public/  -> app dashboards for Org 2 (uid: mimir-public)
-#   {{ grafana_dashboard_dir }}/infra/       -> infra dashboards for Org 1 (uid: mimir-infra)
+#   {{ horde_monitoring_grafana_dashboard_dir }}/app/        -> app dashboards for Org 1 (uid: mimir-app)
+#   {{ horde_monitoring_grafana_dashboard_dir }}/app-public/  -> app dashboards for Org 2 (uid: mimir-public)
+#   {{ horde_monitoring_grafana_dashboard_dir }}/infra/       -> infra dashboards for Org 1 (uid: mimir-infra)
 
 - name: Install git (needed for dashboard checkout)
   ansible.builtin.apt:
@@ -15,7 +15,7 @@
 
 - name: Create dashboard subdirectories
   ansible.builtin.file:
-    path: "{{ grafana_dashboard_dir }}/{{ item }}"
+    path: "{{ horde_monitoring_grafana_dashboard_dir }}/{{ item }}"
     state: directory
     owner: "472"
     group: "472"
@@ -28,13 +28,13 @@
 
 - name: Clone horde-exporters repository (shallow)
   ansible.builtin.git:
-    repo: "{{ grafana_dashboards_repo_url }}"
+    repo: "{{ horde_monitoring_grafana_dashboards_repo_url }}"
     dest: /tmp/horde-exporters-dashboards
-    version: "{{ grafana_dashboards_repo_ref }}"
+    version: "{{ horde_monitoring_grafana_dashboards_repo_ref }}"
     depth: 1
     force: true
   become: true
-  register: _dashboards_clone
+  register: horde_monitoring__dashboards_clone
 
 - name: Verify expected dashboard directories exist after clone
   ansible.builtin.stat:
@@ -42,18 +42,18 @@
   loop:
     - /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
     - /tmp/horde-exporters-dashboards/dashboards
-  register: _dashboard_dirs
+  register: horde_monitoring__dashboard_dirs
   become: true
 
 - name: Fail if dashboard directories are missing (repo structure changed?)
   ansible.builtin.fail:
     msg: >-
       Expected dashboard directory {{ item.item }} not found after cloning
-      {{ grafana_dashboards_repo_url }} at ref {{ grafana_dashboards_repo_ref }}.
+      {{ horde_monitoring_grafana_dashboards_repo_url }} at ref {{ horde_monitoring_grafana_dashboards_repo_ref }}.
       The repository layout may have changed — update the dashboard paths or
-      pin grafana_dashboards_repo_ref to a known-good tag.
+      pin horde_monitoring_grafana_dashboards_repo_ref to a known-good tag.
   when: not item.stat.exists
-  loop: "{{ _dashboard_dirs.results }}"
+  loop: "{{ horde_monitoring__dashboard_dirs.results }}"
   loop_control:
     label: "{{ item.item }}"
 
@@ -61,7 +61,7 @@
   ansible.builtin.find:
     paths: /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
     patterns: "*.json"
-  register: _app_dashboard_files
+  register: horde_monitoring__app_dashboard_files
   become: true
 
 - name: Find infra dashboard JSON files
@@ -69,7 +69,7 @@
     paths: /tmp/horde-exporters-dashboards/dashboards
     patterns: "*.json"
     recurse: true
-  register: _infra_dashboard_files
+  register: horde_monitoring__infra_dashboard_files
   become: true
 
 # --- Copy dashboards into their target directories -----------------------
@@ -77,39 +77,39 @@
 - name: Copy app dashboards for Org 1 (admin)
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "{{ grafana_dashboard_dir }}/app/{{ item.path | basename }}"
+    dest: "{{ horde_monitoring_grafana_dashboard_dir }}/app/{{ item.path | basename }}"
     remote_src: true
     owner: "472"
     group: "472"
     mode: "0644"
   become: true
-  loop: "{{ _app_dashboard_files.files }}"
+  loop: "{{ horde_monitoring__app_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
 
 - name: Copy app dashboards for Org 2 (public)
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "{{ grafana_dashboard_dir }}/app-public/{{ item.path | basename }}"
+    dest: "{{ horde_monitoring_grafana_dashboard_dir }}/app-public/{{ item.path | basename }}"
     remote_src: true
     owner: "472"
     group: "472"
     mode: "0644"
   become: true
-  loop: "{{ _app_dashboard_files.files }}"
+  loop: "{{ horde_monitoring__app_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
 
 - name: Copy infra dashboards for Org 1 (admin)
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "{{ grafana_dashboard_dir }}/infra/{{ item.path | basename }}"
+    dest: "{{ horde_monitoring_grafana_dashboard_dir }}/infra/{{ item.path | basename }}"
     remote_src: true
     owner: "472"
     group: "472"
     mode: "0644"
   become: true
-  loop: "{{ _infra_dashboard_files.files }}"
+  loop: "{{ horde_monitoring__infra_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
 
@@ -129,7 +129,7 @@
 - name: Patch datasource UIDs in all dashboard sets
   ansible.builtin.command: >
     python3 /tmp/patch_dashboard_uid.py
-    "{{ grafana_dashboard_dir }}/{{ item.0 }}/{{ item.1.path | basename }}"
+    "{{ horde_monitoring_grafana_dashboard_dir }}/{{ item.0 }}/{{ item.1.path | basename }}"
     "{{ item.2 }}"
   become: true
   loop: "{{ _patch_targets }}"
@@ -138,13 +138,13 @@
   vars:
     _patch_targets: >-
       {{
-        (_app_dashboard_files.files | product(['app']) | map('reverse') | map('list')
+        (horde_monitoring__app_dashboard_files.files | product(['app']) | map('reverse') | map('list')
          | product(['mimir-app']) | map('flatten') | list)
         +
-        (_app_dashboard_files.files | product(['app-public']) | map('reverse') | map('list')
+        (horde_monitoring__app_dashboard_files.files | product(['app-public']) | map('reverse') | map('list')
          | product(['mimir-public']) | map('flatten') | list)
         +
-        (_infra_dashboard_files.files | product(['infra']) | map('reverse') | map('list')
+        (horde_monitoring__infra_dashboard_files.files | product(['infra']) | map('reverse') | map('list')
          | product(['mimir-infra']) | map('flatten') | list)
       }}
   changed_when: false

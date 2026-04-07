@@ -2,12 +2,12 @@
 # Managed by Ansible - do not edit manually
 
 overrides:
-  {{ monitoring_application_tenant_id }}:
-    compactor_blocks_retention_period: {{ pyroscope_application_retention }}
-  {{ monitoring_infrastructure_tenant_id }}:
-    compactor_blocks_retention_period: {{ pyroscope_infrastructure_retention }}
-  {{ monitoring_public_tenant_id }}:
-    compactor_blocks_retention_period: {{ pyroscope_public_retention }}
-{% if pyroscope_extra_tenant_overrides %}
-{{ pyroscope_extra_tenant_overrides | to_nice_yaml(indent=2, sort_keys=False) | indent(2, False) }}
+  {{ horde_monitoring_application_tenant_id }}:
+    compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_application_retention }}
+  {{ horde_monitoring_infrastructure_tenant_id }}:
+    compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_infrastructure_retention }}
+  {{ horde_monitoring_public_tenant_id }}:
+    compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_public_retention }}
+{% if horde_monitoring_pyroscope_extra_tenant_overrides %}
+{{ horde_monitoring_pyroscope_extra_tenant_overrides | to_nice_yaml(indent=2, sort_keys=False) | indent(2, False) }}
 {% endif %}

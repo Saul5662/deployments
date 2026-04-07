@@ -1,6 +1,6 @@
 ---
 # Example playbook for deploying Grafana Alloy on application hosts
-# Usage: ansible-playbook -i inventory.yml alloy_app_host.yml
+# Usage: ansible-playbook -i inventory.yml horde_alloy_app_host.yml
 #
 # Architecture:
 #   Alloy runs as a native systemd service on each app host. It:
@@ -19,53 +19,53 @@
 
   vars:
     # --- Alloy version ---
-    alloy_version: "1.8.1"
+    horde_alloy_version: "1.8.1"
 
     # --- Central stack endpoints (required) ---
     # Replace with your actual monitoring host URL.
-    alloy_mimir_endpoint: "https://mimir.example.com/api/v1/push"
-    alloy_loki_endpoint: "https://loki.example.com/loki/api/v1/push"
-    alloy_tempo_endpoint: "https://tempo.example.com:4318"
+    horde_alloy_mimir_endpoint: "https://mimir.example.com/api/v1/push"
+    horde_alloy_loki_endpoint: "https://loki.example.com/loki/api/v1/push"
+    horde_alloy_tempo_endpoint: "https://tempo.example.com:4318"
 
     # --- Tenant ---
-    alloy_tenant_id: "infrastructure"
+    horde_alloy_tenant_id: "infrastructure"
 
     # --- Authentication ---
-    alloy_basic_auth_username: "alloy"
-    alloy_basic_auth_password: "{{ vault_alloy_basic_auth_password }}"
+    horde_alloy_basic_auth_username: "alloy"
+    horde_alloy_basic_auth_password: "{{ vault_alloy_basic_auth_password }}"
 
     # --- TLS ---
     # Path on the Ansible controller to the CA certificate used to sign
     # the monitoring stack's TLS certificates.
-    alloy_tls_ca_cert: "tls/ca.crt"
+    horde_alloy_tls_ca_cert: "tls/ca.crt"
 
     # --- Metrics ---
-    alloy_collect_metrics: true
-    alloy_scrape_interval: "15s"
-    alloy_external_labels:
+    horde_alloy_collect_metrics: true
+    horde_alloy_scrape_interval: "15s"
+    horde_alloy_external_labels:
       environment: "production"
 
     # Extra scrape targets for local application metrics:
-    # alloy_extra_scrape_targets:
+    # horde_alloy_extra_scrape_targets:
     #   - job: "myapp"
     #     address: "127.0.0.1:8080"
     #     metrics_path: "/metrics"
 
     # --- Logs ---
-    alloy_collect_logs: true
-    alloy_collect_journal: true
-    alloy_journal_max_age: "24h"
+    horde_alloy_collect_logs: true
+    horde_alloy_collect_journal: true
+    horde_alloy_journal_max_age: "24h"
     # Collect specific log files:
-    # alloy_collect_log_files:
+    # horde_alloy_collect_log_files:
     #   - "/var/log/myapp/*.log"
-    alloy_collect_docker_logs: false
+    horde_alloy_collect_docker_logs: false
 
     # --- Traces ---
-    alloy_collect_traces: true
+    horde_alloy_collect_traces: true
     # OTLP receiver listens on localhost — apps send traces here.
-    alloy_otlp_listen_address: "127.0.0.1"
-    alloy_otlp_grpc_port: 4317
-    alloy_otlp_http_port: 4318
+    horde_alloy_otlp_listen_address: "127.0.0.1"
+    horde_alloy_otlp_grpc_port: 4317
+    horde_alloy_otlp_http_port: 4318
 
   roles:
     - haidra.deployments.horde_alloy
@@ -73,21 +73,21 @@
   post_tasks:
     - name: Verify Alloy is healthy
       ansible.builtin.uri:
-        url: "http://{{ alloy_http_listen_address }}:{{ alloy_http_port }}/-/healthy"
+        url: "http://{{ horde_alloy_http_listen_address }}:{{ horde_alloy_http_port }}/-/healthy"
         return_content: true
-      register: alloy_health
+      register: horde_alloy_health
       retries: 5
       delay: 3
-      until: alloy_health.status == 200
+      until: horde_alloy_health.status == 200
 
     - name: Display Alloy status
       ansible.builtin.debug:
         msg:
           - "Alloy deployed successfully on {{ inventory_hostname }}!"
-          - "Health UI: http://{{ alloy_http_listen_address }}:{{ alloy_http_port }}/graph"
-          - "OTLP gRPC: {{ alloy_otlp_listen_address }}:{{ alloy_otlp_grpc_port }}"
-          - "OTLP HTTP: {{ alloy_otlp_listen_address }}:{{ alloy_otlp_http_port }}"
-          - "Tenant: {{ alloy_tenant_id }}"
-          - "Metrics: {{ alloy_collect_metrics }} → {{ alloy_mimir_endpoint }}"
-          - "Logs: {{ alloy_collect_logs }} → {{ alloy_loki_endpoint }}"
-          - "Traces: {{ alloy_collect_traces }} → {{ alloy_tempo_endpoint }}"
+          - "Health UI: http://{{ horde_alloy_http_listen_address }}:{{ horde_alloy_http_port }}/graph"
+          - "OTLP gRPC: {{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_grpc_port }}"
+          - "OTLP HTTP: {{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_http_port }}"
+          - "Tenant: {{ horde_alloy_tenant_id }}"
+          - "Metrics: {{ horde_alloy_collect_metrics }} → {{ horde_alloy_mimir_endpoint }}"
+          - "Logs: {{ horde_alloy_collect_logs }} → {{ horde_alloy_loki_endpoint }}"
+          - "Traces: {{ horde_alloy_collect_traces }} → {{ horde_alloy_tempo_endpoint }}"

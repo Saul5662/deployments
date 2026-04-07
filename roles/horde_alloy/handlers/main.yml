@@ -7,11 +7,11 @@
     state: restarted
     daemon_reload: true
   become: true
-  when: alloy_start_service | bool
+  when: horde_alloy_start_service | bool
 
 - name: Reload alloy
   ansible.builtin.systemd:
     name: alloy
     state: reloaded
   become: true
-  when: alloy_start_service | bool
+  when: horde_alloy_start_service | bool

@@ -9,27 +9,27 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: false
-    grafana_admin_password: "testpass123"
-    grafana_anonymous_enabled: false
-    monitoring_application_tenant_id: "app-metrics"
-    monitoring_application_retention: "0"
-    monitoring_infrastructure_tenant_id: "infra-metrics"
-    monitoring_infrastructure_retention: "7d"
-    monitoring_start_services: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_grafana_admin_password: "testpass123"
+    horde_monitoring_grafana_anonymous_enabled: false
+    horde_monitoring_application_tenant_id: "app-metrics"
+    horde_monitoring_application_retention: "0"
+    horde_monitoring_infrastructure_tenant_id: "infra-metrics"
+    horde_monitoring_infrastructure_retention: "7d"
+    horde_monitoring_start_services: false
     # Alerting rules disabled — tests the skip path
-    monitoring_install_alerting_rules: false
+    horde_monitoring_install_alerting_rules: false
     # Backup enabled — tests backup service/timer template rendering
-    mimir_backup_enabled: true
-    mimir_backup_target_endpoint: "https://s3.example.com"
-    mimir_backup_target_bucket: "mimir-backup"
-    mimir_backup_target_access_key: "test-access-key"
-    mimir_backup_target_secret_key: "test-secret-key"
+    horde_monitoring_mimir_backup_enabled: true
+    horde_monitoring_mimir_backup_target_endpoint: "https://s3.example.com"
+    horde_monitoring_mimir_backup_target_bucket: "mimir-backup"
+    horde_monitoring_mimir_backup_target_access_key: "test-access-key"
+    horde_monitoring_mimir_backup_target_secret_key: "test-secret-key"
     # Extra tenant overrides — tests the merge path
-    mimir_extra_tenant_overrides:
+    horde_monitoring_mimir_extra_tenant_overrides:
       custom-tenant:
         compactor_blocks_retention_period: "180d"
         max_global_series_per_user: 100000
@@ -41,20 +41,20 @@
     - name: Read rendered Mimir runtime overrides
       ansible.builtin.slurp:
         path: /etc/mimir/runtime-overrides.yaml
-      register: mimir_runtime_overrides
+      register: horde_monitoring_mimir_runtime_overrides
 
     - name: Assert custom retention values
       ansible.builtin.assert:
         that:
-          - "'compactor_blocks_retention_period: 0' in (mimir_runtime_overrides.content | b64decode)"
-          - "'compactor_blocks_retention_period: 7d' in (mimir_runtime_overrides.content | b64decode)"
+          - "'compactor_blocks_retention_period: 0' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'compactor_blocks_retention_period: 7d' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
 
     - name: Assert extra tenant overrides are merged
       ansible.builtin.assert:
         that:
-          - "'custom-tenant' in (mimir_runtime_overrides.content | b64decode)"
-          - "'180d' in (mimir_runtime_overrides.content | b64decode)"
-          - "'100000' in (mimir_runtime_overrides.content | b64decode)"
+          - "'custom-tenant' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'180d' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'100000' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
 
     - name: Check alerting rules file is absent (disabled)
       ansible.builtin.stat:
@@ -65,7 +65,7 @@
       ansible.builtin.assert:
         that:
           - not _rules_file.stat.exists
-        fail_msg: "Alerting rules should be absent when monitoring_install_alerting_rules=false"
+        fail_msg: "Alerting rules should be absent when horde_monitoring_install_alerting_rules=false"
 
     - name: Check backup systemd service was rendered
       ansible.builtin.stat:
@@ -149,13 +149,13 @@
     - name: Read Grafana datasources
       ansible.builtin.slurp:
         path: /etc/grafana/provisioning/datasources/mimir.yml
-      register: grafana_ds
+      register: horde_monitoring_grafana_ds
 
     - name: Assert no public org datasource when anonymous disabled
       ansible.builtin.assert:
         that:
-          - "'orgId: 2' not in (grafana_ds.content | b64decode)"
-          - "'mimir-public' not in (grafana_ds.content | b64decode)"
+          - "'orgId: 2' not in (horde_monitoring_grafana_ds.content | b64decode)"
+          - "'mimir-public' not in (horde_monitoring_grafana_ds.content | b64decode)"
 
     - name: Read rendered Docker Compose
       ansible.builtin.slurp:
@@ -171,7 +171,7 @@
       ansible.builtin.assert:
         that:
           - "'pyroscope' not in (compose_config.content | b64decode)"
-        fail_msg: "Pyroscope should not appear in Compose when monitoring_install_pyroscope is false"
+        fail_msg: "Pyroscope should not appear in Compose when horde_monitoring_install_pyroscope is false"
 
     - name: Stat Docker Compose file permissions
       ansible.builtin.stat:

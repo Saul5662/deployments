@@ -4,7 +4,7 @@
 
 - name: Create Tempo config directory
   ansible.builtin.file:
-    path: "{{ tempo_config_dir }}"
+    path: "{{ horde_monitoring_tempo_config_dir }}"
     state: directory
     owner: root
     group: root
@@ -20,17 +20,17 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ tempo_data_dir }}"
-    - "{{ tempo_data_dir }}/wal"
-    - "{{ tempo_data_dir }}/blocks"
-    - "{{ tempo_data_dir }}/generator"
-    - "{{ tempo_data_dir }}/generator/wal"
-    - "{{ tempo_data_dir }}/generator/traces"
+    - "{{ horde_monitoring_tempo_data_dir }}"
+    - "{{ horde_monitoring_tempo_data_dir }}/wal"
+    - "{{ horde_monitoring_tempo_data_dir }}/blocks"
+    - "{{ horde_monitoring_tempo_data_dir }}/generator"
+    - "{{ horde_monitoring_tempo_data_dir }}/generator/wal"
+    - "{{ horde_monitoring_tempo_data_dir }}/generator/traces"
 
 - name: Template Tempo configuration
   ansible.builtin.template:
     src: tempo.yaml.j2
-    dest: "{{ tempo_config_dir }}/tempo.yaml"
+    dest: "{{ horde_monitoring_tempo_config_dir }}/tempo.yaml"
     owner: root
     group: "10001"
     mode: "0640"

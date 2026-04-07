@@ -3,7 +3,7 @@
 # idempotency: skip
 # Runtime integration test: starts Docker Compose services and validates health.
 #
-# Unlike render-only tests (monitoring_start_services: false), this test
+# Unlike render-only tests (horde_monitoring_start_services: false), this test
 # actually boots the monitoring stack and verifies that Mimir, MinIO,
 # Grafana, and Memcached are healthy and accepting connections.
 #
@@ -20,29 +20,29 @@
   gather_facts: true
 
   vars:
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_install_loki: false
-    monitoring_install_tempo: false
-    monitoring_install_pyroscope: false
-    monitoring_configure_firewall: false
-    monitoring_configure_haproxy: false
-    grafana_admin_password: "test-runtime-pass"
-    minio_root_password: "test-minio-secret-12345"
-    monitoring_application_tenant_id: "app-test"
-    monitoring_infrastructure_tenant_id: "infra-test"
-    monitoring_public_tenant_id: "public-test"
-    grafana_anonymous_enabled: false
-    grafana_provision_dashboards: false
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_install_loki: false
+    horde_monitoring_install_tempo: false
+    horde_monitoring_install_pyroscope: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_grafana_admin_password: "test-runtime-pass"
+    horde_monitoring_minio_root_password: "test-minio-secret-12345"
+    horde_monitoring_application_tenant_id: "app-test"
+    horde_monitoring_infrastructure_tenant_id: "infra-test"
+    horde_monitoring_public_tenant_id: "public-test"
+    horde_monitoring_grafana_anonymous_enabled: false
+    horde_monitoring_grafana_provision_dashboards: false
     # Actually start services — the point of this test
-    monitoring_start_services: true
-    mimir_backup_enabled: false
+    horde_monitoring_start_services: true
+    horde_monitoring_mimir_backup_enabled: false
     # Reduce resource footprint for CI containers
-    mimir_memory_limit: "1g"
-    minio_memory_limit: "256m"
-    grafana_memory_limit: "256m"
-    mimir_memcached_memory_mb: 64
-    mimir_memcached_memory_limit: "128m"
+    horde_monitoring_mimir_memory_limit: "1g"
+    horde_monitoring_minio_memory_limit: "256m"
+    horde_monitoring_grafana_memory_limit: "256m"
+    horde_monitoring_mimir_memcached_memory_mb: 64
+    horde_monitoring_mimir_memcached_memory_limit: "128m"
 
   roles:
     - role: horde_monitoring
@@ -53,15 +53,15 @@
         url: "http://127.0.0.1:9000/minio/health/live"
         method: GET
         status_code: 200
-      register: minio_health
+      register: horde_monitoring_minio_health
       retries: 20
       delay: 3
-      until: minio_health.status == 200
+      until: horde_monitoring_minio_health.status == 200
 
     - name: Assert MinIO is healthy
       ansible.builtin.assert:
         that:
-          - minio_health.status == 200
+          - horde_monitoring_minio_health.status == 200
         fail_msg: "MinIO health check failed"
 
     - name: Verify Mimir ready endpoint
@@ -69,15 +69,15 @@
         url: "http://127.0.0.1:9009/ready"
         method: GET
         status_code: 200
-      register: mimir_health
+      register: horde_monitoring_mimir_health
       retries: 25
       delay: 5
-      until: mimir_health.status == 200
+      until: horde_monitoring_mimir_health.status == 200
 
     - name: Assert Mimir is ready
       ansible.builtin.assert:
         that:
-          - mimir_health.status == 200
+          - horde_monitoring_mimir_health.status == 200
         fail_msg: "Mimir ready check failed"
 
     - name: Verify Grafana health endpoint
@@ -85,15 +85,15 @@
         url: "http://127.0.0.1:3000/api/health"
         method: GET
         status_code: 200
-      register: grafana_health
+      register: horde_monitoring_grafana_health
       retries: 20
       delay: 3
-      until: grafana_health.status == 200
+      until: horde_monitoring_grafana_health.status == 200
 
     - name: Assert Grafana is healthy
       ansible.builtin.assert:
         that:
-          - grafana_health.status == 200
+          - horde_monitoring_grafana_health.status == 200
         fail_msg: "Grafana health check failed"
 
     - name: Push a test metric to Mimir via remote_write
@@ -107,13 +107,13 @@
         # but 200/202 for valid ones, and crucially NOT 404/503.
         # A 400 confirms the endpoint is live and processing requests.
         status_code: [200, 202, 400]
-      register: mimir_push
+      register: horde_monitoring_mimir_push
 
     - name: Assert Mimir push endpoint is responsive
       ansible.builtin.assert:
         that:
-          - mimir_push.status in [200, 202, 400]
-        fail_msg: "Mimir push endpoint is not responding (got {{ mimir_push.status }})"
+          - horde_monitoring_mimir_push.status in [200, 202, 400]
+        fail_msg: "Mimir push endpoint is not responding (got {{ horde_monitoring_mimir_push.status }})"
 
     - name: Query Mimir app tenant
       ansible.builtin.uri:
@@ -122,13 +122,13 @@
         headers:
           X-Scope-OrgID: "app-test"
         status_code: 200
-      register: mimir_query_app
+      register: horde_monitoring_mimir_query_app
 
     - name: Assert Mimir app tenant query works
       ansible.builtin.assert:
         that:
-          - mimir_query_app.status == 200
-          - "'resultType' in (mimir_query_app.content | default(mimir_query_app.json | to_json))"
+          - horde_monitoring_mimir_query_app.status == 200
+          - "'resultType' in (horde_monitoring_mimir_query_app.content | default(horde_monitoring_mimir_query_app.json | to_json))"
         fail_msg: "Mimir query failed for app tenant"
 
     - name: Query Mimir infra tenant
@@ -138,12 +138,12 @@
         headers:
           X-Scope-OrgID: "infra-test"
         status_code: 200
-      register: mimir_query_infra
+      register: horde_monitoring_mimir_query_infra
 
     - name: Assert Mimir infra tenant query works
       ansible.builtin.assert:
         that:
-          - mimir_query_infra.status == 200
+          - horde_monitoring_mimir_query_infra.status == 200
 
     - name: List Grafana datasources via API
       ansible.builtin.uri:
@@ -153,15 +153,15 @@
         password: "test-runtime-pass"
         force_basic_auth: true
         status_code: 200
-      register: grafana_ds
+      register: horde_monitoring_grafana_ds
 
     - name: Assert expected datasources exist
       ansible.builtin.assert:
         that:
-          - grafana_ds.json | length >= 2
-          - grafana_ds.json | map(attribute='name') | select('search', 'AI Horde App') | list | length > 0
-          - grafana_ds.json | map(attribute='name') | select('search', 'Infrastructure') | list | length > 0
-        fail_msg: "Expected datasources not found in Grafana: {{ grafana_ds.json | map(attribute='name') | list }}"
+          - horde_monitoring_grafana_ds.json | length >= 2
+          - horde_monitoring_grafana_ds.json | map(attribute='name') | select('search', 'AI Horde App') | list | length > 0
+          - horde_monitoring_grafana_ds.json | map(attribute='name') | select('search', 'Infrastructure') | list | length > 0
+        fail_msg: "Expected datasources not found in Grafana: {{ horde_monitoring_grafana_ds.json | map(attribute='name') | list }}"
 
     - name: List running Docker containers
       ansible.builtin.command: docker ps --format '{{ '{{' }}.Names{{ '}}' }}'
@@ -180,13 +180,13 @@
     - name: Check systemd service status
       ansible.builtin.systemd:
         name: mimir-monitoring
-      register: mimir_svc
+      register: horde_monitoring_mimir_svc
 
     - name: Assert systemd service is active
       ansible.builtin.assert:
         that:
-          - mimir_svc.status.ActiveState == 'active'
-        fail_msg: "mimir-monitoring service is not active: {{ mimir_svc.status.ActiveState }}"
+          - horde_monitoring_mimir_svc.status.ActiveState == 'active'
+        fail_msg: "mimir-monitoring service is not active: {{ horde_monitoring_mimir_svc.status.ActiveState }}"
 
     - name: Stop monitoring stack
       ansible.builtin.command: docker compose down

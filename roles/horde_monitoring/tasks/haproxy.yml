@@ -6,62 +6,62 @@
 # ── Build monitoring backends block ────────────────────────
 - name: Build monitoring backends block content
   ansible.builtin.set_fact:
-    _haproxy_backends_lines: >-
+    horde_monitoring__haproxy_backends_lines: >-
       {{
         (
         [
-          'backend grafana_backend',
+          'backend horde_monitoring_grafana_backend',
           '    balance leastconn',
           '    option forwardfor if-none',
-          '    server grafana_local 127.0.0.1:' ~ grafana_port ~ ' check',
+          '    server horde_monitoring_grafana_local 127.0.0.1:' ~ horde_monitoring_grafana_port ~ ' check',
           '',
-          'backend mimir_backend',
+          'backend horde_monitoring_mimir_backend',
           '    balance leastconn',
           '    timeout queue 30s',
           '    retries 3',
           '    option httpchk',
           '    option forwardfor if-none',
-          '    server mimir_local 127.0.0.1:' ~ mimir_port ~ ' check observe layer7',
+          '    server horde_monitoring_mimir_local 127.0.0.1:' ~ horde_monitoring_mimir_port ~ ' check observe layer7',
           '    http-check expect ! rstatus ^5',
         ]
         + (
           [
             '',
-            'backend loki_backend',
+            'backend horde_monitoring_loki_backend',
             '    balance leastconn',
             '    timeout queue 30s',
             '    retries 3',
             '    option httpchk',
             '    option forwardfor if-none',
-            '    server loki_local 127.0.0.1:' ~ loki_port ~ ' check observe layer7',
+            '    server horde_monitoring_loki_local 127.0.0.1:' ~ horde_monitoring_loki_port ~ ' check observe layer7',
             '    http-check expect ! rstatus ^5',
-          ] if (monitoring_install_loki | bool) else []
+          ] if (horde_monitoring_install_loki | bool) else []
         )
         + (
           [
             '',
-            'backend tempo_otlp_backend',
+            'backend horde_monitoring_tempo_otlp_backend',
             '    balance leastconn',
             '    timeout queue 30s',
             '    retries 3',
             '    option forwardfor if-none',
-            '    server tempo_local 127.0.0.1:' ~ tempo_otlp_http_port ~ ' check',
-          ] if (monitoring_install_tempo | bool) else []
+            '    server horde_monitoring_tempo_local 127.0.0.1:' ~ horde_monitoring_tempo_otlp_http_port ~ ' check',
+          ] if (horde_monitoring_install_tempo | bool) else []
         )
         ) }}
 
 - name: Join backends into multi-line block
   ansible.builtin.set_fact:
-    _haproxy_backends_block: "{{ _haproxy_backends_lines | join('\n') }}"
+    horde_monitoring__haproxy_backends_block: "{{ horde_monitoring__haproxy_backends_lines | join('\n') }}"
 
 # ── Delegate to shared safe-edit pipeline ──────────────────
-- name: Apply monitoring backends via shared safe-edit pipeline
+- name: Apply monitoring backends via shared safe-edit pipeline  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: _haproxy_safe_edit
   vars:
-    _hse_config_path: "{{ haproxy_config_path }}"
-    _hse_backup_dir: "{{ haproxy_backup_dir }}"
-    _hse_marker: "MONITORING BACKENDS"
-    _hse_block: "{{ _haproxy_backends_block }}"
-    _hse_backup_retention: "{{ haproxy_backup_retention_count | default(20) }}"
-    _hse_apply: "{{ monitoring_start_services | default(true) | bool }}"
+    _haproxy_safe_edit_config_path: "{{ horde_monitoring_haproxy_config_path }}"
+    _haproxy_safe_edit_backup_dir: "{{ horde_monitoring_haproxy_backup_dir }}"
+    _haproxy_safe_edit_marker: "MONITORING BACKENDS"
+    _haproxy_safe_edit_block: "{{ horde_monitoring__haproxy_backends_block }}"
+    _haproxy_safe_edit_backup_retention: "{{ haproxy_backup_retention_count | default(20) }}"
+    _haproxy_safe_edit_apply: "{{ horde_monitoring_start_services | default(true) | bool }}"

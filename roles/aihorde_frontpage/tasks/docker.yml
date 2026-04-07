@@ -6,19 +6,19 @@
   ansible.builtin.command: docker --version
   changed_when: false
   failed_when: false
-  register: _docker_check
+  register: aihorde_frontpage__docker_check
   become: true
 
 - name: Fail if Docker is not installed
   ansible.builtin.fail:
     msg: "Docker is required for AiHordeFrontpage (deploy_mode=docker). Please install Docker first."
-  when: _docker_check.rc != 0
+  when: aihorde_frontpage__docker_check.rc != 0
 
 - name: Verify Docker Compose V2 is available
   ansible.builtin.command: docker compose version
   changed_when: false
-  failed_when: _compose_check.rc != 0
-  register: _compose_check
+  failed_when: aihorde_frontpage__compose_check.rc != 0
+  register: aihorde_frontpage__compose_check
   become: true
 
 - name: Fail if Docker Compose V2 is not available
@@ -27,7 +27,7 @@
       Docker Compose V2 plugin is required but 'docker compose version' failed.
       The standalone docker-compose (V1) is end-of-life. Please install the
       Docker Compose V2 plugin: https://docs.docker.com/compose/install/
-  when: _compose_check.rc != 0
+  when: aihorde_frontpage__compose_check.rc != 0
 
 - name: Clone AiHordeFrontpage source repository
   ansible.builtin.git:
@@ -36,7 +36,7 @@
     version: "{{ aihorde_frontpage_repo_version }}"
     force: true
   become: true
-  register: _frontpage_clone
+  register: aihorde_frontpage__clone
   when: aihorde_frontpage_start_services | bool
 
 - name: Template Docker Compose for AiHordeFrontpage
@@ -73,8 +73,8 @@
     url: "http://127.0.0.1:{{ aihorde_frontpage_port }}/"
     method: GET
     status_code: 200
-  register: _frontpage_ready
-  until: _frontpage_ready.status == 200
+  register: aihorde_frontpage__ready
+  until: aihorde_frontpage__ready.status == 200
   retries: 30
   delay: 5
   become: true

@@ -10,9 +10,9 @@
 # Prometheus loads files matching /etc/prometheus/rules/*.rules automatically.
 #
 # Requires Prometheus scrape configs for:
-#   - job="{{ monitoring_mimir_job_name }}" → localhost:{{ mimir_port }}/metrics
-#   - job="{{ monitoring_minio_job_name }}" → localhost:{{ minio_api_port }}/minio/v2/metrics/cluster
-#     (MinIO rules are only included when mimir_enable_minio is true)
+#   - job="{{ horde_monitoring_mimir_job_name }}" → localhost:{{ horde_monitoring_mimir_port }}/metrics
+#   - job="{{ horde_monitoring_minio_job_name }}" → localhost:{{ horde_monitoring_minio_api_port }}/minio/v2/metrics/cluster
+#     (MinIO rules are only included when horde_monitoring_mimir_enable_minio is true)
 
 groups:
   # --- Dead man's switch ---
@@ -37,25 +37,25 @@ groups:
   - name: mimir-health
     rules:
       - alert: MimirDown
-        expr: up{job="{{ monitoring_mimir_job_name }}"} == 0
+        expr: up{job="{{ horde_monitoring_mimir_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "Mimir is unreachable"
           description: >-
-            The Mimir metrics endpoint (job={{ monitoring_mimir_job_name }})
+            The Mimir metrics endpoint (job={{ horde_monitoring_mimir_job_name }})
             has been unreachable for more than 2 minutes. Check the
             mimir-monitoring systemd service and Docker container health
             with: systemctl status mimir-monitoring && docker compose
-            -f {{ mimir_compose_dir }}/docker-compose.yml ps
+            -f {{ horde_monitoring_mimir_compose_dir }}/docker-compose.yml ps
 
       - alert: MimirRequestErrors
         expr: >-
           100 * (
-            sum(rate(cortex_request_duration_seconds_count{job="{{ monitoring_mimir_job_name }}", status_code=~"5.."}[5m]))
+            sum(rate(cortex_request_duration_seconds_count{job="{{ horde_monitoring_mimir_job_name }}", status_code=~"5.."}[5m]))
           /
-            clamp_min(sum(rate(cortex_request_duration_seconds_count{job="{{ monitoring_mimir_job_name }}"}[5m])), 1)
+            clamp_min(sum(rate(cortex_request_duration_seconds_count{job="{{ horde_monitoring_mimir_job_name }}"}[5m])), 1)
           ) > 1
         for: 15m
         labels:
@@ -69,9 +69,9 @@ groups:
 
       - alert: MimirIngestionStalled
         expr: >-
-          sum(rate(cortex_ingester_ingested_samples_total{job="{{ monitoring_mimir_job_name }}"}[15m])) == 0
+          sum(rate(cortex_ingester_ingested_samples_total{job="{{ horde_monitoring_mimir_job_name }}"}[15m])) == 0
             and
-          up{job="{{ monitoring_mimir_job_name }}"} == 1
+          up{job="{{ horde_monitoring_mimir_job_name }}"} == 1
         for: 30m
         labels:
           severity: critical
@@ -80,10 +80,10 @@ groups:
           description: >-
             Mimir is up but no samples have been ingested for 30 minutes.
             Verify that Prometheus remote_write is configured and that
-            Prometheus can reach Mimir at localhost:{{ mimir_port }}.
+            Prometheus can reach Mimir at localhost:{{ horde_monitoring_mimir_port }}.
 
       - alert: MimirCompactorFailed
-        expr: increase(cortex_compactor_runs_failed_total{job="{{ monitoring_mimir_job_name }}"}[2h]) > 0
+        expr: increase(cortex_compactor_runs_failed_total{job="{{ horde_monitoring_mimir_job_name }}"}[2h]) > 0
         for: 5m
         labels:
           severity: warning
@@ -96,9 +96,9 @@ groups:
 
       - alert: MimirCompactorNotRunning
         expr: >-
-          increase(cortex_compactor_runs_completed_total{job="{{ monitoring_mimir_job_name }}"}[6h]) == 0
+          increase(cortex_compactor_runs_completed_total{job="{{ horde_monitoring_mimir_job_name }}"}[6h]) == 0
             and
-          up{job="{{ monitoring_mimir_job_name }}"} == 1
+          up{job="{{ horde_monitoring_mimir_job_name }}"} == 1
         for: 2h
         labels:
           severity: warning
@@ -108,35 +108,35 @@ groups:
             The Mimir compactor has not completed a successful run in
             the past 6 hours (checked continuously for 2 hours).
             This may indicate a stuck compactor or a configuration issue.
-            Compaction interval is {{ mimir_compaction_interval }};
+            Compaction interval is {{ horde_monitoring_mimir_compaction_interval }};
             expected ~6 runs in the lookback window.
 
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
   # --- MinIO health ---
   # These rules require the MinIO Prometheus endpoint to be scraped.
   # See the example playbook for the scrape config:
-  #   job_name: {{ monitoring_minio_job_name }}
+  #   job_name: {{ horde_monitoring_minio_job_name }}
   #   metrics_path: /minio/v2/metrics/cluster
   - name: minio-health
     rules:
       - alert: MinIODown
-        expr: up{job="{{ monitoring_minio_job_name }}"} == 0
+        expr: up{job="{{ horde_monitoring_minio_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "MinIO is unreachable"
           description: >-
-            MinIO (job={{ monitoring_minio_job_name }}) has been unreachable
+            MinIO (job={{ horde_monitoring_minio_job_name }}) has been unreachable
             for more than 2 minutes. Mimir cannot store or retrieve metric
             blocks without MinIO. Check: docker logs minio --since 5m
 
       - alert: MinIODiskUsageCritical
         expr: >-
           (
-            minio_cluster_capacity_usable_free_bytes{job="{{ monitoring_minio_job_name }}"}
+            horde_monitoring_minio_cluster_capacity_usable_free_bytes{job="{{ horde_monitoring_minio_job_name }}"}
           /
-            minio_cluster_capacity_usable_total_bytes{job="{{ monitoring_minio_job_name }}"}
+            horde_monitoring_minio_cluster_capacity_usable_total_bytes{job="{{ horde_monitoring_minio_job_name }}"}
           ) < 0.05
         for: 5m
         labels:
@@ -146,14 +146,14 @@ groups:
           description: >-
             MinIO free disk space is below 5%. Ingestion will fail when
             disk is full. Immediate action: expand storage, reduce retention
-            (see monitoring_application_retention), or move data off-host.
+            (see horde_monitoring_application_retention), or move data off-host.
 
       - alert: MinIODiskUsageWarning
         expr: >-
           (
-            minio_cluster_capacity_usable_free_bytes{job="{{ monitoring_minio_job_name }}"}
+            horde_monitoring_minio_cluster_capacity_usable_free_bytes{job="{{ horde_monitoring_minio_job_name }}"}
           /
-            minio_cluster_capacity_usable_total_bytes{job="{{ monitoring_minio_job_name }}"}
+            horde_monitoring_minio_cluster_capacity_usable_total_bytes{job="{{ horde_monitoring_minio_job_name }}"}
           ) < 0.15
         for: 10m
         labels:
@@ -163,34 +163,34 @@ groups:
           description: >-
             MinIO free disk space is below 15%. Plan for storage expansion
             or review retention settings before disk fills up. Current data
-            directory: {{ minio_data_dir }}
+            directory: {{ horde_monitoring_minio_data_dir }}
 {% endif %}
 
-{% if monitoring_install_loki | bool %}
+{% if horde_monitoring_install_loki | bool %}
   # --- Loki health ---
   # These rules monitor the Loki log aggregation backend.
   # Requires a Prometheus scrape config for:
-  #   job="{{ monitoring_loki_job_name }}" → localhost:{{ loki_port }}/metrics
+  #   job="{{ horde_monitoring_loki_job_name }}" → localhost:{{ horde_monitoring_loki_port }}/metrics
   - name: loki-health
     rules:
       - alert: LokiDown
-        expr: up{job="{{ monitoring_loki_job_name }}"} == 0
+        expr: up{job="{{ horde_monitoring_loki_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "Loki is unreachable"
           description: >-
-            The Loki metrics endpoint (job={{ monitoring_loki_job_name }})
+            The Loki metrics endpoint (job={{ horde_monitoring_loki_job_name }})
             has been unreachable for more than 2 minutes. Log ingestion
             is disrupted. Check: docker logs loki --since 5m
 
       - alert: LokiRequestErrors
         expr: >-
           100 * (
-            sum(rate(loki_request_duration_seconds_count{job="{{ monitoring_loki_job_name }}", status_code=~"5.."}[5m]))
+            sum(rate(horde_monitoring_loki_request_duration_seconds_count{job="{{ horde_monitoring_loki_job_name }}", status_code=~"5.."}[5m]))
           /
-            clamp_min(sum(rate(loki_request_duration_seconds_count{job="{{ monitoring_loki_job_name }}"}[5m])), 1)
+            clamp_min(sum(rate(horde_monitoring_loki_request_duration_seconds_count{job="{{ horde_monitoring_loki_job_name }}"}[5m])), 1)
           ) > 1
         for: 15m
         labels:
@@ -204,9 +204,9 @@ groups:
 
       - alert: LokiIngestionStalled
         expr: >-
-          sum(rate(loki_distributor_bytes_received_total{job="{{ monitoring_loki_job_name }}"}[15m])) == 0
+          sum(rate(horde_monitoring_loki_distributor_bytes_received_total{job="{{ horde_monitoring_loki_job_name }}"}[15m])) == 0
             and
-          up{job="{{ monitoring_loki_job_name }}"} == 1
+          up{job="{{ horde_monitoring_loki_job_name }}"} == 1
         for: 30m
         labels:
           severity: warning
@@ -215,34 +215,34 @@ groups:
           description: >-
             Loki is up but no log data has been received for 30 minutes.
             Verify that Alloy or other log shippers are sending to Loki
-            at localhost:{{ loki_port }}.
+            at localhost:{{ horde_monitoring_loki_port }}.
 {% endif %}
 
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
   # --- Tempo health ---
   # These rules monitor the Tempo distributed tracing backend.
   # Requires a Prometheus scrape config for:
-  #   job="{{ monitoring_tempo_job_name }}" → localhost:{{ tempo_http_port }}/metrics
+  #   job="{{ horde_monitoring_tempo_job_name }}" → localhost:{{ horde_monitoring_tempo_http_port }}/metrics
   - name: tempo-health
     rules:
       - alert: TempoDown
-        expr: up{job="{{ monitoring_tempo_job_name }}"} == 0
+        expr: up{job="{{ horde_monitoring_tempo_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "Tempo is unreachable"
           description: >-
-            The Tempo metrics endpoint (job={{ monitoring_tempo_job_name }})
+            The Tempo metrics endpoint (job={{ horde_monitoring_tempo_job_name }})
             has been unreachable for more than 2 minutes. Trace ingestion
             is disrupted. Check: docker logs tempo --since 5m
 
       - alert: TempoRequestErrors
         expr: >-
           100 * (
-            sum(rate(tempo_request_duration_seconds_count{job="{{ monitoring_tempo_job_name }}", status_code=~"5.."}[5m]))
+            sum(rate(horde_monitoring_tempo_request_duration_seconds_count{job="{{ horde_monitoring_tempo_job_name }}", status_code=~"5.."}[5m]))
           /
-            clamp_min(sum(rate(tempo_request_duration_seconds_count{job="{{ monitoring_tempo_job_name }}"}[5m])), 1)
+            clamp_min(sum(rate(horde_monitoring_tempo_request_duration_seconds_count{job="{{ horde_monitoring_tempo_job_name }}"}[5m])), 1)
           ) > 1
         for: 15m
         labels:
@@ -256,9 +256,9 @@ groups:
 
       - alert: TempoIngestionStalled
         expr: >-
-          sum(rate(tempo_distributor_spans_received_total{job="{{ monitoring_tempo_job_name }}"}[15m])) == 0
+          sum(rate(horde_monitoring_tempo_distributor_spans_received_total{job="{{ horde_monitoring_tempo_job_name }}"}[15m])) == 0
             and
-          up{job="{{ monitoring_tempo_job_name }}"} == 1
+          up{job="{{ horde_monitoring_tempo_job_name }}"} == 1
         for: 30m
         labels:
           severity: warning
@@ -267,34 +267,34 @@ groups:
           description: >-
             Tempo is up but no spans have been received for 30 minutes.
             Verify that Alloy or other OTLP sources are sending traces
-            to localhost:{{ tempo_otlp_grpc_port }}.
+            to localhost:{{ horde_monitoring_tempo_otlp_grpc_port }}.
 {% endif %}
 
-{% if monitoring_install_pyroscope | bool %}
+{% if horde_monitoring_install_pyroscope | bool %}
   # --- Pyroscope health ---
   # These rules monitor the Pyroscope continuous profiling backend.
   # Requires a Prometheus scrape config for:
-  #   job="{{ monitoring_pyroscope_job_name }}" → localhost:{{ pyroscope_port }}/metrics
+  #   job="{{ horde_monitoring_pyroscope_job_name }}" → localhost:{{ horde_monitoring_pyroscope_port }}/metrics
   - name: pyroscope-health
     rules:
       - alert: PyroscopeDown
-        expr: up{job="{{ monitoring_pyroscope_job_name }}"} == 0
+        expr: up{job="{{ horde_monitoring_pyroscope_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "Pyroscope is unreachable"
           description: >-
-            The Pyroscope metrics endpoint (job={{ monitoring_pyroscope_job_name }})
+            The Pyroscope metrics endpoint (job={{ horde_monitoring_pyroscope_job_name }})
             has been unreachable for more than 2 minutes. Profile ingestion
             is disrupted. Check: docker logs pyroscope --since 5m
 
       - alert: PyroscopeRequestErrors
         expr: >-
           100 * (
-            sum(rate(pyroscope_request_duration_seconds_count{job="{{ monitoring_pyroscope_job_name }}", status_code=~"5.."}[5m]))
+            sum(rate(horde_monitoring_pyroscope_request_duration_seconds_count{job="{{ horde_monitoring_pyroscope_job_name }}", status_code=~"5.."}[5m]))
           /
-            clamp_min(sum(rate(pyroscope_request_duration_seconds_count{job="{{ monitoring_pyroscope_job_name }}"}[5m])), 1)
+            clamp_min(sum(rate(horde_monitoring_pyroscope_request_duration_seconds_count{job="{{ horde_monitoring_pyroscope_job_name }}"}[5m])), 1)
           ) > 1
         for: 15m
         labels:
@@ -308,9 +308,9 @@ groups:
 
       - alert: PyroscopeIngestionStalled
         expr: >-
-          sum(rate(pyroscope_ingester_ingested_sample_count{job="{{ monitoring_pyroscope_job_name }}"}[15m])) == 0
+          sum(rate(horde_monitoring_pyroscope_ingester_ingested_sample_count{job="{{ horde_monitoring_pyroscope_job_name }}"}[15m])) == 0
             and
-          up{job="{{ monitoring_pyroscope_job_name }}"} == 1
+          up{job="{{ horde_monitoring_pyroscope_job_name }}"} == 1
         for: 30m
         labels:
           severity: warning
@@ -319,7 +319,7 @@ groups:
           description: >-
             Pyroscope is up but no profiles have been received for 30 minutes.
             Verify that SDK agents are configured to push profiles to
-            localhost:{{ pyroscope_port }}.
+            localhost:{{ horde_monitoring_pyroscope_port }}.
 {% endif %}
 
   # --- Host filesystem disk usage (Plan 005C) ---
@@ -331,9 +331,9 @@ groups:
   # by Prometheus. If node_exporter is not deployed, these alerts will
   # silently never fire. The example playbook deploys node_exporter via
   # the prometheus.prometheus role, but this role does not install it.
-  # Set monitoring_install_host_disk_alerts: false to disable these rules
+  # Set horde_monitoring_install_host_disk_alerts: false to disable these rules
   # if node_exporter is not available.
-{% if monitoring_install_host_disk_alerts | default(true) | bool %}
+{% if horde_monitoring_install_host_disk_alerts | default(true) | bool %}
   - name: host-disk-usage
     rules:
       - alert: HostDiskUsageCritical

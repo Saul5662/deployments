@@ -43,8 +43,8 @@
     url: "http://{{ ai_horde_backend_host }}:{{ item }}/api/v2/status/heartbeat"
     method: GET
     status_code: 200
-  register: _horde_restart_health
-  until: _horde_restart_health.status == 200
+  register: ai_horde__restart_health
+  until: ai_horde__restart_health.status == 200
   retries: 20
   delay: 3
   become: true
@@ -57,8 +57,8 @@
     url: "http://{{ ai_horde_backend_host }}:{{ item }}/api/v2/status/heartbeat"
     method: GET
     status_code: 200
-  register: _horde_restart_health
-  until: _horde_restart_health.status == 200
+  register: ai_horde__restart_health
+  until: ai_horde__restart_health.status == 200
   retries: 20
   delay: 3
   become: true

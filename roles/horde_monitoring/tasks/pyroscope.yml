@@ -4,7 +4,7 @@
 
 - name: Create Pyroscope config directory
   ansible.builtin.file:
-    path: "{{ pyroscope_config_dir }}"
+    path: "{{ horde_monitoring_pyroscope_config_dir }}"
     state: directory
     owner: root
     group: root
@@ -13,7 +13,7 @@
 
 - name: Create Pyroscope data directory
   ansible.builtin.file:
-    path: "{{ pyroscope_data_dir }}"
+    path: "{{ horde_monitoring_pyroscope_data_dir }}"
     state: directory
     owner: "10001"
     group: "10001"
@@ -23,7 +23,7 @@
 - name: Template Pyroscope configuration
   ansible.builtin.template:
     src: pyroscope.yaml.j2
-    dest: "{{ pyroscope_config_dir }}/pyroscope.yaml"
+    dest: "{{ horde_monitoring_pyroscope_config_dir }}/pyroscope.yaml"
     owner: root
     group: "10001"
     mode: "0640"
@@ -34,7 +34,7 @@
 - name: Template Pyroscope runtime overrides
   ansible.builtin.template:
     src: pyroscope-runtime-overrides.yaml.j2
-    dest: "{{ pyroscope_config_dir }}/runtime-overrides.yaml"
+    dest: "{{ horde_monitoring_pyroscope_config_dir }}/runtime-overrides.yaml"
     owner: root
     group: "10001"
     mode: "0640"

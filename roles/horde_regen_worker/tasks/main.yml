@@ -10,7 +10,7 @@
     - packages
     - worker
 
-- name: Ensure {{ worker_username }} user exists
+- name: Ensure worker user exists ({{ worker_username }})
   ansible.builtin.user:
     name: "{{ worker_username }}"
     shell: /bin/bash
@@ -30,7 +30,7 @@
   notify: Restart AI Worker service
   tags: worker
 
-- name: Ensure git repo is owned by {{ worker_username }}
+- name: Ensure git repo is owned by worker user ({{ worker_username }})
   ansible.builtin.file:
     path: /home/{{ worker_username }}/{{ worker_clone_dir }}
     owner: "{{ worker_username }}"
@@ -38,7 +38,7 @@
     recurse: true
   tags: worker
 
-- name: Ensure worker_runtime_dir '{{ worker_runtime_dir }}' exists.
+- name: Ensure worker_runtime_dir exists ({{ worker_runtime_dir }})
   ansible.builtin.file:
     path: /home/{{ worker_username }}/{{ worker_runtime_dir }}
     owner: "{{ worker_username }}"
@@ -48,7 +48,7 @@
   tags:
     - worker
 
-- name: Ensure models_dir dir '{{ models_dir }}' exists.
+- name: Ensure models_dir exists ({{ models_dir }})
   ansible.builtin.file:
     path: /home/{{ worker_username }}/{{ models_dir }}
     owner: "{{ worker_username }}"
@@ -189,7 +189,7 @@
     - worker
     - systemd
 
-- name: Enable {{ worker_username }} lingering if needed
+- name: Enable lingering if needed ({{ worker_username }})
   ansible.builtin.command: loginctl enable-linger {{ worker_username }}
   args:
     creates: /var/lib/systemd/linger/{{ worker_username }}
@@ -198,7 +198,7 @@
     - systemd
 
 # Needed for the next task
-- name: Find {{ worker_username }} uid
+- name: Find worker uid ({{ worker_username }})
   ansible.builtin.getent:
     database: passwd
   tags:

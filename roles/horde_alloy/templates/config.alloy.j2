@@ -10,23 +10,23 @@
 //   OTLP Metrics: otelcol.receiver.otlp → otelcol.processor.batch → otelcol.exporter.prometheus → prometheus.remote_write (Mimir)
 
 logging {
-  level = {{ alloy_log_level | to_json }}
+  level = {{ horde_alloy_log_level | to_json }}
 }
 
 // ============================================================================
 // METRICS PIPELINE
 // ============================================================================
-{% if alloy_collect_metrics %}
+{% if horde_alloy_collect_metrics %}
 
 prometheus.exporter.unix "node" { }
 
 prometheus.scrape "node" {
   targets         = prometheus.exporter.unix.node.targets
-  scrape_interval = {{ alloy_scrape_interval | to_json }}
+  scrape_interval = {{ horde_alloy_scrape_interval | to_json }}
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
-{% for target in alloy_extra_scrape_targets %}
+{% for target in horde_alloy_extra_scrape_targets %}
 prometheus.scrape {{ target.job | to_json }} {
   targets = [{
     "__address__" = {{ target.address | to_json }},
@@ -34,7 +34,7 @@ prometheus.scrape {{ target.job | to_json }} {
 {% if target.metrics_path is defined %}
   metrics_path    = {{ target.metrics_path | to_json }}
 {% endif %}
-  scrape_interval = {{ alloy_scrape_interval | to_json }}
+  scrape_interval = {{ horde_alloy_scrape_interval | to_json }}
   forward_to      = [prometheus.remote_write.mimir.receiver]
 }
 
@@ -42,28 +42,28 @@ prometheus.scrape {{ target.job | to_json }} {
 prometheus.remote_write "mimir" {
   external_labels = merge(
     { "instance" = {{ ansible_hostname | to_json }} },
-{% for k, v in alloy_external_labels.items() %}
+{% for k, v in horde_alloy_external_labels.items() %}
     { {{ k | to_json }} = {{ v | to_json }} },
 {% endfor %}
   )
 
   endpoint {
-    url = {{ alloy_mimir_endpoint | to_json }}
+    url = {{ horde_alloy_mimir_endpoint | to_json }}
 
     headers = {
-      "X-Scope-OrgID" = {{ alloy_tenant_id | to_json }},
+      "X-Scope-OrgID" = {{ horde_alloy_tenant_id | to_json }},
     }
 
-{% if alloy_basic_auth_username %}
+{% if horde_alloy_basic_auth_username %}
     basic_auth {
-      username = {{ alloy_basic_auth_username | to_json }}
-      password = {{ alloy_basic_auth_password | to_json }}
+      username = {{ horde_alloy_basic_auth_username | to_json }}
+      password = {{ horde_alloy_basic_auth_password | to_json }}
     }
 {% endif %}
 
-{% if alloy_tls_ca_cert %}
+{% if horde_alloy_tls_ca_cert %}
     tls_config {
-      ca_file = "{{ alloy_config_dir }}/ca.crt"
+      ca_file = "{{ horde_alloy_config_dir }}/ca.crt"
     }
 {% endif %}
   }
@@ -73,9 +73,9 @@ prometheus.remote_write "mimir" {
 // ============================================================================
 // LOG PIPELINE
 // ============================================================================
-{% if alloy_collect_logs %}
+{% if horde_alloy_collect_logs %}
 
-{% if alloy_collect_journal %}
+{% if horde_alloy_collect_journal %}
 // Relabel journal fields into useful labels.
 loki.relabel "journal" {
   forward_to = []
@@ -97,27 +97,27 @@ loki.relabel "journal" {
 }
 
 loki.source.journal "systemd" {
-  max_age       = {{ alloy_journal_max_age | to_json }}
+  max_age       = {{ horde_alloy_journal_max_age | to_json }}
   forward_to    = [loki.write.loki.receiver]
   relabel_rules = loki.relabel.journal.rules
   labels        = merge(
     { "source" = "journal", "instance" = {{ ansible_hostname | to_json }} },
-{% for k, v in alloy_log_labels.items() %}
+{% for k, v in horde_alloy_log_labels.items() %}
     { {{ k | to_json }} = {{ v | to_json }} },
 {% endfor %}
   )
 }
 
 {% endif %}
-{% if alloy_collect_log_files | length > 0 %}
+{% if horde_alloy_collect_log_files | length > 0 %}
 local.file_match "log_files" {
   path_targets = [
-{% for pattern in alloy_collect_log_files %}
+{% for pattern in horde_alloy_collect_log_files %}
     {
       "__path__"  = {{ pattern | to_json }},
       "instance"  = {{ ansible_hostname | to_json }},
       "source"    = "file",
-{% for k, v in alloy_log_labels.items() %}
+{% for k, v in horde_alloy_log_labels.items() %}
       {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
     },
@@ -131,7 +131,7 @@ loki.source.file "log_files" {
 }
 
 {% endif %}
-{% if alloy_collect_docker_logs %}
+{% if horde_alloy_collect_docker_logs %}
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
@@ -151,7 +151,7 @@ loki.source.docker "containers" {
   forward_to = [loki.process.docker.receiver]
   labels     = merge(
     { "source" = "docker", "instance" = {{ ansible_hostname | to_json }} },
-{% for k, v in alloy_log_labels.items() %}
+{% for k, v in horde_alloy_log_labels.items() %}
     { {{ k | to_json }} = {{ v | to_json }} },
 {% endfor %}
   )
@@ -165,26 +165,26 @@ loki.process "docker" {
 {% endif %}
 loki.write "loki" {
   endpoint {
-    url       = {{ alloy_loki_endpoint | to_json }}
-    tenant_id = {{ alloy_tenant_id | to_json }}
+    url       = {{ horde_alloy_loki_endpoint | to_json }}
+    tenant_id = {{ horde_alloy_tenant_id | to_json }}
 
-{% if alloy_basic_auth_username %}
+{% if horde_alloy_basic_auth_username %}
     basic_auth {
-      username = {{ alloy_basic_auth_username | to_json }}
-      password = {{ alloy_basic_auth_password | to_json }}
+      username = {{ horde_alloy_basic_auth_username | to_json }}
+      password = {{ horde_alloy_basic_auth_password | to_json }}
     }
 {% endif %}
 
-{% if alloy_tls_ca_cert %}
+{% if horde_alloy_tls_ca_cert %}
     tls_config {
-      ca_file = "{{ alloy_config_dir }}/ca.crt"
+      ca_file = "{{ horde_alloy_config_dir }}/ca.crt"
     }
 {% endif %}
   }
 
   external_labels = {
     "instance" = {{ ansible_hostname | to_json }},
-{% for k, v in alloy_log_labels.items() %}
+{% for k, v in horde_alloy_log_labels.items() %}
     {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
   }
@@ -194,19 +194,19 @@ loki.write "loki" {
 // ============================================================================
 // OTLP PIPELINE (traces + metrics from instrumented applications)
 // ============================================================================
-{% if alloy_collect_traces %}
+{% if horde_alloy_collect_traces %}
 
 otelcol.receiver.otlp "local" {
   grpc {
-    endpoint = "{{ alloy_otlp_listen_address }}:{{ alloy_otlp_grpc_port }}"
+    endpoint = "{{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_grpc_port }}"
   }
 
   http {
-    endpoint = "{{ alloy_otlp_listen_address }}:{{ alloy_otlp_http_port }}"
+    endpoint = "{{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_http_port }}"
   }
 
   output {
-{% if alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics %}
     metrics = [otelcol.processor.batch.default.input]
 {% endif %}
     traces  = [otelcol.processor.batch.default.input]
@@ -214,18 +214,18 @@ otelcol.receiver.otlp "local" {
 }
 
 otelcol.processor.batch "default" {
-  timeout             = {{ alloy_trace_batch_timeout | to_json }}
-  send_batch_max_size = {{ alloy_trace_batch_size }}
+  timeout             = {{ horde_alloy_trace_batch_timeout | to_json }}
+  send_batch_max_size = {{ horde_alloy_trace_batch_size }}
 
   output {
-{% if alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics %}
     metrics = [otelcol.exporter.prometheus.mimir.input]
 {% endif %}
     traces  = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
-{% if alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics %}
 otelcol.exporter.prometheus "mimir" {
   forward_to = [prometheus.remote_write.otlp_metrics.receiver]
 }
@@ -233,51 +233,51 @@ otelcol.exporter.prometheus "mimir" {
 prometheus.remote_write "otlp_metrics" {
   external_labels = merge(
     { "instance" = {{ ansible_hostname | to_json }} },
-{% for k, v in alloy_external_labels.items() %}
+{% for k, v in horde_alloy_external_labels.items() %}
     { {{ k | to_json }} = {{ v | to_json }} },
 {% endfor %}
   )
 
   endpoint {
-    url = {{ alloy_mimir_endpoint | to_json }}
+    url = {{ horde_alloy_mimir_endpoint | to_json }}
 
     headers = {
-      "X-Scope-OrgID" = {{ alloy_otlp_metrics_tenant_id | to_json }},
+      "X-Scope-OrgID" = {{ horde_alloy_otlp_metrics_tenant_id | to_json }},
     }
 
-{% if alloy_basic_auth_username %}
+{% if horde_alloy_basic_auth_username %}
     basic_auth {
-      username = {{ alloy_basic_auth_username | to_json }}
-      password = {{ alloy_basic_auth_password | to_json }}
+      username = {{ horde_alloy_basic_auth_username | to_json }}
+      password = {{ horde_alloy_basic_auth_password | to_json }}
     }
 {% endif %}
 
-{% if alloy_tls_ca_cert %}
+{% if horde_alloy_tls_ca_cert %}
     tls_config {
-      ca_file = "{{ alloy_config_dir }}/ca.crt"
+      ca_file = "{{ horde_alloy_config_dir }}/ca.crt"
     }
 {% endif %}
   }
 }
 
 {% endif %}
-{% if alloy_basic_auth_username %}
+{% if horde_alloy_basic_auth_username %}
 otelcol.auth.basic "tempo" {
-  username = {{ alloy_basic_auth_username | to_json }}
-  password = {{ alloy_basic_auth_password | to_json }}
+  username = {{ horde_alloy_basic_auth_username | to_json }}
+  password = {{ horde_alloy_basic_auth_password | to_json }}
 }
 
 {% endif %}
 otelcol.exporter.otlphttp "tempo" {
   client {
-    endpoint = {{ alloy_tempo_endpoint | to_json }}
-{% if alloy_basic_auth_username %}
+    endpoint = {{ horde_alloy_tempo_endpoint | to_json }}
+{% if horde_alloy_basic_auth_username %}
     auth     = otelcol.auth.basic.tempo.handler
 {% endif %}
 
-{% if alloy_tls_ca_cert %}
+{% if horde_alloy_tls_ca_cert %}
     tls {
-      ca_file = "{{ alloy_config_dir }}/ca.crt"
+      ca_file = "{{ horde_alloy_config_dir }}/ca.crt"
     }
 {% endif %}
   }

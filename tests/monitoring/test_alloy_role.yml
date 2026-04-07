@@ -7,46 +7,46 @@
   gather_facts: true
 
   vars:
-    alloy_version: "1.8.1"
-    alloy_config_dir: "/etc/alloy"
-    alloy_data_dir: "/var/lib/alloy"
-    alloy_log_level: "warn"
-    alloy_http_listen_address: "127.0.0.1"
-    alloy_http_port: 12345
-    alloy_scrape_interval: "15s"
-    alloy_tls_ca_cert: ""
-    alloy_journal_max_age: "24h"
-    alloy_forward_otlp_metrics: true
-    alloy_otlp_listen_address: "127.0.0.1"
-    alloy_otlp_grpc_port: 4317
-    alloy_otlp_http_port: 4318
-    alloy_otlp_metrics_tenant_id: "test-tenant"
-    alloy_trace_batch_timeout: "5s"
-    alloy_trace_batch_size: 8192
-    alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
-    alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
-    alloy_tempo_endpoint: "https://tempo.test.local:4318"
-    alloy_tenant_id: "test-tenant"
-    alloy_basic_auth_username: "alloy"
-    alloy_basic_auth_password: "test-secret-not-default"
-    alloy_collect_metrics: true
-    alloy_collect_logs: true
-    alloy_collect_journal: true
-    alloy_collect_log_files:
+    horde_alloy_version: "1.8.1"
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_data_dir: "/var/lib/alloy"
+    horde_alloy_log_level: "warn"
+    horde_alloy_http_listen_address: "127.0.0.1"
+    horde_alloy_http_port: 12345
+    horde_alloy_scrape_interval: "15s"
+    horde_alloy_tls_ca_cert: ""
+    horde_alloy_journal_max_age: "24h"
+    horde_alloy_forward_otlp_metrics: true
+    horde_alloy_otlp_listen_address: "127.0.0.1"
+    horde_alloy_otlp_grpc_port: 4317
+    horde_alloy_otlp_http_port: 4318
+    horde_alloy_otlp_metrics_tenant_id: "test-tenant"
+    horde_alloy_trace_batch_timeout: "5s"
+    horde_alloy_trace_batch_size: 8192
+    horde_alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
+    horde_alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
+    horde_alloy_tempo_endpoint: "https://tempo.test.local:4318"
+    horde_alloy_tenant_id: "test-tenant"
+    horde_alloy_basic_auth_username: "alloy"
+    horde_alloy_basic_auth_password: "test-secret-not-default"
+    horde_alloy_collect_metrics: true
+    horde_alloy_collect_logs: true
+    horde_alloy_collect_journal: true
+    horde_alloy_collect_log_files:
       - "/var/log/test/*.log"
-    alloy_collect_docker_logs: false
-    alloy_collect_traces: true
-    alloy_external_labels:
+    horde_alloy_collect_docker_logs: false
+    horde_alloy_collect_traces: true
+    horde_alloy_external_labels:
       environment: "test"
-    alloy_log_labels:
+    horde_alloy_log_labels:
       app: "testapp"
-    alloy_extra_scrape_targets:
+    horde_alloy_extra_scrape_targets:
       - job: "myapp"
         address: "127.0.0.1:8080"
         metrics_path: "/metrics"
-    alloy_start_service: false
+    horde_alloy_start_service: false
     # Skip package installation in CI — just test config rendering
-    alloy_install_method: "package"
+    horde_alloy_install_method: "package"
 
   pre_tasks:
     # Create the alloy user/group that the role expects
@@ -68,13 +68,13 @@
     - name: Validate Alloy endpoint configuration
       ansible.builtin.assert:
         that:
-          - alloy_mimir_endpoint | length > 0 or not alloy_collect_metrics
-          - alloy_loki_endpoint  | length > 0 or not alloy_collect_logs
-          - alloy_tempo_endpoint | length > 0 or not alloy_collect_traces
+          - horde_alloy_mimir_endpoint | length > 0 or not horde_alloy_collect_metrics
+          - horde_alloy_loki_endpoint  | length > 0 or not horde_alloy_collect_logs
+          - horde_alloy_tempo_endpoint | length > 0 or not horde_alloy_collect_traces
 
     - name: Ensure Alloy config directory exists
       ansible.builtin.file:
-        path: "{{ alloy_config_dir | default('/etc/alloy') }}"
+        path: "{{ horde_alloy_config_dir | default('/etc/alloy') }}"
         state: directory
         owner: alloy
         group: alloy
@@ -82,7 +82,7 @@
 
     - name: Ensure Alloy data directory exists
       ansible.builtin.file:
-        path: "{{ alloy_data_dir | default('/var/lib/alloy') }}"
+        path: "{{ horde_alloy_data_dir | default('/var/lib/alloy') }}"
         state: directory
         owner: alloy
         group: alloy
@@ -91,7 +91,7 @@
     - name: Deploy Alloy configuration (template only)
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../roles/horde_alloy/templates/config.alloy.j2"
-        dest: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+        dest: "{{ horde_alloy_config_dir | default('/etc/alloy') }}/config.alloy"
         owner: alloy
         group: alloy
         mode: "0640"
@@ -107,75 +107,75 @@
   post_tasks:
     - name: Read rendered Alloy config
       ansible.builtin.slurp:
-        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
-      register: alloy_config
+        path: "{{ horde_alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+      register: horde_alloy_config
 
     - name: Assert metrics pipeline is present
       ansible.builtin.assert:
         that:
-          - "'prometheus.exporter.unix' in (alloy_config.content | b64decode)"
-          - "'prometheus.scrape' in (alloy_config.content | b64decode)"
-          - "'prometheus.remote_write' in (alloy_config.content | b64decode)"
-          - "'X-Scope-OrgID' in (alloy_config.content | b64decode)"
-          - "'test-tenant' in (alloy_config.content | b64decode)"
-          - "'mimir.test.local' in (alloy_config.content | b64decode)"
-          - "'basic_auth' in (alloy_config.content | b64decode)"
+          - "'prometheus.exporter.unix' in (horde_alloy_config.content | b64decode)"
+          - "'prometheus.scrape' in (horde_alloy_config.content | b64decode)"
+          - "'prometheus.remote_write' in (horde_alloy_config.content | b64decode)"
+          - "'X-Scope-OrgID' in (horde_alloy_config.content | b64decode)"
+          - "'test-tenant' in (horde_alloy_config.content | b64decode)"
+          - "'mimir.test.local' in (horde_alloy_config.content | b64decode)"
+          - "'basic_auth' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Alloy config must contain metrics pipeline with tenant header"
 
     - name: Assert extra scrape target is present
       ansible.builtin.assert:
         that:
-          - "'myapp' in (alloy_config.content | b64decode)"
-          - "'127.0.0.1:8080' in (alloy_config.content | b64decode)"
+          - "'myapp' in (horde_alloy_config.content | b64decode)"
+          - "'127.0.0.1:8080' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Extra scrape targets must be rendered in config"
 
     - name: Assert log pipeline is present
       ansible.builtin.assert:
         that:
-          - "'loki.source.journal' in (alloy_config.content | b64decode)"
-          - "'loki.relabel' in (alloy_config.content | b64decode)"
-          - "'loki.write' in (alloy_config.content | b64decode)"
-          - "'loki.test.local' in (alloy_config.content | b64decode)"
-          - "'local.file_match' in (alloy_config.content | b64decode)"
-          - "'loki.source.file' in (alloy_config.content | b64decode)"
-          - "'/var/log/test/*.log' in (alloy_config.content | b64decode)"
+          - "'loki.source.journal' in (horde_alloy_config.content | b64decode)"
+          - "'loki.relabel' in (horde_alloy_config.content | b64decode)"
+          - "'loki.write' in (horde_alloy_config.content | b64decode)"
+          - "'loki.test.local' in (horde_alloy_config.content | b64decode)"
+          - "'local.file_match' in (horde_alloy_config.content | b64decode)"
+          - "'loki.source.file' in (horde_alloy_config.content | b64decode)"
+          - "'/var/log/test/*.log' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Alloy config must contain log pipeline with journal and file sources"
 
     - name: Assert trace pipeline is present
       ansible.builtin.assert:
         that:
-          - "'otelcol.receiver.otlp' in (alloy_config.content | b64decode)"
-          - "'otelcol.processor.batch' in (alloy_config.content | b64decode)"
-          - "'otelcol.exporter.otlphttp' in (alloy_config.content | b64decode)"
-          - "'otelcol.auth.basic' in (alloy_config.content | b64decode)"
-          - "'tempo.test.local' in (alloy_config.content | b64decode)"
-          - "'4317' in (alloy_config.content | b64decode)"
-          - "'4318' in (alloy_config.content | b64decode)"
+          - "'otelcol.receiver.otlp' in (horde_alloy_config.content | b64decode)"
+          - "'otelcol.processor.batch' in (horde_alloy_config.content | b64decode)"
+          - "'otelcol.exporter.otlphttp' in (horde_alloy_config.content | b64decode)"
+          - "'otelcol.auth.basic' in (horde_alloy_config.content | b64decode)"
+          - "'tempo.test.local' in (horde_alloy_config.content | b64decode)"
+          - "'4317' in (horde_alloy_config.content | b64decode)"
+          - "'4318' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Alloy config must contain trace pipeline with OTLP receiver and Tempo exporter"
 
     - name: Assert external labels are present
       ansible.builtin.assert:
         that:
-          - "'environment' in (alloy_config.content | b64decode)"
-          - "'test' in (alloy_config.content | b64decode)"
+          - "'environment' in (horde_alloy_config.content | b64decode)"
+          - "'test' in (horde_alloy_config.content | b64decode)"
         fail_msg: "External labels must be rendered in config"
 
     - name: Assert log labels are present
       ansible.builtin.assert:
         that:
-          - "'testapp' in (alloy_config.content | b64decode)"
+          - "'testapp' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Log labels must be rendered in config"
 
     - name: Assert Docker log collection is NOT present when disabled
       ansible.builtin.assert:
         that:
-          - '''loki.source.docker "containers"'' not in (alloy_config.content | b64decode)'
-          - '''discovery.docker "containers"'' not in (alloy_config.content | b64decode)'
-        fail_msg: "Docker log collection should not appear when alloy_collect_docker_logs is false"
+          - '''loki.source.docker "containers"'' not in (horde_alloy_config.content | b64decode)'
+          - '''discovery.docker "containers"'' not in (horde_alloy_config.content | b64decode)'
+        fail_msg: "Docker log collection should not appear when horde_alloy_collect_docker_logs is false"
 
     - name: Stat config file permissions
       ansible.builtin.stat:
-        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+        path: "{{ horde_alloy_config_dir | default('/etc/alloy') }}/config.alloy"
       register: _alloy_config_stat
 
     - name: Assert config file permissions
@@ -189,14 +189,14 @@
     - name: Read environment file
       ansible.builtin.slurp:
         path: /etc/default/alloy
-      register: alloy_env
+      register: horde_alloy_env
 
     - name: Assert environment file content
       ansible.builtin.assert:
         that:
-          - "'config.alloy' in (alloy_env.content | b64decode)"
-          - "'12345' in (alloy_env.content | b64decode)"
-          - "'stability.level' in (alloy_env.content | b64decode)"
+          - "'config.alloy' in (horde_alloy_env.content | b64decode)"
+          - "'12345' in (horde_alloy_env.content | b64decode)"
+          - "'stability.level' in (horde_alloy_env.content | b64decode)"
         fail_msg: "Alloy environment file must reference config path and HTTP port"
 
 # ---------------------------------------------------------------------------
@@ -208,73 +208,73 @@
   gather_facts: true
 
   vars:
-    alloy_version: "1.8.1"
-    alloy_config_dir: "/etc/alloy"
-    alloy_data_dir: "/var/lib/alloy"
-    alloy_log_level: "warn"
-    alloy_http_listen_address: "127.0.0.1"
-    alloy_http_port: 12345
-    alloy_scrape_interval: "15s"
-    alloy_tls_ca_cert: ""
-    alloy_journal_max_age: "24h"
-    alloy_forward_otlp_metrics: false
-    alloy_otlp_listen_address: "127.0.0.1"
-    alloy_otlp_grpc_port: 4317
-    alloy_otlp_http_port: 4318
-    alloy_otlp_metrics_tenant_id: "infra"
-    alloy_trace_batch_timeout: "5s"
-    alloy_trace_batch_size: 8192
-    alloy_collect_log_files: []
-    alloy_collect_docker_logs: false
-    alloy_collect_journal: false
-    alloy_log_labels: {}
-    alloy_external_labels: {}
-    alloy_extra_scrape_targets: []
-    alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
-    alloy_loki_endpoint: ""
-    alloy_tempo_endpoint: ""
-    alloy_tenant_id: "infra"
-    alloy_basic_auth_username: ""
-    alloy_basic_auth_password: ""
-    alloy_collect_metrics: true
-    alloy_collect_logs: false
-    alloy_collect_traces: false
-    alloy_start_service: false
+    horde_alloy_version: "1.8.1"
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_data_dir: "/var/lib/alloy"
+    horde_alloy_log_level: "warn"
+    horde_alloy_http_listen_address: "127.0.0.1"
+    horde_alloy_http_port: 12345
+    horde_alloy_scrape_interval: "15s"
+    horde_alloy_tls_ca_cert: ""
+    horde_alloy_journal_max_age: "24h"
+    horde_alloy_forward_otlp_metrics: false
+    horde_alloy_otlp_listen_address: "127.0.0.1"
+    horde_alloy_otlp_grpc_port: 4317
+    horde_alloy_otlp_http_port: 4318
+    horde_alloy_otlp_metrics_tenant_id: "infra"
+    horde_alloy_trace_batch_timeout: "5s"
+    horde_alloy_trace_batch_size: 8192
+    horde_alloy_collect_log_files: []
+    horde_alloy_collect_docker_logs: false
+    horde_alloy_collect_journal: false
+    horde_alloy_log_labels: {}
+    horde_alloy_external_labels: {}
+    horde_alloy_extra_scrape_targets: []
+    horde_alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
+    horde_alloy_loki_endpoint: ""
+    horde_alloy_tempo_endpoint: ""
+    horde_alloy_tenant_id: "infra"
+    horde_alloy_basic_auth_username: ""
+    horde_alloy_basic_auth_password: ""
+    horde_alloy_collect_metrics: true
+    horde_alloy_collect_logs: false
+    horde_alloy_collect_traces: false
+    horde_alloy_start_service: false
 
   tasks:
     - name: Deploy Alloy configuration (metrics only)
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../roles/horde_alloy/templates/config.alloy.j2"
-        dest: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+        dest: "{{ horde_alloy_config_dir | default('/etc/alloy') }}/config.alloy"
         owner: alloy
         group: alloy
         mode: "0640"
 
     - name: Read rendered Alloy config (metrics only)
       ansible.builtin.slurp:
-        path: "{{ alloy_config_dir | default('/etc/alloy') }}/config.alloy"
-      register: alloy_metrics_only
+        path: "{{ horde_alloy_config_dir | default('/etc/alloy') }}/config.alloy"
+      register: horde_alloy_metrics_only
 
     - name: Assert metrics pipeline is present
       ansible.builtin.assert:
         that:
-          - "'prometheus.exporter.unix' in (alloy_metrics_only.content | b64decode)"
-          - "'prometheus.remote_write' in (alloy_metrics_only.content | b64decode)"
+          - "'prometheus.exporter.unix' in (horde_alloy_metrics_only.content | b64decode)"
+          - "'prometheus.remote_write' in (horde_alloy_metrics_only.content | b64decode)"
 
     - name: Assert log and trace pipelines are NOT present
       ansible.builtin.assert:
         that:
-          - '''loki.source.journal "systemd"'' not in (alloy_metrics_only.content | b64decode)'
-          - '''loki.write "loki"'' not in (alloy_metrics_only.content | b64decode)'
-          - '''otelcol.receiver.otlp "local"'' not in (alloy_metrics_only.content | b64decode)'
-          - '''otelcol.exporter.otlphttp "tempo"'' not in (alloy_metrics_only.content | b64decode)'
+          - '''loki.source.journal "systemd"'' not in (horde_alloy_metrics_only.content | b64decode)'
+          - '''loki.write "loki"'' not in (horde_alloy_metrics_only.content | b64decode)'
+          - '''otelcol.receiver.otlp "local"'' not in (horde_alloy_metrics_only.content | b64decode)'
+          - '''otelcol.exporter.otlphttp "tempo"'' not in (horde_alloy_metrics_only.content | b64decode)'
         fail_msg: "Log and trace pipelines should not appear when disabled"
 
     - name: Assert no basic_auth block when username is empty
       ansible.builtin.assert:
         that:
-          - "'basic_auth' not in (alloy_metrics_only.content | b64decode)"
-        fail_msg: "basic_auth block should not appear when alloy_basic_auth_username is empty"
+          - "'basic_auth' not in (horde_alloy_metrics_only.content | b64decode)"
+        fail_msg: "basic_auth block should not appear when horde_alloy_basic_auth_username is empty"
 
 # ---------------------------------------------------------------------------
 # Play 3: Test fail-fast rejects default password
@@ -292,7 +292,7 @@
             that:
               - "'changeme-alloy' != 'changeme-alloy'"
             fail_msg: >-
-              alloy_basic_auth_password is still set to the insecure default.
+              horde_alloy_basic_auth_password is still set to the insecure default.
               Override it in your inventory or vault.
 
         - name: Fail if assertion did not reject default

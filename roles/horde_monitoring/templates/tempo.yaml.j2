@@ -4,8 +4,8 @@
 stream_over_http_enabled: true
 
 server:
-  http_listen_port: {{ tempo_http_port }}
-  log_level: {{ tempo_log_level }}
+  http_listen_port: {{ horde_monitoring_tempo_http_port }}
+  log_level: {{ horde_monitoring_tempo_log_level }}
   grpc_server_max_recv_msg_size: 104857600
   grpc_server_max_send_msg_size: 104857600
 
@@ -14,28 +14,28 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: "{{ tempo_otlp_bind_address }}:{{ tempo_otlp_grpc_port }}"
+          endpoint: "{{ horde_monitoring_tempo_otlp_bind_address }}:{{ horde_monitoring_tempo_otlp_grpc_port }}"
         http:
-          endpoint: "{{ tempo_otlp_bind_address }}:{{ tempo_otlp_http_port }}"
+          endpoint: "{{ horde_monitoring_tempo_otlp_bind_address }}:{{ horde_monitoring_tempo_otlp_http_port }}"
 
 ingester:
-  trace_idle_period: {{ tempo_ingester_trace_idle_period }}
-  max_block_bytes: {{ tempo_ingester_max_block_bytes }}
-  max_block_duration: {{ tempo_ingester_max_block_duration }}
+  trace_idle_period: {{ horde_monitoring_tempo_ingester_trace_idle_period }}
+  max_block_bytes: {{ horde_monitoring_tempo_ingester_max_block_bytes }}
+  max_block_duration: {{ horde_monitoring_tempo_ingester_max_block_duration }}
 
 compactor:
   compaction:
-    block_retention: {{ tempo_trace_retention }}
+    block_retention: {{ horde_monitoring_tempo_trace_retention }}
 
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
 storage:
   trace:
     backend: s3
     s3:
-      endpoint: minio:{{ minio_api_port }}
-      access_key: {{ minio_root_user }}
-      secret_key: {{ minio_root_password }}
-      bucket: {{ tempo_traces_bucket }}
+      endpoint: minio:{{ horde_monitoring_minio_api_port }}
+      access_key: {{ horde_monitoring_minio_root_user }}
+      secret_key: {{ horde_monitoring_minio_root_password }}
+      bucket: {{ horde_monitoring_tempo_traces_bucket }}
       insecure: true
       forcepathstyle: true
     wal:
@@ -52,7 +52,7 @@ storage:
       path: /var/tempo/blocks
 {% endif %}
 
-{% if tempo_metrics_generator_enabled | bool %}
+{% if horde_monitoring_tempo_metrics_generator_enabled | bool %}
 metrics_generator:
   ring:
     kvstore:
@@ -70,7 +70,7 @@ metrics_generator:
     remote_write:
       - url: http://mimir:9009/api/v1/push
         headers:
-          X-Scope-OrgID: {{ tempo_metrics_generator_tenant_id }}
+          X-Scope-OrgID: {{ horde_monitoring_tempo_metrics_generator_tenant_id }}
         send_exemplars: true
   traces_storage:
     path: /var/tempo/generator/traces
@@ -79,7 +79,7 @@ overrides:
   defaults:
     metrics_generator:
       processors:
-{% for processor in tempo_metrics_generator_processors %}
+{% for processor in horde_monitoring_tempo_metrics_generator_processors %}
         - {{ processor }}
 {% endfor %}
 {% endif %}

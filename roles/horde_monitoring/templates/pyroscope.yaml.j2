@@ -1,11 +1,11 @@
 # Grafana Pyroscope configuration - monolithic mode with S3 object storage (MinIO)
 # Managed by Ansible - do not edit manually
 
-multitenancy_enabled: {{ pyroscope_auth_enabled | lower }}
+multitenancy_enabled: {{ horde_monitoring_pyroscope_auth_enabled | lower }}
 
 server:
-  http_listen_port: {{ pyroscope_port }}
-  log_level: {{ pyroscope_log_level }}
+  http_listen_port: {{ horde_monitoring_pyroscope_port }}
+  log_level: {{ horde_monitoring_pyroscope_log_level }}
   grpc_server_max_recv_msg_size: 104857600
   grpc_server_max_send_msg_size: 104857600
 
@@ -13,7 +13,7 @@ self_profiling:
   # Pyroscope 1.x self-profiling push does not include X-Scope-OrgID;
   # when multitenancy is enabled the push must be disabled.
   # Scrape Pyroscope's pprof endpoints via Alloy if profiling is needed.
-  disable_push: {{ (not pyroscope_self_profiling or pyroscope_auth_enabled) | lower }}
+  disable_push: {{ (not horde_monitoring_pyroscope_self_profiling or horde_monitoring_pyroscope_auth_enabled) | lower }}
 
 runtime_config:
   file: /etc/pyroscope/runtime-overrides.yaml
@@ -30,18 +30,18 @@ ingester:
       replication_factor: 1
 
 limits:
-  ingestion_rate_mb: {{ pyroscope_ingestion_rate_mb }}
-  ingestion_burst_size_mb: {{ pyroscope_ingestion_burst_size_mb }}
-  compactor_blocks_retention_period: {{ pyroscope_retention_period }}
+  ingestion_rate_mb: {{ horde_monitoring_pyroscope_ingestion_rate_mb }}
+  ingestion_burst_size_mb: {{ horde_monitoring_pyroscope_ingestion_burst_size_mb }}
+  compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_retention_period }}
 
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
 storage:
   backend: s3
   s3:
-    endpoint: minio:{{ minio_api_port }}
-    access_key_id: {{ minio_root_user }}
-    secret_access_key: {{ minio_root_password }}
-    bucket_name: {{ pyroscope_blocks_bucket }}
+    endpoint: minio:{{ horde_monitoring_minio_api_port }}
+    access_key_id: {{ horde_monitoring_minio_root_user }}
+    secret_access_key: {{ horde_monitoring_minio_root_password }}
+    bucket_name: {{ horde_monitoring_pyroscope_blocks_bucket }}
     insecure: true
 {% else %}
 storage:

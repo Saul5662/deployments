@@ -8,70 +8,70 @@
 - name: Warn when backup is enabled but MinIO is disabled
   ansible.builtin.debug:
     msg: >-
-      mimir_backup_enabled=true has no effect because mimir_enable_minio=false.
+      horde_monitoring_mimir_backup_enabled=true has no effect because horde_monitoring_mimir_enable_minio=false.
       Backups require MinIO as the object-storage backend.
-      Set mimir_backup_enabled=false to silence this warning,
-      or enable MinIO with mimir_enable_minio=true.
+      Set horde_monitoring_mimir_backup_enabled=false to silence this warning,
+      or enable MinIO with horde_monitoring_mimir_enable_minio=true.
   when:
-    - mimir_backup_enabled | default(false) | bool
-    - not (mimir_enable_minio | default(true) | bool)
+    - horde_monitoring_mimir_backup_enabled | default(false) | bool
+    - not (horde_monitoring_mimir_enable_minio | default(true) | bool)
 
 - name: Warn when Grafana anonymous access is enabled but Grafana is disabled
   ansible.builtin.debug:
     msg: >-
-      grafana_anonymous_enabled=true has no effect because
-      monitoring_install_grafana=false. Either enable Grafana or
-      set grafana_anonymous_enabled=false.
+      horde_monitoring_grafana_anonymous_enabled=true has no effect because
+      horde_monitoring_install_grafana=false. Either enable Grafana or
+      set horde_monitoring_grafana_anonymous_enabled=false.
   when:
-    - grafana_anonymous_enabled | default(false) | bool
-    - not (monitoring_install_grafana | default(true) | bool)
+    - horde_monitoring_grafana_anonymous_enabled | default(false) | bool
+    - not (horde_monitoring_install_grafana | default(true) | bool)
 
 - name: Warn when Tempo metrics generator is enabled but Tempo is disabled
   ansible.builtin.debug:
     msg: >-
-      tempo_metrics_generator_enabled=true has no effect because
-      monitoring_install_tempo=false. Either enable Tempo or
-      set tempo_metrics_generator_enabled=false.
+      horde_monitoring_tempo_metrics_generator_enabled=true has no effect because
+      horde_monitoring_install_tempo=false. Either enable Tempo or
+      set horde_monitoring_tempo_metrics_generator_enabled=false.
   when:
-    - tempo_metrics_generator_enabled | default(false) | bool
-    - not (monitoring_install_tempo | default(true) | bool)
+    - horde_monitoring_tempo_metrics_generator_enabled | default(false) | bool
+    - not (horde_monitoring_install_tempo | default(true) | bool)
 
 - name: Deploy Mimir + Grafana monitoring stack
   ansible.builtin.include_tasks: mimir.yml
-  when: monitoring_install_mimir | bool
+  when: horde_monitoring_install_mimir | bool
 
 - name: Deploy Loki log aggregation backend
   ansible.builtin.include_tasks: loki.yml
-  when: monitoring_install_loki | bool
+  when: horde_monitoring_install_loki | bool
 
 - name: Deploy Tempo distributed tracing backend
   ansible.builtin.include_tasks: tempo.yml
-  when: monitoring_install_tempo | bool
+  when: horde_monitoring_install_tempo | bool
 
 - name: Deploy Pyroscope continuous profiling backend
   ansible.builtin.include_tasks: pyroscope.yml
-  when: monitoring_install_pyroscope | bool
+  when: horde_monitoring_install_pyroscope | bool
 
 - name: Configure Grafana provisioning
   ansible.builtin.include_tasks: grafana.yml
   when:
-    - monitoring_install_mimir | bool
-    - monitoring_install_grafana | bool
+    - horde_monitoring_install_mimir | bool
+    - horde_monitoring_install_grafana | bool
 
 - name: Provision Grafana dashboards from horde-exporters
   ansible.builtin.include_tasks: dashboards.yml
   when:
-    - monitoring_install_grafana | bool
-    - grafana_provision_dashboards | bool
+    - horde_monitoring_install_grafana | bool
+    - horde_monitoring_grafana_provision_dashboards | bool
 
 - name: Deploy monitoring stack alerting rules
   ansible.builtin.include_tasks: alerting.yml
-  when: monitoring_install_alerting_rules | bool
+  when: horde_monitoring_install_alerting_rules | bool
 
 - name: Configure HAProxy for monitoring
   ansible.builtin.include_tasks: haproxy.yml
-  when: monitoring_configure_haproxy | bool
+  when: horde_monitoring_configure_haproxy | bool
 
 - name: Configure firewall rules
   ansible.builtin.include_tasks: firewall.yml
-  when: monitoring_configure_firewall | bool
+  when: horde_monitoring_configure_firewall | bool

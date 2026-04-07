@@ -8,14 +8,10 @@ exclude_paths:
   - roles/geerlingguy.*/
 
 skip_list:
-  # 586 violations — renaming all role vars is too disruptive for existing playbooks
+  # Deferred roles only — target roles (horde_monitoring, horde_alloy, ai_horde,
+  # aihorde_frontpage, _haproxy_safe_edit, _uv_bootstrap) are fully remediated.
+  # Remaining: artbot, artbot_revproxy, horde_regen_worker, horde_stats_exporter.
   - var-naming[no-role-prefix]
-  # Jinja2 in task names is used intentionally for clarity
-  - name[template]
-  # Internal roles use "role-name — description" prefix pattern (lowercase by design)
-  - name[casing]
 
 warn_list:
   - yaml[comments]
-  # Change-gated tasks are intentional; converting to handlers would lose context
-  - no-handler

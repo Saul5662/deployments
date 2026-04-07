@@ -33,7 +33,7 @@
 
 - name: Install Alloy package (Debian/Ubuntu)
   ansible.builtin.apt:
-    name: "alloy={{ alloy_version }}*"
+    name: "alloy={{ horde_alloy_version }}*"
     state: present
     update_cache: true
   become: true
@@ -53,7 +53,7 @@
 
 - name: Install Alloy package (RHEL/CentOS)
   ansible.builtin.dnf:
-    name: "alloy-{{ alloy_version }}"
+    name: "alloy-{{ horde_alloy_version }}"
     state: present
   become: true
   notify: Restart alloy

@@ -6,22 +6,22 @@
 - name: Validate Alloy endpoint configuration
   ansible.builtin.assert:
     that:
-      - alloy_mimir_endpoint | length > 0 or not alloy_collect_metrics
-      - alloy_loki_endpoint  | length > 0 or not alloy_collect_logs
-      - alloy_tempo_endpoint | length > 0 or not alloy_collect_traces
+      - horde_alloy_mimir_endpoint | length > 0 or not horde_alloy_collect_metrics
+      - horde_alloy_loki_endpoint  | length > 0 or not horde_alloy_collect_logs
+      - horde_alloy_tempo_endpoint | length > 0 or not horde_alloy_collect_traces
     fail_msg: >-
       Alloy endpoints must be configured when the corresponding collection
-      pipeline is enabled. Set alloy_mimir_endpoint, alloy_loki_endpoint,
-      and/or alloy_tempo_endpoint in your inventory.
+      pipeline is enabled. Set horde_alloy_mimir_endpoint, horde_alloy_loki_endpoint,
+      and/or horde_alloy_tempo_endpoint in your inventory.
 
 - name: Validate Alloy basic auth is not using default password
   ansible.builtin.assert:
     that:
-      - alloy_basic_auth_password != "changeme-alloy"
+      - horde_alloy_basic_auth_password != "changeme-alloy"
     fail_msg: >-
-      alloy_basic_auth_password is still set to the insecure default.
+      horde_alloy_basic_auth_password is still set to the insecure default.
       Override it in your inventory or vault.
-  when: alloy_basic_auth_username | length > 0
+  when: horde_alloy_basic_auth_username | length > 0
 
 - name: Install Grafana Alloy
   ansible.builtin.include_tasks: install.yml
@@ -31,4 +31,4 @@
 
 - name: Deploy TLS CA certificate
   ansible.builtin.include_tasks: tls.yml
-  when: alloy_tls_ca_cert | length > 0
+  when: horde_alloy_tls_ca_cert | length > 0

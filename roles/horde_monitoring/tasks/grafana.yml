@@ -5,7 +5,7 @@
 - name: Template Grafana datasource provisioning
   ansible.builtin.template:
     src: grafana-datasources.yml.j2
-    dest: "{{ grafana_provisioning_dir }}/datasources/mimir.yml"
+    dest: "{{ horde_monitoring_grafana_provisioning_dir }}/datasources/mimir.yml"
     owner: "472"
     group: "472"
     # 0600: secureJsonData contains Mimir tenant IDs which control write
@@ -18,7 +18,7 @@
 - name: Template Grafana dashboard provider
   ansible.builtin.template:
     src: grafana-dashboards.yml.j2
-    dest: "{{ grafana_provisioning_dir }}/dashboards/default.yml"
+    dest: "{{ horde_monitoring_grafana_provisioning_dir }}/dashboards/default.yml"
     owner: "472"
     group: "472"
     mode: "0600"
@@ -28,31 +28,31 @@
 # --- Public org creation (requires running Grafana) ---
 - name: Wait for Grafana to be healthy
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ grafana_port }}/api/health"
+    url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/health"
     method: GET
     status_code: 200
-  register: grafana_health
-  until: grafana_health.status == 200
+  register: horde_monitoring_grafana_health
+  until: horde_monitoring_grafana_health.status == 200
   retries: 30
   delay: 2
   when:
-    - grafana_anonymous_enabled | bool
-    - monitoring_start_services | bool
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool
 
 - name: Create public Grafana organization
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ grafana_port }}/api/orgs"
+    url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/orgs"
     method: POST
-    user: "{{ grafana_admin_user }}"
-    password: "{{ grafana_admin_password }}"
+    user: "{{ horde_monitoring_grafana_admin_user }}"
+    password: "{{ horde_monitoring_grafana_admin_password }}"
     force_basic_auth: true
     body_format: json
     body:
-      name: "{{ grafana_public_org_name }}"
+      name: "{{ horde_monitoring_grafana_public_org_name }}"
     status_code: [200, 409]
-  register: org_create_result
-  changed_when: org_create_result.status == 200
+  register: horde_monitoring_org_create_result
+  changed_when: horde_monitoring_org_create_result.status == 200
   no_log: true
   when:
-    - grafana_anonymous_enabled | bool
-    - monitoring_start_services | bool
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool

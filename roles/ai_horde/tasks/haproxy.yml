@@ -124,16 +124,16 @@
       {% endfor %}
   when: ai_horde_haproxy_mode == 'safe_edit'
 
-- name: Apply AI-Horde block via shared safe-edit pipeline
+- name: Apply AI-Horde block via shared safe-edit pipeline  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: _haproxy_safe_edit
   vars:
-    _hse_config_path: "{{ ai_horde_haproxy_config_path }}"
-    _hse_backup_dir: "{{ ai_horde_haproxy_backup_dir }}"
-    _hse_marker: "AI-HORDE BACKENDS"
-    _hse_block: "{{ _ai_horde_haproxy_block }}"
-    _hse_backup_retention: "{{ ai_horde_haproxy_backup_retention_count }}"
-    _hse_apply: "{{ _ai_horde_haproxy_apply_mode }}"
+    _haproxy_safe_edit_config_path: "{{ ai_horde_haproxy_config_path }}"
+    _haproxy_safe_edit_backup_dir: "{{ ai_horde_haproxy_backup_dir }}"
+    _haproxy_safe_edit_marker: "AI-HORDE BACKENDS"
+    _haproxy_safe_edit_block: "{{ _ai_horde_haproxy_block }}"
+    _haproxy_safe_edit_backup_retention: "{{ ai_horde_haproxy_backup_retention_count }}"
+    _haproxy_safe_edit_apply: "{{ _ai_horde_haproxy_apply_mode }}"
   when: ai_horde_haproxy_mode == 'safe_edit'
 
 # ── Enable and start HAProxy ─────────────────────────────────

@@ -5,32 +5,32 @@ multitenancy_enabled: true
 
 server:
   http_listen_port: 9009
-  log_level: {{ mimir_log_level }}
-  grpc_server_max_recv_msg_size: {{ mimir_grpc_max_msg_size }}
-  grpc_server_max_send_msg_size: {{ mimir_grpc_max_msg_size }}
+  log_level: {{ horde_monitoring_mimir_log_level }}
+  grpc_server_max_recv_msg_size: {{ horde_monitoring_mimir_grpc_max_msg_size }}
+  grpc_server_max_send_msg_size: {{ horde_monitoring_mimir_grpc_max_msg_size }}
 
 runtime_config:
   file: /etc/mimir/runtime-overrides.yaml
-  period: {{ mimir_runtime_config_period }}
+  period: {{ horde_monitoring_mimir_runtime_config_period }}
 
 activity_tracker:
   filepath: /mimir/data/activity.log
 
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
 common:
   storage:
     backend: s3
     s3:
-      endpoint: minio:{{ minio_api_port }}
-      access_key_id: {{ minio_root_user }}
-      secret_access_key: {{ minio_root_password }}
+      endpoint: minio:{{ horde_monitoring_minio_api_port }}
+      access_key_id: {{ horde_monitoring_minio_root_user }}
+      secret_access_key: {{ horde_monitoring_minio_root_password }}
       insecure: true
 {% endif %}
 
 blocks_storage:
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
   s3:
-    bucket_name: {{ minio_blocks_bucket }}
+    bucket_name: {{ horde_monitoring_minio_blocks_bucket }}
 {% else %}
   backend: filesystem
   filesystem:
@@ -38,38 +38,38 @@ blocks_storage:
 {% endif %}
   bucket_store:
     sync_dir: /mimir/data/tsdb-sync
-{% if mimir_enable_memcached | bool %}
+{% if horde_monitoring_mimir_enable_memcached | bool %}
     chunks_cache:
       backend: memcached
       memcached:
-        addresses: dns+memcached:{{ mimir_memcached_port }}
-        timeout: {{ mimir_memcached_timeout }}
-        max_idle_connections: {{ mimir_memcached_max_idle }}
+        addresses: dns+memcached:{{ horde_monitoring_mimir_memcached_port }}
+        timeout: {{ horde_monitoring_mimir_memcached_timeout }}
+        max_idle_connections: {{ horde_monitoring_mimir_memcached_max_idle }}
     metadata_cache:
       backend: memcached
       memcached:
-        addresses: dns+memcached:{{ mimir_memcached_port }}
-        timeout: {{ mimir_memcached_timeout }}
-        max_idle_connections: {{ mimir_memcached_max_idle }}
+        addresses: dns+memcached:{{ horde_monitoring_mimir_memcached_port }}
+        timeout: {{ horde_monitoring_mimir_memcached_timeout }}
+        max_idle_connections: {{ horde_monitoring_mimir_memcached_max_idle }}
 {% endif %}
   tsdb:
     dir: /mimir/tsdb
-{% if mimir_blocks_retention %}
-    retention_period: {{ mimir_blocks_retention }}
+{% if horde_monitoring_mimir_blocks_retention %}
+    retention_period: {{ horde_monitoring_mimir_blocks_retention }}
 {% endif %}
 
 limits:
-{% if mimir_blocks_retention %}
-  compactor_blocks_retention_period: {{ mimir_blocks_retention }}
+{% if horde_monitoring_mimir_blocks_retention %}
+  compactor_blocks_retention_period: {{ horde_monitoring_mimir_blocks_retention }}
 {% endif %}
-  max_global_series_per_user: {{ mimir_max_global_series_per_user }}
-  ingestion_rate: {{ mimir_ingestion_rate }}
-  ingestion_burst_size: {{ mimir_ingestion_burst_size }}
+  max_global_series_per_user: {{ horde_monitoring_mimir_max_global_series_per_user }}
+  ingestion_rate: {{ horde_monitoring_mimir_ingestion_rate }}
+  ingestion_burst_size: {{ horde_monitoring_mimir_ingestion_burst_size }}
 
 compactor:
   data_dir: /mimir/data/compactor
-  compaction_interval: {{ mimir_compaction_interval }}
-  deletion_delay: {{ mimir_compactor_deletion_delay }}
+  compaction_interval: {{ horde_monitoring_mimir_compaction_interval }}
+  deletion_delay: {{ horde_monitoring_mimir_compactor_deletion_delay }}
   sharding_ring:
     kvstore:
       store: memberlist
@@ -88,21 +88,21 @@ ingester:
     replication_factor: 1
 
 frontend:
-  split_queries_by_interval: {{ mimir_split_queries_interval }}
-{% if mimir_enable_memcached | bool %}
+  split_queries_by_interval: {{ horde_monitoring_mimir_split_queries_interval }}
+{% if horde_monitoring_mimir_enable_memcached | bool %}
   cache_results: true
   results_cache:
     backend: memcached
     memcached:
-      addresses: dns+memcached:{{ mimir_memcached_port }}
-      timeout: {{ mimir_memcached_timeout }}
-      max_idle_connections: {{ mimir_memcached_max_idle }}
+      addresses: dns+memcached:{{ horde_monitoring_mimir_memcached_port }}
+      timeout: {{ horde_monitoring_mimir_memcached_timeout }}
+      max_idle_connections: {{ horde_monitoring_mimir_memcached_max_idle }}
 {% endif %}
 
 ruler_storage:
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
   s3:
-    bucket_name: {{ minio_ruler_bucket }}
+    bucket_name: {{ horde_monitoring_minio_ruler_bucket }}
 {% else %}
   backend: filesystem
   filesystem:

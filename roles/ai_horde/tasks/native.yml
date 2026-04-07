@@ -91,13 +91,13 @@
   become: true
   when: ai_horde_start_services | bool
 
-- name: Bootstrap uv (Python package manager)
+- name: Bootstrap uv (Python package manager)  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: _uv_bootstrap
   vars:
-    _uvb_version: "{{ ai_horde_uv_version }}"
-    _uvb_installer_checksum: "{{ ai_horde_uv_installer_checksum }}"
-    _uvb_allow_unverified: "{{ ai_horde_uv_allow_unverified_installer }}"
+    _uv_bootstrap_version: "{{ ai_horde_uv_version }}"
+    _uv_bootstrap_installer_checksum: "{{ ai_horde_uv_installer_checksum }}"
+    _uv_bootstrap_allow_unverified: "{{ ai_horde_uv_allow_unverified_installer }}"
   when: ai_horde_start_services | bool
 
 # ── Service user ─────────────────────────────────────────────
@@ -233,8 +233,8 @@
       -r {{ ai_horde_base_dir }}/src/requirements.txt
   become: true
   become_user: "{{ ai_horde_user }}"
-  register: _pip_install
-  changed_when: "'Installed' in _pip_install.stdout"
+  register: ai_horde__pip_install
+  changed_when: "'Installed' in ai_horde__pip_install.stdout"
   notify: Restart AI-Horde native instances
   when: ai_horde_start_services | bool
 
@@ -325,8 +325,8 @@
     url: "http://{{ ai_horde_backend_host }}:{{ item }}/api/v2/status/heartbeat"
     method: GET
     status_code: 200
-  register: _horde_ready
-  until: _horde_ready.status == 200
+  register: ai_horde__ready
+  until: ai_horde__ready.status == 200
   retries: 30
   delay: 5
   become: true

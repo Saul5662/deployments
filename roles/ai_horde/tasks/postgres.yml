@@ -47,13 +47,13 @@
     cmd: set -o pipefail && pg_lsclusters -h | head -1 | awk '{print $1}'
     executable: /bin/bash
   changed_when: false
-  register: _pg_version
+  register: ai_horde__pg_version
   become: true
   when: ai_horde_start_services | bool
 
 - name: Configure pg_hba.conf for local password auth (loopback IPv4/IPv6)
   community.postgresql.postgresql_pg_hba:
-    dest: /etc/postgresql/{{ _pg_version.stdout | trim }}/main/pg_hba.conf
+    dest: /etc/postgresql/{{ ai_horde__pg_version.stdout | trim }}/main/pg_hba.conf
     contype: host
     databases: "{{ ai_horde_postgres_db }}"
     users: "{{ ai_horde_postgres_user }}"

@@ -7,19 +7,19 @@
   ansible.builtin.command: docker --version
   changed_when: false
   failed_when: false
-  register: _docker_check
+  register: ai_horde__docker_check
   become: true
 
 - name: Fail if Docker is not installed
   ansible.builtin.fail:
     msg: "Docker is required for ai_horde_deploy_mode=docker. Please install Docker first."
-  when: _docker_check.rc != 0
+  when: ai_horde__docker_check.rc != 0
 
 - name: Verify Docker Compose V2 is available
   ansible.builtin.command: docker compose version
   changed_when: false
   failed_when: false
-  register: _compose_check
+  register: ai_horde__compose_check
   become: true
 
 - name: Ensure AI-Horde base directory exists (docker mode)
@@ -37,7 +37,7 @@
       Docker Compose V2 plugin is required but 'docker compose version' failed.
       The standalone docker-compose (V1) is end-of-life. Please install the
       Docker Compose V2 plugin: https://docs.docker.com/compose/install/
-  when: _compose_check.rc != 0
+  when: ai_horde__compose_check.rc != 0
 
 - name: Clone AI-Horde source repository
   ansible.builtin.git:
@@ -120,8 +120,8 @@
     url: "http://{{ ai_horde_backend_host }}:{{ ai_horde_port }}/api/v2/status/heartbeat"
     method: GET
     status_code: 200
-  register: _horde_ready
-  until: _horde_ready.status == 200
+  register: ai_horde__ready
+  until: ai_horde__ready.status == 200
   retries: 30
   delay: 5
   become: true

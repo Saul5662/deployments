@@ -55,38 +55,38 @@
     version: "{{ aihorde_frontpage_repo_version }}"
     force: true
   become: true
-  register: _frontpage_clone
+  register: aihorde_frontpage__clone
   when: aihorde_frontpage_start_services | bool
 
 - name: Check if a previous native build artifact exists
   ansible.builtin.stat:
     path: "{{ aihorde_frontpage_base_dir }}/src/dist/ai-horde-website/server/server.mjs"
-  register: _frontpage_built_server
+  register: aihorde_frontpage__built_server
   when: aihorde_frontpage_start_services | bool
 
 - name: Check stored native build configuration stamp
   ansible.builtin.stat:
     path: "{{ aihorde_frontpage_base_dir }}/.native-build-config"
-  register: _frontpage_build_stamp
+  register: aihorde_frontpage__build_stamp
   when: aihorde_frontpage_start_services | bool
 
 - name: Read stored native build configuration stamp
   ansible.builtin.slurp:
     src: "{{ aihorde_frontpage_base_dir }}/.native-build-config"
-  register: _frontpage_build_stamp_content
+  register: aihorde_frontpage__build_stamp_content
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_build_stamp.stat.exists
+    - aihorde_frontpage__build_stamp.stat.exists
 
 - name: Determine whether native build is required
   ansible.builtin.set_fact:
-    _frontpage_needs_build: >-
+    aihorde_frontpage__needs_build: >-
       {{
         (aihorde_frontpage_force_build | bool)
-        or (_frontpage_clone.changed | default(false))
-        or (not _frontpage_built_server.stat.exists)
+        or (aihorde_frontpage__clone.changed | default(false))
+        or (not aihorde_frontpage__built_server.stat.exists)
         or (
-          (_frontpage_build_stamp_content.content | default('') | b64decode | trim)
+          (aihorde_frontpage__build_stamp_content.content | default('') | b64decode | trim)
           != aihorde_frontpage_build_config
         )
       }}
@@ -97,20 +97,20 @@
     cmd: npm ci
     chdir: "{{ aihorde_frontpage_base_dir }}/src"
   become: true
-  changed_when: _frontpage_needs_build | default(false)
+  changed_when: aihorde_frontpage__needs_build | default(false)
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Build Angular application
   ansible.builtin.command:
     cmd: "npm run build -- --configuration={{ aihorde_frontpage_build_config }}"
     chdir: "{{ aihorde_frontpage_base_dir }}/src"
   become: true
-  changed_when: _frontpage_needs_build | default(false)
+  changed_when: aihorde_frontpage__needs_build | default(false)
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Remove existing dist directory before deploying fresh artifacts
   ansible.builtin.file:
@@ -119,7 +119,7 @@
   become: true
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Recreate dist directory for built artifacts
   ansible.builtin.file:
@@ -131,7 +131,7 @@
   become: true
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Copy built artifacts to dist directory
   ansible.builtin.copy:
@@ -144,7 +144,7 @@
     directory_mode: "u=rwx,g=rx,o="
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Persist native build configuration stamp
   ansible.builtin.copy:
@@ -156,7 +156,7 @@
   become: true
   when:
     - aihorde_frontpage_start_services | bool
-    - _frontpage_needs_build | default(false)
+    - aihorde_frontpage__needs_build | default(false)
 
 - name: Set ownership on dist directory
   ansible.builtin.file:
@@ -192,8 +192,8 @@
     url: "http://127.0.0.1:{{ aihorde_frontpage_port }}/"
     method: GET
     status_code: 200
-  register: _frontpage_ready
-  until: _frontpage_ready.status == 200
+  register: aihorde_frontpage__ready
+  until: aihorde_frontpage__ready.status == 200
   retries: 30
   delay: 5
   become: true

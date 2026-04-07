@@ -9,245 +9,245 @@
 # See roles/horde_monitoring/README.md for full documentation.
 
 # Component flags
-monitoring_install_mimir: true
-monitoring_install_grafana: true
-monitoring_configure_firewall: false
-monitoring_configure_haproxy: false
+horde_monitoring_install_mimir: true
+horde_monitoring_install_grafana: true
+horde_monitoring_configure_firewall: false
+horde_monitoring_configure_haproxy: false
 
 # Set to false in CI/test environments to skip Docker Compose service startup
 # and health-check waits. All configs are still rendered and can be asserted on.
-monitoring_start_services: true
+horde_monitoring_start_services: true
 
 # Mimir configuration (Docker-based, monolithic mode, S3 object storage via MinIO)
-mimir_port: 9009
-mimir_image: "grafana/mimir:2.15.0"
-mimir_config_dir: "/etc/mimir"
-mimir_data_dir: "/var/lib/mimir"
-mimir_compose_dir: "/opt/mimir"
-mimir_log_level: "warn"
+horde_monitoring_mimir_port: 9009
+horde_monitoring_mimir_image: "grafana/mimir:2.15.0"
+horde_monitoring_mimir_config_dir: "/etc/mimir"
+horde_monitoring_mimir_data_dir: "/var/lib/mimir"
+horde_monitoring_mimir_compose_dir: "/opt/mimir"
+horde_monitoring_mimir_log_level: "warn"
 # Global compactor block retention. Empty string = leave unset and rely on tenant overrides.
-mimir_blocks_retention: ""
-mimir_runtime_config_period: "10s"
+horde_monitoring_mimir_blocks_retention: ""
+horde_monitoring_mimir_runtime_config_period: "10s"
 
 # MinIO object storage (S3-compatible, local self-hosted)
 # MinIO provides the long-term block storage backend for Mimir.
-mimir_enable_minio: true
-minio_image: "minio/minio:RELEASE.2025-09-07T16-13-09Z"
-minio_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
-minio_api_port: 9000
-minio_console_port: 9001
+horde_monitoring_mimir_enable_minio: true
+horde_monitoring_minio_image: "minio/minio:RELEASE.2025-09-07T16-13-09Z"
+horde_monitoring_minio_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+horde_monitoring_minio_api_port: 9000
+horde_monitoring_minio_console_port: 9001
 # Persistent data directory — all MinIO object data lives here.
 # Place on a dedicated volume/partition in production for isolation.
-minio_data_dir: "/var/lib/minio-data"
-minio_root_user: "mimir"
-minio_root_password: "changeme-minio-secret"
-minio_blocks_bucket: "mimir-blocks"
-minio_ruler_bucket: "mimir-ruler"
-minio_memory_limit: "512m"
+horde_monitoring_minio_data_dir: "/var/lib/minio-data"
+horde_monitoring_minio_root_user: "mimir"
+horde_monitoring_minio_root_password: "changeme-minio-secret"
+horde_monitoring_minio_blocks_bucket: "mimir-blocks"
+horde_monitoring_minio_ruler_bucket: "mimir-ruler"
+horde_monitoring_minio_memory_limit: "512m"
 
 # Offsite backup via MinIO client mirror.
-# Only applies when mimir_enable_minio is true (MinIO is the storage backend).
+# Only applies when horde_monitoring_mimir_enable_minio is true (MinIO is the storage backend).
 # Enabled by default because MinIO runs in single-drive mode with no
 # redundancy — a disk failure causes permanent data loss without backup.
-# Set mimir_backup_enabled: false to disable (a warning task will fire).
-# Has no effect when mimir_enable_minio: false.
-mimir_backup_enabled: true
-mimir_backup_schedule: "*-*-* 02:00:00"
-mimir_backup_target_endpoint: ""
-mimir_backup_target_bucket: ""
-mimir_backup_target_access_key: ""
-mimir_backup_target_secret_key: ""
-mimir_backup_target_insecure: false
+# Set horde_monitoring_mimir_backup_enabled: false to disable (a warning task will fire).
+# Has no effect when horde_monitoring_mimir_enable_minio: false.
+horde_monitoring_mimir_backup_enabled: true
+horde_monitoring_mimir_backup_schedule: "*-*-* 02:00:00"
+horde_monitoring_mimir_backup_target_endpoint: ""
+horde_monitoring_mimir_backup_target_bucket: ""
+horde_monitoring_mimir_backup_target_access_key: ""
+horde_monitoring_mimir_backup_target_secret_key: ""
+horde_monitoring_mimir_backup_target_insecure: false
 # Controls whether `mc mirror --remove` is passed, which deletes objects
 # from the remote that were deleted locally (e.g. by the compactor after
 # retention expires). Default: false (append-only — safer, remote retains
 # data beyond local retention). Set to true for parity mode (space-efficient
 # but propagates accidental deletions).
-mimir_backup_remove_deleted: false
+horde_monitoring_mimir_backup_remove_deleted: false
 # Include Grafana's SQLite database (grafana.db) in the backup scope.
 # When true, grafana.db is copied into the MinIO ruler bucket before the
 # mirror runs, so it is included in the offsite backup. Provisioned
 # resources (orgs, datasources, dashboards) are re-created by the playbook,
 # but user preferences, annotations, API keys, and manual edits are not.
-mimir_backup_grafana_db: false
+horde_monitoring_mimir_backup_grafana_db: false
 
 # Default two-tenant retention model. Mimir requires X-Scope-OrgID on writes and queries
 # when multitenancy is enabled, so keep these tenant IDs aligned with Prometheus remote_write
 # headers and Grafana datasource provisioning.
-monitoring_application_tenant_id: "ai-horde-app"
+horde_monitoring_application_tenant_id: "ai-horde-app"
 # ⚠ Infinite retention: blocks accumulate indefinitely (~2 GB/month at 50k series).
 # This is an intentional trade-off — full history is valuable, and disk usage is
 # bounded in practice by monitoring alerts (MinIODiskUsageCritical/Warning +
 # HostDiskUsageHigh). If growth becomes a problem, change to a bounded value
 # (e.g. "365d") — the compactor will garbage-collect blocks beyond the window.
-monitoring_application_retention: "0"
-monitoring_application_datasource_name: "AI Horde App"
+horde_monitoring_application_retention: "0"
+horde_monitoring_application_datasource_name: "AI Horde App"
 
-monitoring_infrastructure_tenant_id: "infrastructure"
-monitoring_infrastructure_retention: "30d"
-monitoring_infrastructure_datasource_name: "Infrastructure"
+horde_monitoring_infrastructure_tenant_id: "infrastructure"
+horde_monitoring_infrastructure_retention: "30d"
+horde_monitoring_infrastructure_datasource_name: "Infrastructure"
 
 # Public tenant — receives real-time data via dual remote_write plus downsampled
 # historical data.  Strict query limits protect Mimir from expensive anonymous queries.
-monitoring_public_tenant_id: "ai-horde-public"
-monitoring_public_retention: "90d"
-monitoring_public_datasource_name: "AI Horde"
-monitoring_public_max_query_length: "7d"
-monitoring_public_max_fetched_series: 50000
+horde_monitoring_public_tenant_id: "ai-horde-public"
+horde_monitoring_public_retention: "90d"
+horde_monitoring_public_datasource_name: "AI Horde"
+horde_monitoring_public_max_query_length: "7d"
+horde_monitoring_public_max_fetched_series: 50000
 
 # Additional runtime override entries keyed by tenant ID.
-mimir_extra_tenant_overrides: {}
+horde_monitoring_mimir_extra_tenant_overrides: {}
 # Mimir performance tuning
-mimir_grpc_max_msg_size: 104857600
-mimir_max_global_series_per_user: 500000
-mimir_ingestion_rate: 10000
-mimir_ingestion_burst_size: 200000
-mimir_compaction_interval: "1h"
-mimir_compactor_deletion_delay: "12h"
-mimir_split_queries_interval: "24h"
+horde_monitoring_mimir_grpc_max_msg_size: 104857600
+horde_monitoring_mimir_max_global_series_per_user: 500000
+horde_monitoring_mimir_ingestion_rate: 10000
+horde_monitoring_mimir_ingestion_burst_size: 200000
+horde_monitoring_mimir_compaction_interval: "1h"
+horde_monitoring_mimir_compactor_deletion_delay: "12h"
+horde_monitoring_mimir_split_queries_interval: "24h"
 
 # Memcached caching layer (chunks, metadata, and query results)
-mimir_enable_memcached: true
-mimir_memcached_image: "memcached:1.6.41-alpine"
-mimir_memcached_port: 11211
-mimir_memcached_memory_mb: 512
-mimir_memcached_max_item_size: "5m"
-mimir_memcached_max_connections: 1024
-mimir_memcached_timeout: "500ms"
-mimir_memcached_max_idle: 100
-mimir_memcached_memory_limit: "768m"
+horde_monitoring_mimir_enable_memcached: true
+horde_monitoring_mimir_memcached_image: "memcached:1.6.41-alpine"
+horde_monitoring_mimir_memcached_port: 11211
+horde_monitoring_mimir_memcached_memory_mb: 512
+horde_monitoring_mimir_memcached_max_item_size: "5m"
+horde_monitoring_mimir_memcached_max_connections: 1024
+horde_monitoring_mimir_memcached_timeout: "500ms"
+horde_monitoring_mimir_memcached_max_idle: 100
+horde_monitoring_mimir_memcached_memory_limit: "768m"
 
 # Container resource limits
-mimir_memory_limit: "3g"
-grafana_memory_limit: "512m"
+horde_monitoring_mimir_memory_limit: "3g"
+horde_monitoring_grafana_memory_limit: "512m"
 
 # Grafana configuration (Docker-based, part of the Mimir compose stack)
-grafana_image: "grafana/grafana:12.4.1"
-grafana_port: 3000
-grafana_admin_user: "admin"
-grafana_admin_password: "changeme"
+horde_monitoring_grafana_image: "grafana/grafana:12.4.1"
+horde_monitoring_grafana_port: 3000
+horde_monitoring_grafana_admin_user: "admin"
+horde_monitoring_grafana_admin_password: "changeme"
 # Set to external URL when behind a reverse proxy (e.g. https://grafana.example.com)
-grafana_root_url: ""
-grafana_data_dir: "/var/lib/grafana"
-grafana_provisioning_dir: "/etc/grafana/provisioning"
-grafana_dashboard_dir: "/etc/grafana/dashboards"
+horde_monitoring_grafana_root_url: ""
+horde_monitoring_grafana_data_dir: "/var/lib/grafana"
+horde_monitoring_grafana_provisioning_dir: "/etc/grafana/provisioning"
+horde_monitoring_grafana_dashboard_dir: "/etc/grafana/dashboards"
 
 # Multi-org: anonymous public organization for AI Horde application dashboards
-grafana_public_org_name: "AI Horde Public"
-grafana_public_org_id: 2
-grafana_anonymous_enabled: true
-grafana_anonymous_org_role: "Viewer"
+horde_monitoring_grafana_public_org_name: "AI Horde Public"
+horde_monitoring_grafana_public_org_id: 2
+horde_monitoring_grafana_anonymous_enabled: true
+horde_monitoring_grafana_anonymous_org_role: "Viewer"
 # Dashboard refresh floor and dataproxy timeout protect against expensive queries
 # (primary query protection is at the Mimir tenant limits level)
-grafana_min_refresh_interval: "5s"
-grafana_dataproxy_timeout: 30
+horde_monitoring_grafana_min_refresh_interval: "5s"
+horde_monitoring_grafana_dataproxy_timeout: 30
 
 # Dashboard provisioning from horde-exporters repository
-grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
+horde_monitoring_grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
 # Pin to a release tag for reproducible deployments (e.g., "v1.2.0").
 # Using "main" always fetches the latest dashboards but may break if the
 # repo layout changes.
-grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
-grafana_provision_dashboards: true
+horde_monitoring_grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
+horde_monitoring_grafana_provision_dashboards: true
 
 # Alertmanager datasource in Grafana
 # When set to a non-empty URL, provisions an Alertmanager datasource in Grafana
 # so alerts are visible in the Grafana Alerting UI.  In production (Alertmanager
 # native on host, Grafana in Docker), use "http://host.docker.internal:9093".
 # Leave empty to skip provisioning this datasource.
-monitoring_alertmanager_url: ""
+horde_monitoring_alertmanager_url: ""
 
 # Alerting rules for monitoring stack self-monitoring
 # Renders a Prometheus alerting rules file for Mimir, MinIO, and pipeline health.
 # The rules file is placed in the Prometheus rules directory and auto-loaded.
 # Set to false if you provide your own rules or don't use Prometheus alerting.
-monitoring_install_alerting_rules: true
+horde_monitoring_install_alerting_rules: true
 # Host-level disk alerts (HostDiskUsageCritical, HostDiskUsageHigh) depend on
 # node_exporter being deployed and scraped by Prometheus. If you don't run
 # node_exporter, set this to false — the alerts will silently never fire without it.
-monitoring_install_host_disk_alerts: true
-monitoring_alerting_rules_dir: "/etc/prometheus/rules"
-monitoring_alerting_rules_file: "monitoring-stack.rules"
+horde_monitoring_install_host_disk_alerts: true
+horde_monitoring_alerting_rules_dir: "/etc/prometheus/rules"
+horde_monitoring_alerting_rules_file: "monitoring-stack.rules"
 # Job names must match the job_name in your Prometheus scrape_configs
-monitoring_mimir_job_name: "mimir"
-monitoring_minio_job_name: "minio"
-monitoring_loki_job_name: "loki"
-monitoring_tempo_job_name: "tempo"
-monitoring_pyroscope_job_name: "pyroscope"
+horde_monitoring_mimir_job_name: "mimir"
+horde_monitoring_minio_job_name: "minio"
+horde_monitoring_loki_job_name: "loki"
+horde_monitoring_tempo_job_name: "tempo"
+horde_monitoring_pyroscope_job_name: "pyroscope"
 
 # ---------------------------------------------------------------------------
 # Loki (log aggregation — Docker-based, monolithic mode, S3 via MinIO)
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Loki alongside Mimir in the Docker Compose stack.
 # When enabled, Loki stores logs in MinIO and is accessible at localhost:3100.
-monitoring_install_loki: false
+horde_monitoring_install_loki: false
 
-loki_image: "grafana/loki:3.4.2"
-loki_port: 3100
-loki_grpc_port: 9095
-loki_config_dir: "/etc/loki"
-loki_data_dir: "/var/lib/loki"
-loki_memory_limit: "2g"
-loki_log_level: "warn"
+horde_monitoring_loki_image: "grafana/loki:3.4.2"
+horde_monitoring_loki_port: 3100
+horde_monitoring_loki_grpc_port: 9095
+horde_monitoring_loki_config_dir: "/etc/loki"
+horde_monitoring_loki_data_dir: "/var/lib/loki"
+horde_monitoring_loki_memory_limit: "2g"
+horde_monitoring_loki_log_level: "warn"
 
 # Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
-loki_auth_enabled: true
+horde_monitoring_loki_auth_enabled: true
 
 # MinIO bucket for Loki log chunks and index data
-loki_chunks_bucket: "loki-chunks"
+horde_monitoring_loki_chunks_bucket: "loki-chunks"
 
 # Retention via the compactor. Set to "0" to disable (infinite retention).
 # Uses Go duration format: "2160h" = 90 days.
-loki_retention_enabled: true
-loki_retention_period: "2160h"
+horde_monitoring_loki_retention_enabled: true
+horde_monitoring_loki_retention_period: "2160h"
 
 # Per-tenant limit overrides (keyed by tenant ID). Example:
-#   loki_tenant_overrides:
+#   horde_monitoring_loki_tenant_overrides:
 #     ai-horde-app:
 #       retention_period: "8760h"
-loki_tenant_overrides: {}
+horde_monitoring_loki_tenant_overrides: {}
 # Ingestion rate limits (per-tenant defaults)
-loki_ingestion_rate_mb: 10
-loki_ingestion_burst_size_mb: 20
-loki_max_streams_per_user: 10000
+horde_monitoring_loki_ingestion_rate_mb: 10
+horde_monitoring_loki_ingestion_burst_size_mb: 20
+horde_monitoring_loki_max_streams_per_user: 10000
 
 # Query limits
-loki_max_query_length: "721h"
-loki_max_query_lookback: "2160h"
+horde_monitoring_loki_max_query_length: "721h"
+horde_monitoring_loki_max_query_lookback: "2160h"
 
 # Structured metadata (enables trace_id/span_id on log lines from OTLP sources)
-loki_allow_structured_metadata: true
+horde_monitoring_loki_allow_structured_metadata: true
 
 # ---------------------------------------------------------------------------
 # Tempo (distributed tracing — Docker-based, monolithic mode, S3 via MinIO)
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Tempo alongside Mimir in the Docker Compose stack.
 # When enabled, Tempo receives OTLP traces and stores them in MinIO.
-monitoring_install_tempo: false
+horde_monitoring_install_tempo: false
 
-tempo_image: "grafana/tempo:2.7.1"
-tempo_http_port: 3200
-tempo_otlp_grpc_port: 4317
-tempo_otlp_http_port: 4318
-tempo_config_dir: "/etc/tempo"
-tempo_data_dir: "/var/lib/tempo"
-tempo_memory_limit: "2g"
-tempo_log_level: "warn"
+horde_monitoring_tempo_image: "grafana/tempo:2.7.1"
+horde_monitoring_tempo_http_port: 3200
+horde_monitoring_tempo_otlp_grpc_port: 4317
+horde_monitoring_tempo_otlp_http_port: 4318
+horde_monitoring_tempo_config_dir: "/etc/tempo"
+horde_monitoring_tempo_data_dir: "/var/lib/tempo"
+horde_monitoring_tempo_memory_limit: "2g"
+horde_monitoring_tempo_log_level: "warn"
 
 # MinIO bucket for Tempo trace blocks
-tempo_traces_bucket: "tempo-traces"
+horde_monitoring_tempo_traces_bucket: "tempo-traces"
 
 # Trace retention — the compactor removes blocks older than this.
 # Uses Go duration format: "168h" = 7 days.
-tempo_trace_retention: "168h"
+horde_monitoring_tempo_trace_retention: "168h"
 
 # Metrics generator — derives RED metrics from traces and remote_writes them
 # to Mimir. Enables service graph and span metrics visualisations in Grafana.
-tempo_metrics_generator_enabled: true
+horde_monitoring_tempo_metrics_generator_enabled: true
 # Tenant ID used when the metrics generator writes to Mimir via remote_write.
-tempo_metrics_generator_tenant_id: "infrastructure"
+horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
 # Processors to enable (service-graphs provides service map, span-metrics provides RED).
-tempo_metrics_generator_processors:
+horde_monitoring_tempo_metrics_generator_processors:
   - "service-graphs"
   - "span-metrics"
   - "local-blocks"
@@ -255,52 +255,52 @@ tempo_metrics_generator_processors:
 # OTLP receiver bind address inside Docker.
 # 0.0.0.0 within the container — external access is controlled by Docker port
 # mapping (127.0.0.1 by default) and HAProxy for remote ingest.
-tempo_otlp_bind_address: "0.0.0.0"
+horde_monitoring_tempo_otlp_bind_address: "0.0.0.0"
 
 # Ingester tuning (conservative for ≤10 host deployments)
-tempo_ingester_trace_idle_period: "10s"
-tempo_ingester_max_block_bytes: 1000000
-tempo_ingester_max_block_duration: "5m"
+horde_monitoring_tempo_ingester_trace_idle_period: "10s"
+horde_monitoring_tempo_ingester_max_block_bytes: 1000000
+horde_monitoring_tempo_ingester_max_block_duration: "5m"
 
 # ---------------------------------------------------------------------------
 # Pyroscope (continuous profiling — Docker-based, monolithic mode, S3 via MinIO)
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Pyroscope alongside Mimir in the Docker Compose stack.
 # When enabled, Pyroscope receives profiling data and stores it in MinIO.
-monitoring_install_pyroscope: false
+horde_monitoring_install_pyroscope: false
 
-pyroscope_image: "grafana/pyroscope:1.19.0"
-pyroscope_port: 4040
-pyroscope_memberlist_port: 7946
-pyroscope_config_dir: "/etc/pyroscope"
-pyroscope_data_dir: "/var/lib/pyroscope"
-pyroscope_memory_limit: "2g"
-pyroscope_log_level: "warn"
+horde_monitoring_pyroscope_image: "grafana/pyroscope:1.19.0"
+horde_monitoring_pyroscope_port: 4040
+horde_monitoring_pyroscope_memberlist_port: 7946
+horde_monitoring_pyroscope_config_dir: "/etc/pyroscope"
+horde_monitoring_pyroscope_data_dir: "/var/lib/pyroscope"
+horde_monitoring_pyroscope_memory_limit: "2g"
+horde_monitoring_pyroscope_log_level: "warn"
 
 # Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
-pyroscope_auth_enabled: true
+horde_monitoring_pyroscope_auth_enabled: true
 
 # MinIO bucket for Pyroscope profile data
-pyroscope_blocks_bucket: "pyroscope-data"
+horde_monitoring_pyroscope_blocks_bucket: "pyroscope-data"
 
 # Global retention default (applies to tenants without overrides).
 # Uses Go duration format: "0s" = infinite retention.
-pyroscope_retention_period: "0s"
+horde_monitoring_pyroscope_retention_period: "0s"
 
 # Per-tenant retention (matches Mimir's multi-tenant model).
-pyroscope_application_retention: "0"
-pyroscope_infrastructure_retention: "30d"
-pyroscope_public_retention: "90d"
+horde_monitoring_pyroscope_application_retention: "0"
+horde_monitoring_pyroscope_infrastructure_retention: "30d"
+horde_monitoring_pyroscope_public_retention: "90d"
 
 # Additional per-tenant override entries (dict). Merged into runtime-overrides.yaml.
-pyroscope_extra_tenant_overrides: {}
+horde_monitoring_pyroscope_extra_tenant_overrides: {}
 # Self-profiling: Pyroscope profiles itself for debugging/monitoring
-pyroscope_self_profiling: true
+horde_monitoring_pyroscope_self_profiling: true
 
 # Ingestion rate limit (MB/s per tenant)
-pyroscope_ingestion_rate_mb: 4
-pyroscope_ingestion_burst_size_mb: 8
+horde_monitoring_pyroscope_ingestion_rate_mb: 4
+horde_monitoring_pyroscope_ingestion_burst_size_mb: 8
 
 # HAProxy configuration (safe edit with permanent rolling backups)
-haproxy_config_path: "/etc/haproxy/haproxy.cfg"
-haproxy_backup_dir: "/var/backups/haproxy"
+horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
+horde_monitoring_haproxy_backup_dir: "/var/backups/haproxy"

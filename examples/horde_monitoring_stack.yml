@@ -54,43 +54,43 @@
 
   vars:
     # -- Mimir + Grafana (horde_monitoring role) --
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_configure_haproxy: true
-    grafana_admin_password: "{{ vault_grafana_admin_password }}"
-    monitoring_application_tenant_id: "ai-horde-app"
-    monitoring_application_retention: "0"
-    monitoring_infrastructure_tenant_id: "infrastructure"
-    monitoring_infrastructure_retention: "30d"
-    monitoring_public_tenant_id: "ai-horde-public"
-    monitoring_public_retention: "90d"
-    grafana_anonymous_enabled: true
-    grafana_provision_dashboards: true
-    # grafana_root_url: "https://grafana.example.com"
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_configure_haproxy: true
+    horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+    horde_monitoring_application_tenant_id: "ai-horde-app"
+    horde_monitoring_application_retention: "0"
+    horde_monitoring_infrastructure_tenant_id: "infrastructure"
+    horde_monitoring_infrastructure_retention: "30d"
+    horde_monitoring_public_tenant_id: "ai-horde-public"
+    horde_monitoring_public_retention: "90d"
+    horde_monitoring_grafana_anonymous_enabled: true
+    horde_monitoring_grafana_provision_dashboards: true
+    # horde_monitoring_grafana_root_url: "https://grafana.example.com"
 
     # -- Loki (log aggregation — opt-in) --
-    monitoring_install_loki: true
-    loki_retention_period: "2160h"  # 90 days
+    horde_monitoring_install_loki: true
+    horde_monitoring_loki_retention_period: "2160h"  # 90 days
 
     # -- Tempo (distributed tracing — opt-in) --
-    monitoring_install_tempo: true
-    tempo_trace_retention: "168h"  # 7 days
-    tempo_metrics_generator_enabled: true
-    tempo_metrics_generator_tenant_id: "infrastructure"
+    horde_monitoring_install_tempo: true
+    horde_monitoring_tempo_trace_retention: "168h"  # 7 days
+    horde_monitoring_tempo_metrics_generator_enabled: true
+    horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
 
     # -- Pyroscope (continuous profiling — opt-in) --
-    monitoring_install_pyroscope: true
-    pyroscope_retention_period: "0s"  # global default (infinite)
-    pyroscope_application_retention: "0"  # per-tenant: infinite
-    pyroscope_infrastructure_retention: "30d"
-    pyroscope_public_retention: "90d"
-    pyroscope_self_profiling: true
+    horde_monitoring_install_pyroscope: true
+    horde_monitoring_pyroscope_retention_period: "0s"  # global default (infinite)
+    horde_monitoring_pyroscope_application_retention: "0"  # per-tenant: infinite
+    horde_monitoring_pyroscope_infrastructure_retention: "30d"
+    horde_monitoring_pyroscope_public_retention: "90d"
+    horde_monitoring_pyroscope_self_profiling: true
 
     # -- Alertmanager datasource in Grafana --
     # Lets Grafana query alert state from Alertmanager (Alerting UI).
     # Uses host.docker.internal because Alertmanager is native on the host
     # while Grafana runs inside Docker.
-    monitoring_alertmanager_url: "http://host.docker.internal:9093"
+    horde_monitoring_alertmanager_url: "http://host.docker.internal:9093"
 
     # -- Alertmanager (community role, applied directly) --
     # Receives alerts from Prometheus, deduplicates, groups, and routes to
@@ -156,21 +156,21 @@
     prometheus_remote_write:
       - url: "http://localhost:9009/api/v1/push"
         headers:
-          X-Scope-OrgID: "{{ monitoring_application_tenant_id }}"
+          X-Scope-OrgID: "{{ horde_monitoring_application_tenant_id }}"
         write_relabel_configs:
           - source_labels: [job]
             regex: horde-exporter
             action: keep
       - url: "http://localhost:9009/api/v1/push"
         headers:
-          X-Scope-OrgID: "{{ monitoring_infrastructure_tenant_id }}"
+          X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
         write_relabel_configs:
           - source_labels: [job]
             regex: horde-exporter
             action: drop
       - url: "http://localhost:9009/api/v1/push"
         headers:
-          X-Scope-OrgID: "{{ monitoring_public_tenant_id }}"
+          X-Scope-OrgID: "{{ horde_monitoring_public_tenant_id }}"
         write_relabel_configs:
           - source_labels: [job]
             regex: horde-exporter
@@ -245,10 +245,10 @@
       ansible.builtin.uri:
         url: "http://localhost:9009/ready"
         return_content: true
-      register: mimir_health
+      register: horde_monitoring_mimir_health
       retries: 10
       delay: 5
-      until: mimir_health.status == 200
+      until: horde_monitoring_mimir_health.status == 200
 
     - name: Verify Alertmanager is ready
       ansible.builtin.uri:
@@ -262,10 +262,10 @@
     - name: Verify Grafana is running
       ansible.builtin.uri:
         url: "http://localhost:3000/api/health"
-      register: grafana_health
+      register: horde_monitoring_grafana_health
       retries: 5
       delay: 5
-      until: grafana_health.status == 200
+      until: horde_monitoring_grafana_health.status == 200
 
     - name: Display monitoring stack status
       ansible.builtin.debug:
@@ -278,6 +278,6 @@
           - "Loki: http://127.0.0.1:3100 (local only)"
           - "Tempo: http://127.0.0.1:3200 (local only, OTLP: 4317/4318)"
           - "Pyroscope: http://127.0.0.1:4040 (local only)"
-          - "Application tenant: {{ monitoring_application_tenant_id }} (retention {{ monitoring_application_retention }})"
-          - "Infrastructure tenant: {{ monitoring_infrastructure_tenant_id }} (retention {{ monitoring_infrastructure_retention }})"
+          - "Application tenant: {{ horde_monitoring_application_tenant_id }} (retention {{ horde_monitoring_application_retention }})"
+          - "Infrastructure tenant: {{ horde_monitoring_infrastructure_tenant_id }} (retention {{ horde_monitoring_infrastructure_retention }})"
           - "Stats Exporter: http://localhost:9150/metrics"

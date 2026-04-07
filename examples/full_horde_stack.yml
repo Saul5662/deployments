@@ -89,9 +89,9 @@
   roles:
     - role: haidra.deployments.horde_monitoring
       vars:
-        monitoring_install_mimir: true
-        monitoring_install_grafana: true
-        grafana_admin_password: "{{ vault_grafana_admin_password }}"
+        horde_monitoring_install_mimir: true
+        horde_monitoring_install_grafana: true
+        horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
       tags: [monitoring]
 
     - role: haidra.deployments.horde_stats_exporter

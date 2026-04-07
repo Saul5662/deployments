@@ -10,13 +10,13 @@
     update_cache: true
   become: true
 
-- name: Bootstrap uv (Python package manager)
+- name: Bootstrap uv (Python package manager)  # noqa: var-naming[no-role-prefix]
   ansible.builtin.include_role:
     name: _uv_bootstrap
   vars:
-    _uvb_version: "{{ exporter_uv_version }}"
-    _uvb_installer_checksum: "{{ exporter_uv_installer_checksum }}"
-    _uvb_allow_unverified: false
+    _uv_bootstrap_version: "{{ exporter_uv_version }}"
+    _uv_bootstrap_installer_checksum: "{{ exporter_uv_installer_checksum }}"
+    _uv_bootstrap_allow_unverified: false
   when: not ansible_check_mode
 
 - name: Create exporter user
@@ -51,16 +51,7 @@
     creates: "{{ exporter_install_dir }}/venv"
   become: true
   register: _exporter_venv_create
-
-- name: Set venv ownership (change-gated)
-  ansible.builtin.file:
-    path: "{{ exporter_install_dir }}/venv"
-    state: directory
-    owner: "{{ exporter_user }}"
-    group: "{{ exporter_user }}"
-    recurse: true
-  become: true
-  when: _exporter_venv_create is changed
+  notify: Set venv ownership
 
 - name: Read installed exporter ref marker
   ansible.builtin.slurp:

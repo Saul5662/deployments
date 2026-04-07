@@ -3,7 +3,7 @@
 
 - name: Ensure Alloy config directory exists
   ansible.builtin.file:
-    path: "{{ alloy_config_dir }}"
+    path: "{{ horde_alloy_config_dir }}"
     state: directory
     owner: alloy
     group: alloy
@@ -12,7 +12,7 @@
 
 - name: Ensure Alloy data directory exists
   ansible.builtin.file:
-    path: "{{ alloy_data_dir }}"
+    path: "{{ horde_alloy_data_dir }}"
     state: directory
     owner: alloy
     group: alloy
@@ -22,7 +22,7 @@
 - name: Deploy Alloy configuration
   ansible.builtin.template:
     src: config.alloy.j2
-    dest: "{{ alloy_config_dir }}/config.alloy"
+    dest: "{{ horde_alloy_config_dir }}/config.alloy"
     owner: alloy
     group: alloy
     mode: "0640"
@@ -48,4 +48,4 @@
     state: started
     daemon_reload: true
   become: true
-  when: alloy_start_service | bool
+  when: horde_alloy_start_service | bool

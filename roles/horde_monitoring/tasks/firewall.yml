@@ -11,15 +11,15 @@
 - name: Allow Grafana port
   community.general.ufw:
     rule: allow
-    port: "{{ grafana_port | string }}"
+    port: "{{ horde_monitoring_grafana_port | string }}"
     proto: tcp
   become: true
-  when: monitoring_install_grafana | bool
+  when: horde_monitoring_install_grafana | bool
 
 - name: Allow Mimir port
   community.general.ufw:
     rule: allow
-    port: "{{ mimir_port | string }}"
+    port: "{{ horde_monitoring_mimir_port | string }}"
     proto: tcp
   become: true
-  when: monitoring_install_mimir | bool
+  when: horde_monitoring_install_mimir | bool

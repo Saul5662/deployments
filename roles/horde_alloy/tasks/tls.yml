@@ -3,7 +3,7 @@
 
 - name: Ensure keyrings directory exists for CA cert
   ansible.builtin.file:
-    path: "{{ alloy_config_dir }}"
+    path: "{{ horde_alloy_config_dir }}"
     state: directory
     owner: alloy
     group: alloy
@@ -12,8 +12,8 @@
 
 - name: Deploy CA certificate
   ansible.builtin.copy:
-    src: "{{ alloy_tls_ca_cert }}"
-    dest: "{{ alloy_config_dir }}/ca.crt"
+    src: "{{ horde_alloy_tls_ca_cert }}"
+    dest: "{{ horde_alloy_config_dir }}/ca.crt"
     owner: alloy
     group: alloy
     mode: "0644"

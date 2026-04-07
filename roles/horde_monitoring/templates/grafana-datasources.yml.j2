@@ -5,7 +5,7 @@ apiVersion: 1
 
 datasources:
   # --- Org 1 (admin) datasources ---
-  - name: {{ monitoring_application_datasource_name }}
+  - name: {{ horde_monitoring_application_datasource_name }}
     uid: mimir-app
     orgId: 1
     type: prometheus
@@ -16,8 +16,8 @@ datasources:
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_application_tenant_id }}
-  - name: {{ monitoring_infrastructure_datasource_name }}
+      httpHeaderValue1: {{ horde_monitoring_application_tenant_id }}
+  - name: {{ horde_monitoring_infrastructure_datasource_name }}
     uid: mimir-infra
     orgId: 1
     type: prometheus
@@ -28,72 +28,72 @@ datasources:
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
-{% if monitoring_alertmanager_url %}
+      httpHeaderValue1: {{ horde_monitoring_infrastructure_tenant_id }}
+{% if horde_monitoring_alertmanager_url %}
   - name: Alertmanager
     uid: alertmanager
     orgId: 1
     type: alertmanager
     access: proxy
-    url: {{ monitoring_alertmanager_url }}
+    url: {{ horde_monitoring_alertmanager_url }}
     isDefault: false
     editable: false
     jsonData:
       implementation: prometheus
       handleGrafanaManagedAlerts: false
 {% endif %}
-{% if monitoring_install_loki | bool %}
-  - name: Loki ({{ monitoring_application_datasource_name }})
+{% if horde_monitoring_install_loki | bool %}
+  - name: Loki ({{ horde_monitoring_application_datasource_name }})
     uid: loki-app
     orgId: 1
     type: loki
     access: proxy
-    url: http://loki:{{ loki_port }}
+    url: http://loki:{{ horde_monitoring_loki_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
       derivedFields:
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
         - datasourceUid: tempo
           matcherRegex: "(?:trace_id|traceID|traceId)=(\\w+)"
           name: TraceID
           url: "$${__value.raw}"
 {% endif %}
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_application_tenant_id }}
-  - name: Loki ({{ monitoring_infrastructure_datasource_name }})
+      httpHeaderValue1: {{ horde_monitoring_application_tenant_id }}
+  - name: Loki ({{ horde_monitoring_infrastructure_datasource_name }})
     uid: loki-infra
     orgId: 1
     type: loki
     access: proxy
-    url: http://loki:{{ loki_port }}
+    url: http://loki:{{ horde_monitoring_loki_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
       derivedFields:
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
         - datasourceUid: tempo
           matcherRegex: "(?:trace_id|traceID|traceId)=(\\w+)"
           name: TraceID
           url: "$${__value.raw}"
 {% endif %}
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
+      httpHeaderValue1: {{ horde_monitoring_infrastructure_tenant_id }}
 {% endif %}
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
   - name: Tempo
     uid: tempo
     orgId: 1
     type: tempo
     access: proxy
-    url: http://tempo:{{ tempo_http_port }}
+    url: http://tempo:{{ horde_monitoring_tempo_http_port }}
     isDefault: false
     editable: false
     jsonData:
       tracesToLogsV2:
-{% if monitoring_install_loki | bool %}
+{% if horde_monitoring_install_loki | bool %}
         datasourceUid: loki-app
         filterByTraceID: true
         filterBySpanID: true
@@ -105,37 +105,37 @@ datasources:
       nodeGraph:
         enabled: true
 {% endif %}
-{% if monitoring_install_pyroscope | bool %}
-  - name: Pyroscope ({{ monitoring_application_datasource_name }})
+{% if horde_monitoring_install_pyroscope | bool %}
+  - name: Pyroscope ({{ horde_monitoring_application_datasource_name }})
     uid: pyroscope-app
     orgId: 1
     type: grafana-pyroscope-datasource
     access: proxy
-    url: http://pyroscope:{{ pyroscope_port }}
+    url: http://pyroscope:{{ horde_monitoring_pyroscope_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_application_tenant_id }}
-  - name: Pyroscope ({{ monitoring_infrastructure_datasource_name }})
+      httpHeaderValue1: {{ horde_monitoring_application_tenant_id }}
+  - name: Pyroscope ({{ horde_monitoring_infrastructure_datasource_name }})
     uid: pyroscope-infra
     orgId: 1
     type: grafana-pyroscope-datasource
     access: proxy
-    url: http://pyroscope:{{ pyroscope_port }}
+    url: http://pyroscope:{{ horde_monitoring_pyroscope_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_infrastructure_tenant_id }}
+      httpHeaderValue1: {{ horde_monitoring_infrastructure_tenant_id }}
 {% endif %}
-{% if grafana_anonymous_enabled | bool %}
+{% if horde_monitoring_grafana_anonymous_enabled | bool %}
   # --- Org 2 (public / anonymous) datasource ---
-  - name: {{ monitoring_public_datasource_name }}
+  - name: {{ horde_monitoring_public_datasource_name }}
     uid: mimir-public
-    orgId: {{ grafana_public_org_id }}
+    orgId: {{ horde_monitoring_grafana_public_org_id }}
     type: prometheus
     access: proxy
     url: http://mimir:9009/prometheus
@@ -144,46 +144,46 @@ datasources:
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_public_tenant_id }}
-{% if monitoring_install_loki | bool %}
-  - name: Loki ({{ monitoring_public_datasource_name }})
+      httpHeaderValue1: {{ horde_monitoring_public_tenant_id }}
+{% if horde_monitoring_install_loki | bool %}
+  - name: Loki ({{ horde_monitoring_public_datasource_name }})
     uid: loki-public
-    orgId: {{ grafana_public_org_id }}
+    orgId: {{ horde_monitoring_grafana_public_org_id }}
     type: loki
     access: proxy
-    url: http://loki:{{ loki_port }}
+    url: http://loki:{{ horde_monitoring_loki_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_public_tenant_id }}
+      httpHeaderValue1: {{ horde_monitoring_public_tenant_id }}
 {% endif %}
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
   - name: Tempo
     uid: tempo-public
-    orgId: {{ grafana_public_org_id }}
+    orgId: {{ horde_monitoring_grafana_public_org_id }}
     type: tempo
     access: proxy
-    url: http://tempo:{{ tempo_http_port }}
+    url: http://tempo:{{ horde_monitoring_tempo_http_port }}
     isDefault: false
     editable: false
     jsonData:
       nodeGraph:
         enabled: true
 {% endif %}
-{% if monitoring_install_pyroscope | bool %}
-  - name: Pyroscope ({{ monitoring_public_datasource_name }})
+{% if horde_monitoring_install_pyroscope | bool %}
+  - name: Pyroscope ({{ horde_monitoring_public_datasource_name }})
     uid: pyroscope-public
-    orgId: {{ grafana_public_org_id }}
+    orgId: {{ horde_monitoring_grafana_public_org_id }}
     type: grafana-pyroscope-datasource
     access: proxy
-    url: http://pyroscope:{{ pyroscope_port }}
+    url: http://pyroscope:{{ horde_monitoring_pyroscope_port }}
     isDefault: false
     editable: false
     jsonData:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
-      httpHeaderValue1: {{ monitoring_public_tenant_id }}
+      httpHeaderValue1: {{ horde_monitoring_public_tenant_id }}
 {% endif %}
 {% endif %}

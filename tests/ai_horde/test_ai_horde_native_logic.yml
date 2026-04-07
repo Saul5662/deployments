@@ -67,7 +67,7 @@
         that:
           - "'meta: flush_handlers' not in _haproxy_tasks_file_content"
           - "'meta: flush_handlers' not in _shared_safe_edit_content"
-          - "'_hse_requires_promotion' in _shared_safe_edit_content"
+          - "'_haproxy_safe_edit_requires_promotion' in _shared_safe_edit_content"
           - "'Fail if safe-edit ingress port conflicts with unmanaged listeners' in _haproxy_tasks_file_content"
           - "'include_role' in _haproxy_tasks_file_content"
           - "'_haproxy_safe_edit' in _haproxy_tasks_file_content"

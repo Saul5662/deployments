@@ -4,7 +4,7 @@
 #
 # This playbook is driven by tests/monitoring/local_deploy.sh — do not run directly.
 # It applies the horde_monitoring role against localhost with
-# monitoring_start_services=false so that only configs are rendered
+# horde_monitoring_start_services=false so that only configs are rendered
 # (no systemd units are enabled/started).
 #
 # After the role runs, post_tasks render the remaining configs that are
@@ -21,51 +21,51 @@
   vars:
     _local_root: "{{ playbook_dir }}/../../local-deploy"
 
-    monitoring_install_mimir: true
-    monitoring_install_grafana: true
-    monitoring_install_loki: true
-    monitoring_install_tempo: true
-    monitoring_install_pyroscope: true
-    monitoring_configure_haproxy: false
-    monitoring_configure_firewall: false
-    monitoring_start_services: false  # script starts compose directly
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: true
+    horde_monitoring_install_loki: true
+    horde_monitoring_install_tempo: true
+    horde_monitoring_install_pyroscope: true
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_start_services: false  # script starts compose directly
 
-    mimir_config_dir: "{{ _local_root }}/mimir/config"
-    mimir_data_dir: "{{ _local_root }}/mimir/data"
-    mimir_compose_dir: "{{ _local_root }}/compose"
-    grafana_data_dir: "{{ _local_root }}/grafana/data"
-    grafana_provisioning_dir: "{{ _local_root }}/grafana/provisioning"
-    grafana_dashboard_dir: "{{ _local_root }}/grafana/dashboards"
-    loki_config_dir: "{{ _local_root }}/loki/config"
-    loki_data_dir: "{{ _local_root }}/loki/data"
-    tempo_config_dir: "{{ _local_root }}/tempo/config"
-    tempo_data_dir: "{{ _local_root }}/tempo/data"
-    pyroscope_config_dir: "{{ _local_root }}/pyroscope/config"
-    pyroscope_data_dir: "{{ _local_root }}/pyroscope/data"
+    horde_monitoring_mimir_config_dir: "{{ _local_root }}/mimir/config"
+    horde_monitoring_mimir_data_dir: "{{ _local_root }}/mimir/data"
+    horde_monitoring_mimir_compose_dir: "{{ _local_root }}/compose"
+    horde_monitoring_grafana_data_dir: "{{ _local_root }}/grafana/data"
+    horde_monitoring_grafana_provisioning_dir: "{{ _local_root }}/grafana/provisioning"
+    horde_monitoring_grafana_dashboard_dir: "{{ _local_root }}/grafana/dashboards"
+    horde_monitoring_loki_config_dir: "{{ _local_root }}/loki/config"
+    horde_monitoring_loki_data_dir: "{{ _local_root }}/loki/data"
+    horde_monitoring_tempo_config_dir: "{{ _local_root }}/tempo/config"
+    horde_monitoring_tempo_data_dir: "{{ _local_root }}/tempo/data"
+    horde_monitoring_pyroscope_config_dir: "{{ _local_root }}/pyroscope/config"
+    horde_monitoring_pyroscope_data_dir: "{{ _local_root }}/pyroscope/data"
 
-    grafana_admin_password: "localdev"
-    grafana_anonymous_enabled: true
-    grafana_provision_dashboards: true
+    horde_monitoring_grafana_admin_password: "localdev"
+    horde_monitoring_grafana_anonymous_enabled: true
+    horde_monitoring_grafana_provision_dashboards: true
 
     # Tenants
-    monitoring_application_tenant_id: "ai-horde-app"
-    monitoring_infrastructure_tenant_id: "infrastructure"
-    monitoring_public_tenant_id: "ai-horde-public"
+    horde_monitoring_application_tenant_id: "ai-horde-app"
+    horde_monitoring_infrastructure_tenant_id: "infrastructure"
+    horde_monitoring_public_tenant_id: "ai-horde-public"
 
     # Loki / Tempo local settings
-    loki_retention_period: "168h"  # 7 days for local dev
-    tempo_trace_retention: "24h"  # 1 day for local dev
-    tempo_metrics_generator_enabled: true
-    tempo_metrics_generator_tenant_id: "infrastructure"
+    horde_monitoring_loki_retention_period: "168h"  # 7 days for local dev
+    horde_monitoring_tempo_trace_retention: "24h"  # 1 day for local dev
+    horde_monitoring_tempo_metrics_generator_enabled: true
+    horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
 
     # Pyroscope local settings
-    pyroscope_retention_period: "0s"
-    pyroscope_self_profiling: true
+    horde_monitoring_pyroscope_retention_period: "0s"
+    horde_monitoring_pyroscope_self_profiling: true
 
     # Alertmanager — runs as Docker container in local-deploy
-    monitoring_alertmanager_url: "http://alertmanager:9093"
+    horde_monitoring_alertmanager_url: "http://alertmanager:9093"
     # Redirect alerting rules into local-deploy so they can be mounted
-    monitoring_alerting_rules_dir: "{{ _local_root }}/prometheus/rules"
+    horde_monitoring_alerting_rules_dir: "{{ _local_root }}/prometheus/rules"
 
     # Ports for services that the shell script manages
     _local_prometheus_port: 9090
@@ -127,7 +127,7 @@
     - name: Render Docker Compose overlay
       ansible.builtin.template:
         src: local-deploy/docker-compose.local.yml.j2
-        dest: "{{ mimir_compose_dir }}/docker-compose.local.yml"
+        dest: "{{ horde_monitoring_mimir_compose_dir }}/docker-compose.local.yml"
         mode: "0644"
 
     - name: Render local-deploy.env

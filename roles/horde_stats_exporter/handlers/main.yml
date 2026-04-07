@@ -6,6 +6,15 @@
     daemon_reload: true
   become: true
 
+- name: Set venv ownership
+  ansible.builtin.file:
+    path: "{{ exporter_install_dir }}/venv"
+    state: directory
+    owner: "{{ exporter_user }}"
+    group: "{{ exporter_user }}"
+    recurse: true
+  become: true
+
 - name: Restart horde-exporter
   ansible.builtin.systemd:
     name: horde-exporter

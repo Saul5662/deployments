@@ -3,9 +3,9 @@
 
 services:
 
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
   minio:
-    image: {{ minio_image }}
+    image: {{ horde_monitoring_minio_image }}
     container_name: minio
     command:
       - "server"
@@ -13,18 +13,18 @@ services:
       - "--console-address"
       - ":9001"
     environment:
-      - "MINIO_ROOT_USER={{ minio_root_user }}"
-      - "MINIO_ROOT_PASSWORD={{ minio_root_password }}"
+      - "MINIO_ROOT_USER={{ horde_monitoring_minio_root_user }}"
+      - "MINIO_ROOT_PASSWORD={{ horde_monitoring_minio_root_password }}"
     ports:
-      - "127.0.0.1:{{ minio_api_port }}:9000"
-      - "127.0.0.1:{{ minio_console_port }}:9001"
+      - "127.0.0.1:{{ horde_monitoring_minio_api_port }}:9000"
+      - "127.0.0.1:{{ horde_monitoring_minio_console_port }}:9001"
     volumes:
-      - {{ minio_data_dir }}:/data
+      - {{ horde_monitoring_minio_data_dir }}:/data
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ minio_memory_limit }}
+          memory: {{ horde_monitoring_minio_memory_limit }}
     logging:
       driver: local
       options:
@@ -40,24 +40,24 @@ services:
       - monitoring
 
   minio-init:
-    image: {{ minio_mc_image }}
+    image: {{ horde_monitoring_minio_mc_image }}
     container_name: minio-init
     environment:
-      - "MINIO_INIT_USER={{ minio_root_user }}"
-      - "MINIO_INIT_PASSWORD={{ minio_root_password }}"
+      - "MINIO_INIT_USER={{ horde_monitoring_minio_root_user }}"
+      - "MINIO_INIT_PASSWORD={{ horde_monitoring_minio_root_password }}"
     entrypoint: >
       /bin/sh -c "
       until mc alias set local http://minio:9000 $$MINIO_INIT_USER $$MINIO_INIT_PASSWORD; do sleep 2; done;
-      mc mb --ignore-existing local/{{ minio_blocks_bucket }};
-      mc mb --ignore-existing local/{{ minio_ruler_bucket }};
-{% if monitoring_install_loki | bool %}
-      mc mb --ignore-existing local/{{ loki_chunks_bucket }};
+      mc mb --ignore-existing local/{{ horde_monitoring_minio_blocks_bucket }};
+      mc mb --ignore-existing local/{{ horde_monitoring_minio_ruler_bucket }};
+{% if horde_monitoring_install_loki | bool %}
+      mc mb --ignore-existing local/{{ horde_monitoring_loki_chunks_bucket }};
 {% endif %}
-{% if monitoring_install_tempo | bool %}
-      mc mb --ignore-existing local/{{ tempo_traces_bucket }};
+{% if horde_monitoring_install_tempo | bool %}
+      mc mb --ignore-existing local/{{ horde_monitoring_tempo_traces_bucket }};
 {% endif %}
-{% if monitoring_install_pyroscope | bool %}
-      mc mb --ignore-existing local/{{ pyroscope_blocks_bucket }};
+{% if horde_monitoring_install_pyroscope | bool %}
+      mc mb --ignore-existing local/{{ horde_monitoring_pyroscope_blocks_bucket }};
 {% endif %}
       exit 0;
       "
@@ -73,17 +73,17 @@ services:
       - monitoring
 {% endif %}
 
-{% if mimir_enable_memcached | bool %}
+{% if horde_monitoring_mimir_enable_memcached | bool %}
   memcached:
-    image: {{ mimir_memcached_image }}
+    image: {{ horde_monitoring_mimir_memcached_image }}
     container_name: memcached
     command:
       - "-m"
-      - "{{ mimir_memcached_memory_mb }}"
+      - "{{ horde_monitoring_mimir_memcached_memory_mb }}"
       - "-I"
-      - "{{ mimir_memcached_max_item_size }}"
+      - "{{ horde_monitoring_mimir_memcached_max_item_size }}"
       - "-c"
-      - "{{ mimir_memcached_max_connections }}"
+      - "{{ horde_monitoring_mimir_memcached_max_connections }}"
     restart: unless-stopped
     logging:
       driver: local
@@ -93,28 +93,28 @@ services:
     deploy:
       resources:
         limits:
-          memory: {{ mimir_memcached_memory_limit }}
+          memory: {{ horde_monitoring_mimir_memcached_memory_limit }}
     networks:
       - monitoring
 {% endif %}
 
   mimir:
-    image: {{ mimir_image }}
+    image: {{ horde_monitoring_mimir_image }}
     container_name: mimir
     command:
       - "-config.file=/etc/mimir/mimir.yaml"
       - "-target=all"
     ports:
-      - "127.0.0.1:{{ mimir_port }}:9009"
+      - "127.0.0.1:{{ horde_monitoring_mimir_port }}:9009"
     volumes:
-      - {{ mimir_config_dir }}/mimir.yaml:/etc/mimir/mimir.yaml:ro
-      - {{ mimir_config_dir }}/runtime-overrides.yaml:/etc/mimir/runtime-overrides.yaml:ro
-      - {{ mimir_data_dir }}:/mimir
+      - {{ horde_monitoring_mimir_config_dir }}/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      - {{ horde_monitoring_mimir_config_dir }}/runtime-overrides.yaml:/etc/mimir/runtime-overrides.yaml:ro
+      - {{ horde_monitoring_mimir_data_dir }}:/mimir
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ mimir_memory_limit }}
+          memory: {{ horde_monitoring_mimir_memory_limit }}
     logging:
       driver: local
       options:
@@ -124,15 +124,15 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-{% if mimir_enable_memcached | bool %}
+{% if horde_monitoring_mimir_enable_memcached | bool %}
     depends_on:
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
       minio-init:
         condition: service_completed_successfully
 {% endif %}
       memcached:
         condition: service_started
-{% elif mimir_enable_minio | bool %}
+{% elif horde_monitoring_mimir_enable_minio | bool %}
     depends_on:
       minio-init:
         condition: service_completed_successfully
@@ -140,33 +140,33 @@ services:
     networks:
       - monitoring
 
-{% if monitoring_install_grafana | bool %}
+{% if horde_monitoring_install_grafana | bool %}
   grafana:
-    image: {{ grafana_image }}
+    image: {{ horde_monitoring_grafana_image }}
     container_name: grafana
     restart: unless-stopped
     ports:
-      - "127.0.0.1:{{ grafana_port }}:3000"
+      - "127.0.0.1:{{ horde_monitoring_grafana_port }}:3000"
     volumes:
-      - {{ grafana_data_dir }}:/var/lib/grafana
-      - {{ grafana_provisioning_dir }}:/etc/grafana/provisioning:ro
-      - {{ grafana_dashboard_dir }}:/etc/grafana/dashboards:ro
+      - {{ horde_monitoring_grafana_data_dir }}:/var/lib/grafana
+      - {{ horde_monitoring_grafana_provisioning_dir }}:/etc/grafana/provisioning:ro
+      - {{ horde_monitoring_grafana_dashboard_dir }}:/etc/grafana/dashboards:ro
     environment:
-      - "GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}"
-      - "GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}"
-{% if grafana_root_url %}
-      - "GF_SERVER_ROOT_URL={{ grafana_root_url }}"
+      - "GF_SECURITY_ADMIN_USER={{ horde_monitoring_grafana_admin_user }}"
+      - "GF_SECURITY_ADMIN_PASSWORD={{ horde_monitoring_grafana_admin_password }}"
+{% if horde_monitoring_grafana_root_url %}
+      - "GF_SERVER_ROOT_URL={{ horde_monitoring_grafana_root_url }}"
 {% endif %}
       - "GF_USERS_ALLOW_SIGN_UP=false"
       - "GF_USERS_ALLOW_ORG_CREATE=false"
-      - "GF_AUTH_ANONYMOUS_ENABLED={{ grafana_anonymous_enabled | lower }}"
-{% if grafana_anonymous_enabled | bool %}
-      - "GF_AUTH_ANONYMOUS_ORG_NAME={{ grafana_public_org_name }}"
-      - "GF_AUTH_ANONYMOUS_ORG_ROLE={{ grafana_anonymous_org_role }}"
+      - "GF_AUTH_ANONYMOUS_ENABLED={{ horde_monitoring_grafana_anonymous_enabled | lower }}"
+{% if horde_monitoring_grafana_anonymous_enabled | bool %}
+      - "GF_AUTH_ANONYMOUS_ORG_NAME={{ horde_monitoring_grafana_public_org_name }}"
+      - "GF_AUTH_ANONYMOUS_ORG_ROLE={{ horde_monitoring_grafana_anonymous_org_role }}"
 {% endif %}
-      - "GF_DASHBOARDS_MIN_REFRESH_INTERVAL={{ grafana_min_refresh_interval }}"
-      - "GF_DATAPROXY_TIMEOUT={{ grafana_dataproxy_timeout }}"
-{% if monitoring_alertmanager_url %}
+      - "GF_DASHBOARDS_MIN_REFRESH_INTERVAL={{ horde_monitoring_grafana_min_refresh_interval }}"
+      - "GF_DATAPROXY_TIMEOUT={{ horde_monitoring_grafana_dataproxy_timeout }}"
+{% if horde_monitoring_alertmanager_url %}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 {% endif %}
@@ -178,50 +178,50 @@ services:
     deploy:
       resources:
         limits:
-          memory: {{ grafana_memory_limit }}
+          memory: {{ horde_monitoring_grafana_memory_limit }}
     networks:
       - monitoring
     depends_on:
       - mimir
-{% if monitoring_install_loki | bool %}
+{% if horde_monitoring_install_loki | bool %}
       - loki
 {% endif %}
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
       - tempo
 {% endif %}
-{% if monitoring_install_pyroscope | bool %}
+{% if horde_monitoring_install_pyroscope | bool %}
       - pyroscope
 {% endif %}
 {% endif %}
 
-{% if monitoring_install_loki | bool %}
+{% if horde_monitoring_install_loki | bool %}
   loki:
-    image: {{ loki_image }}
+    image: {{ horde_monitoring_loki_image }}
     container_name: loki
     command:
       - "-config.file=/etc/loki/loki.yaml"
     ports:
-      - "127.0.0.1:{{ loki_port }}:{{ loki_port }}"
+      - "127.0.0.1:{{ horde_monitoring_loki_port }}:{{ horde_monitoring_loki_port }}"
     volumes:
-      - {{ loki_config_dir }}/loki.yaml:/etc/loki/loki.yaml:ro
-      - {{ loki_data_dir }}:/loki
+      - {{ horde_monitoring_loki_config_dir }}/loki.yaml:/etc/loki/loki.yaml:ro
+      - {{ horde_monitoring_loki_data_dir }}:/loki
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ loki_memory_limit }}
+          memory: {{ horde_monitoring_loki_memory_limit }}
     logging:
       driver: local
       options:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ loki_port }}/ready"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ horde_monitoring_loki_port }}/ready"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
     depends_on:
       minio-init:
         condition: service_completed_successfully
@@ -230,36 +230,36 @@ services:
       - monitoring
 {% endif %}
 
-{% if monitoring_install_tempo | bool %}
+{% if horde_monitoring_install_tempo | bool %}
   tempo:
-    image: {{ tempo_image }}
+    image: {{ horde_monitoring_tempo_image }}
     container_name: tempo
     command:
       - "-config.file=/etc/tempo/tempo.yaml"
     ports:
-      - "127.0.0.1:{{ tempo_http_port }}:{{ tempo_http_port }}"
-      - "127.0.0.1:{{ tempo_otlp_grpc_port }}:{{ tempo_otlp_grpc_port }}"
-      - "127.0.0.1:{{ tempo_otlp_http_port }}:{{ tempo_otlp_http_port }}"
+      - "127.0.0.1:{{ horde_monitoring_tempo_http_port }}:{{ horde_monitoring_tempo_http_port }}"
+      - "127.0.0.1:{{ horde_monitoring_tempo_otlp_grpc_port }}:{{ horde_monitoring_tempo_otlp_grpc_port }}"
+      - "127.0.0.1:{{ horde_monitoring_tempo_otlp_http_port }}:{{ horde_monitoring_tempo_otlp_http_port }}"
     volumes:
-      - {{ tempo_config_dir }}/tempo.yaml:/etc/tempo/tempo.yaml:ro
-      - {{ tempo_data_dir }}:/var/tempo
+      - {{ horde_monitoring_tempo_config_dir }}/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - {{ horde_monitoring_tempo_data_dir }}:/var/tempo
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ tempo_memory_limit }}
+          memory: {{ horde_monitoring_tempo_memory_limit }}
     logging:
       driver: local
       options:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ tempo_http_port }}/ready"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ horde_monitoring_tempo_http_port }}/ready"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
     depends_on:
       minio-init:
         condition: service_completed_successfully
@@ -268,36 +268,36 @@ services:
       - monitoring
 {% endif %}
 
-{% if monitoring_install_pyroscope | bool %}
+{% if horde_monitoring_install_pyroscope | bool %}
   pyroscope:
-    image: {{ pyroscope_image }}
+    image: {{ horde_monitoring_pyroscope_image }}
     container_name: pyroscope
     command:
       - "-config.file=/etc/pyroscope/pyroscope.yaml"
       - "-target=all"
     ports:
-      - "127.0.0.1:{{ pyroscope_port }}:{{ pyroscope_port }}"
+      - "127.0.0.1:{{ horde_monitoring_pyroscope_port }}:{{ horde_monitoring_pyroscope_port }}"
     volumes:
-      - {{ pyroscope_config_dir }}/pyroscope.yaml:/etc/pyroscope/pyroscope.yaml:ro
-      - {{ pyroscope_config_dir }}/runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro
-      - {{ pyroscope_data_dir }}:/data
+      - {{ horde_monitoring_pyroscope_config_dir }}/pyroscope.yaml:/etc/pyroscope/pyroscope.yaml:ro
+      - {{ horde_monitoring_pyroscope_config_dir }}/runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro
+      - {{ horde_monitoring_pyroscope_data_dir }}:/data
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ pyroscope_memory_limit }}
+          memory: {{ horde_monitoring_pyroscope_memory_limit }}
     logging:
       driver: local
       options:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ pyroscope_port }}/ready"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ horde_monitoring_pyroscope_port }}/ready"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_minio | bool %}
     depends_on:
       minio-init:
         condition: service_completed_successfully

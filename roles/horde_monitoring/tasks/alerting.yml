@@ -8,7 +8,7 @@
 
 - name: Ensure Prometheus rules directory exists
   ansible.builtin.file:
-    path: "{{ monitoring_alerting_rules_dir }}"
+    path: "{{ horde_monitoring_alerting_rules_dir }}"
     state: directory
     owner: root
     group: root
@@ -18,7 +18,7 @@
 - name: Template monitoring stack alerting rules
   ansible.builtin.template:
     src: alerting-rules.yml.j2
-    dest: "{{ monitoring_alerting_rules_dir }}/{{ monitoring_alerting_rules_file }}"
+    dest: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_alerting_rules_file }}"
     owner: root
     group: root
     mode: "0644"
