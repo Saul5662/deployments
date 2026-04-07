@@ -11,6 +11,7 @@
   vars:
     _defaults_path: "{{ playbook_dir }}/../../roles/ai_horde/defaults/main.yml"
     _native_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/native.yml"
+    _uv_bootstrap_tasks_path: "{{ playbook_dir }}/../../roles/_uv_bootstrap/tasks/main.yml"
     _docker_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/docker.yml"
     _examples_requirements_path: "{{ playbook_dir }}/../../examples/requirements.yml"
     _full_stack_example_path: "{{ playbook_dir }}/../../examples/full_horde_stack.yml"
@@ -43,18 +44,34 @@
         path: "{{ _native_tasks_path }}"
       register: _native_tasks_raw
 
-    - name: Assert native installer integrity policy remains enforced by default
+    - name: Load uv bootstrap task file content
+      ansible.builtin.slurp:
+        path: "{{ _uv_bootstrap_tasks_path }}"
+      register: _uv_bootstrap_tasks_raw
+
+    - name: Assert native tasks delegate uv installation to _uv_bootstrap
       ansible.builtin.assert:
         that:
-          - "'Validate uv installer checksum policy' in (_native_tasks_raw.content | b64decode)"
-          - "'Download uv installer with checksum verification' in (_native_tasks_raw.content | b64decode)"
-          - (_native_tasks_raw.content | b64decode) is regex('(?m)^\s*checksum:\s*"\{\{ ai_horde_uv_installer_checksum \}\}"\s*$')
-          - "'Download uv installer without checksum verification (explicit opt-in)' in (_native_tasks_raw.content | b64decode)"
-          - "'not (ai_horde_uv_allow_unverified_installer | bool)' in (_native_tasks_raw.content | b64decode)"
-          - "'ai_horde_uv_allow_unverified_installer | bool' in (_native_tasks_raw.content | b64decode)"
+          - "'_uv_bootstrap' in (_native_tasks_raw.content | b64decode)"
+          - "'_uvb_version' in (_native_tasks_raw.content | b64decode)"
+          - "'_uvb_installer_checksum' in (_native_tasks_raw.content | b64decode)"
+          - "'_uvb_allow_unverified' in (_native_tasks_raw.content | b64decode)"
         fail_msg: >-
-          Native installer integrity enforcement regressed. Role must keep
-          verified-by-default download flow with explicit unverified opt-in.
+          Native tasks must delegate uv installation to the _uv_bootstrap
+          micro-role, passing _uvb_version, _uvb_installer_checksum, and
+          _uvb_allow_unverified.
+
+    - name: Assert _uv_bootstrap enforces installer integrity by default
+      ansible.builtin.assert:
+        that:
+          - "'Validate checksum policy' in (_uv_bootstrap_tasks_raw.content | b64decode)"
+          - "'Download installer with checksum verification' in (_uv_bootstrap_tasks_raw.content | b64decode)"
+          - (_uv_bootstrap_tasks_raw.content | b64decode) is regex('(?m)^\s*checksum:\s*"\{\{ _uvb_installer_checksum \}\}"\s*$')
+          - "'Download installer without checksum verification (explicit opt-in)' in (_uv_bootstrap_tasks_raw.content | b64decode)"
+          - "'_uvb_allow_unverified | bool' in (_uv_bootstrap_tasks_raw.content | b64decode)"
+        fail_msg: >-
+          _uv_bootstrap must enforce verified-by-default download flow with
+          explicit unverified opt-in.
 
     - name: Load docker task file content
       ansible.builtin.slurp:

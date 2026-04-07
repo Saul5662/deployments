@@ -1,0 +1,93 @@
+---
+# Shared uv bootstrap pipeline.
+#
+# Downloads, verifies, and installs a pinned version of uv (the Python
+# package manager from Astral).  Both the ai_horde and
+# horde_stats_exporter roles delegate here via include_role.
+#
+# Required caller variables:
+#   _uvb_version              – pinned uv version string (e.g. "0.11.2")
+#   _uvb_installer_checksum   – sha256:<64-hex> checksum of the install script
+#   _uvb_allow_unverified     – bool; true to skip checksum verification
+#
+# Optional caller variables:
+#   _uvb_install_path         – where to place the uv binary (default: /usr/local/bin)
+#
+# Postcondition: /usr/local/bin/uv (or _uvb_install_path/uv) is present
+# and matches the pinned version.
+
+- name: "uv-bootstrap — Set install path default"
+  ansible.builtin.set_fact:
+    _uvb_install_path: "{{ _uvb_install_path | default('/usr/local/bin') }}"
+
+- name: "uv-bootstrap — Validate checksum policy"
+  ansible.builtin.assert:
+    that:
+      - _uvb_allow_unverified | bool or (_uvb_installer_checksum | length > 0)
+      - _uvb_allow_unverified | bool or (_uvb_installer_checksum is regex('^sha256:[0-9a-f]{64}$'))
+    fail_msg: >-
+      uv installer integrity verification is enforced by default.
+      Provide _uvb_installer_checksum (format sha256:<64-hex>) or set
+      _uvb_allow_unverified=true as an explicit opt-in.
+
+- name: "uv-bootstrap — Warn when checksum verification is disabled"
+  ansible.builtin.debug:
+    msg: >-
+      _uvb_allow_unverified=true: downloading uv installer
+      without checksum verification.
+  when: _uvb_allow_unverified | bool
+
+- name: "uv-bootstrap — Download installer with checksum verification"
+  ansible.builtin.get_url:
+    url: "https://astral.sh/uv/{{ _uvb_version }}/install.sh"
+    dest: /tmp/uv-install.sh
+    mode: "0700"
+    checksum: "{{ _uvb_installer_checksum }}"
+  become: true
+  when: not (_uvb_allow_unverified | bool)
+
+- name: "uv-bootstrap — Download installer without checksum verification (explicit opt-in)"
+  ansible.builtin.get_url:
+    url: "https://astral.sh/uv/{{ _uvb_version }}/install.sh"
+    dest: /tmp/uv-install.sh
+    mode: "0700"
+  become: true
+  when: _uvb_allow_unverified | bool
+
+- name: "uv-bootstrap — Check installed uv version"
+  ansible.builtin.command: "{{ _uvb_install_path }}/uv --version"
+  changed_when: false
+  failed_when: false
+  register: _uvb_version_check
+  become: true
+
+- name: "uv-bootstrap — Install pinned uv version"
+  ansible.builtin.command: /tmp/uv-install.sh
+  environment:
+    UV_UNMANAGED_INSTALL: "{{ _uvb_install_path }}"
+    UV_NO_MODIFY_PATH: "1"
+  changed_when: true
+  become: true
+  when: >-
+    _uvb_version_check.rc != 0
+    or ('uv ' ~ _uvb_version) not in (_uvb_version_check.stdout | default(''))
+
+- name: "uv-bootstrap — Verify installed version matches pin"
+  ansible.builtin.command: "{{ _uvb_install_path }}/uv --version"
+  changed_when: false
+  register: _uvb_version_after
+  become: true
+
+- name: "uv-bootstrap — Assert version match"
+  ansible.builtin.assert:
+    that:
+      - "('uv ' ~ _uvb_version) in (_uvb_version_after.stdout | default(''))"
+    fail_msg: >-
+      Installed uv version does not match _uvb_version={{ _uvb_version }}.
+      Got: {{ _uvb_version_after.stdout | default('unknown') }}
+
+- name: "uv-bootstrap — Remove downloaded installer"
+  ansible.builtin.file:
+    path: /tmp/uv-install.sh
+    state: absent
+  become: true

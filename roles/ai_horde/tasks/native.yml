@@ -91,88 +91,13 @@
   become: true
   when: ai_horde_start_services | bool
 
-- name: Validate uv installer checksum policy
-  ansible.builtin.assert:
-    that:
-      - ai_horde_uv_allow_unverified_installer | bool or (ai_horde_uv_installer_checksum | length > 0)
-      - ai_horde_uv_allow_unverified_installer | bool or (ai_horde_uv_installer_checksum is regex('^sha256:[0-9a-f]{64}$'))
-    fail_msg: >-
-      uv installer integrity verification is enforced by default.
-      Provide ai_horde_uv_installer_checksum (format sha256:<64-hex>) or set
-      ai_horde_uv_allow_unverified_installer=true as an explicit opt-in.
-  when: ai_horde_start_services | bool
-
-- name: Warn when uv installer checksum verification is disabled
-  ansible.builtin.debug:
-    msg: >-
-      ai_horde_uv_allow_unverified_installer=true: downloading uv installer
-      without checksum verification.
-  when:
-    - ai_horde_start_services | bool
-    - ai_horde_uv_allow_unverified_installer | bool
-
-- name: Download uv installer with checksum verification
-  ansible.builtin.get_url:
-    url: "{{ ai_horde_uv_installer_url }}"
-    dest: /tmp/uv-install-aihorde.sh
-    mode: "0700"
-    checksum: "{{ ai_horde_uv_installer_checksum }}"
-  become: true
-  when:
-    - ai_horde_start_services | bool
-    - not (ai_horde_uv_allow_unverified_installer | bool)
-
-- name: Download uv installer without checksum verification (explicit opt-in)
-  ansible.builtin.get_url:
-    url: "{{ ai_horde_uv_installer_url }}"
-    dest: /tmp/uv-install-aihorde-aihorde.sh
-    mode: "0700"
-  become: true
-  when:
-    - ai_horde_start_services | bool
-    - ai_horde_uv_allow_unverified_installer | bool
-
-- name: Check installed uv version
-  ansible.builtin.command: /usr/local/bin/uv --version
-  changed_when: false
-  failed_when: false
-  register: _uv_version
-  become: true
-  when: ai_horde_start_services | bool
-
-- name: Install pinned uv version (Python package manager)
-  ansible.builtin.command:
-    cmd: /tmp/uv-install-aihorde-aihorde.sh
-  environment:
-    UV_UNMANAGED_INSTALL: /usr/local/bin
-    UV_NO_MODIFY_PATH: "1"
-  changed_when: true
-  become: true
-  when:
-    - ai_horde_start_services | bool
-    - _uv_version.rc != 0 or ('uv ' ~ ai_horde_uv_version) not in (_uv_version.stdout | default(''))
-
-- name: Assert pinned uv version is installed
-  ansible.builtin.command: /usr/local/bin/uv --version
-  changed_when: false
-  register: _uv_version_after
-  become: true
-  when: ai_horde_start_services | bool
-
-- name: Validate uv version matches expected pin
-  ansible.builtin.assert:
-    that:
-      - "('uv ' ~ ai_horde_uv_version) in (_uv_version_after.stdout | default(''))"
-    fail_msg: >-
-      Installed uv version does not match ai_horde_uv_version={{ ai_horde_uv_version }}.
-      Got: {{ _uv_version_after.stdout | default('unknown') }}
-  when: ai_horde_start_services | bool
-
-- name: Remove downloaded uv installer
-  ansible.builtin.file:
-    path: /tmp/uv-install-aihorde-aihorde.sh
-    state: absent
-  become: true
+- name: Bootstrap uv (Python package manager)
+  ansible.builtin.include_role:
+    name: _uv_bootstrap
+  vars:
+    _uvb_version: "{{ ai_horde_uv_version }}"
+    _uvb_installer_checksum: "{{ ai_horde_uv_installer_checksum }}"
+    _uvb_allow_unverified: "{{ ai_horde_uv_allow_unverified_installer }}"
   when: ai_horde_start_services | bool
 
 # ── Service user ─────────────────────────────────────────────

@@ -5,74 +5,20 @@
 # When aihorde_frontpage_start_services=false, this file renders service
 # configuration only and skips network/package/build operations.
 
-- name: Install prerequisites for NodeSource
+- name: Install Node.js via geerlingguy.nodejs
+  ansible.builtin.include_role:
+    name: geerlingguy.nodejs
+  vars:
+    nodejs_version: "{{ aihorde_frontpage_node_major }}.x"
+    nodejs_install_npm_user: root
+  when: aihorde_frontpage_start_services | bool
+
+- name: Install git for source checkout
   ansible.builtin.apt:
-    name:
-      - curl
-      - gnupg
-      - ca-certificates
-      - git
+    name: git
     state: present
     update_cache: true
   become: true
-  when: aihorde_frontpage_start_services | bool
-
-- name: Check if NodeSource GPG key is present
-  ansible.builtin.stat:
-    path: /usr/share/keyrings/nodesource.gpg
-  register: _nodesource_key
-  when: aihorde_frontpage_start_services | bool
-
-- name: Download NodeSource ASCII-armored key
-  ansible.builtin.get_url:
-    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
-    dest: /usr/share/keyrings/nodesource-repo.gpg.key
-    mode: "0644"
-  become: true
-  when:
-    - aihorde_frontpage_start_services | bool
-    - not _nodesource_key.stat.exists
-
-- name: Dearmor NodeSource key for apt signed-by
-  ansible.builtin.command:
-    cmd: >-
-      gpg --dearmor --yes --output /usr/share/keyrings/nodesource.gpg
-      /usr/share/keyrings/nodesource-repo.gpg.key
-    creates: /usr/share/keyrings/nodesource.gpg
-  become: true
-  when:
-    - aihorde_frontpage_start_services | bool
-    - not _nodesource_key.stat.exists
-
-- name: Add NodeSource repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [signed-by=/usr/share/keyrings/nodesource.gpg]
-      https://deb.nodesource.com/node_{{ aihorde_frontpage_node_major }}.x
-      nodistro main
-    filename: nodesource
-    state: present
-  become: true
-  when: aihorde_frontpage_start_services | bool
-
-- name: Install Node.js
-  ansible.builtin.apt:
-    name: nodejs
-    state: present
-    update_cache: true
-  become: true
-  when: aihorde_frontpage_start_services | bool
-
-- name: Verify Node.js version
-  ansible.builtin.command: node --version
-  changed_when: false
-  register: _node_version
-  become: true
-  when: aihorde_frontpage_start_services | bool
-
-- name: Display Node.js version
-  ansible.builtin.debug:
-    msg: "Node.js version: {{ _node_version.stdout }}"
   when: aihorde_frontpage_start_services | bool
 
 - name: Create frontpage group

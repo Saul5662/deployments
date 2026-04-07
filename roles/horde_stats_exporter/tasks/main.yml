@@ -10,33 +10,14 @@
     update_cache: true
   become: true
 
-- name: Download uv installer
-  ansible.builtin.get_url:
-    url: "https://astral.sh/uv/{{ exporter_uv_version }}/install.sh"
-    dest: /tmp/uv-install-exporter-exporter.sh
-    mode: "0755"
-    checksum: "{{ exporter_uv_installer_checksum }}"
-  become: true
+- name: Bootstrap uv (Python package manager)
+  ansible.builtin.include_role:
+    name: _uv_bootstrap
+  vars:
+    _uvb_version: "{{ exporter_uv_version }}"
+    _uvb_installer_checksum: "{{ exporter_uv_installer_checksum }}"
+    _uvb_allow_unverified: false
   when: not ansible_check_mode
-
-- name: Check installed uv version
-  ansible.builtin.command: /usr/local/bin/uv --version
-  changed_when: false
-  failed_when: false
-  register: _exporter_uv_version
-  become: true
-  when: not ansible_check_mode
-
-- name: Install uv
-  ansible.builtin.command: /tmp/uv-install-exporter-exporter.sh
-  environment:
-    UV_UNMANAGED_INSTALL: /usr/local/bin
-    UV_NO_MODIFY_PATH: "1"
-  changed_when: true
-  become: true
-  when:
-    - not ansible_check_mode
-    - _exporter_uv_version.rc | default(1) != 0 or ('uv ' ~ exporter_uv_version) not in (_exporter_uv_version.stdout | default(''))
 
 - name: Create exporter user
   ansible.builtin.user:

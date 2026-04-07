@@ -487,6 +487,14 @@ main() {
 
   init_log_dir
 
+  # Install Galaxy role dependencies (idempotent; skips already-installed roles)
+  if [ -f "$REPO_ROOT/requirements.yml" ]; then
+    log "Installing Galaxy role dependencies ..."
+    ansible-galaxy role install -r "$REPO_ROOT/requirements.yml" \
+      --roles-path "$REPO_ROOT/roles" -p "$REPO_ROOT/roles" 2>&1 \
+      | grep -v '^$' || true
+  fi
+
   # Determine which playbooks to run
   local playbooks=()
   if [ ${#suite_args[@]} -gt 0 ]; then

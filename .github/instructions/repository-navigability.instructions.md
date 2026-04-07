@@ -45,6 +45,7 @@ find the right folder before making changes.
 
 | Role path | Purpose |
 | --------- | ------- |
+| `roles/_uv_bootstrap/` | Shared micro-role: download, verify, and install a pinned uv version |
 | `roles/geerlingguy.swap/` | Third-party swap configuration role used as an infrastructure dependency |
 
 ## Meta folders to know first

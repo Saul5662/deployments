@@ -195,8 +195,7 @@ Native `POSTGRES_URL` rendering contract:
 | `ai_horde_user`             | `aihorde`                        | System user for Python processes                  |
 | `ai_horde_group`            | `aihorde`                        | System group for Python processes                 |
 | `ai_horde_venv_dir`         | `{{ ai_horde_base_dir }}/venv`   | Virtualenv location                               |
-| `ai_horde_uv_version`       | `0.11.2`                         | Pinned uv version installed in native mode        |
-| `ai_horde_uv_installer_url` | `https://astral.sh/uv/{{ ai_horde_uv_version }}/install.sh` | Versioned uv installer URL        |
+| `ai_horde_uv_version`       | `0.11.2`                         | Pinned uv version (installed via `_uv_bootstrap` micro-role) |
 | `ai_horde_uv_installer_checksum` | `sha256:a6ccba649ac029ce18500400019d60de389838d13a6751aa2908ede1b2aa3a87` | Enforced checksum for installer script |
 | `ai_horde_uv_allow_unverified_installer` | `false`           | Explicit opt-in to skip installer checksum verification |
 | `ai_horde_install_postgres` | `false`                          | Optionally provision local PostgreSQL             |

@@ -40,5 +40,6 @@ build/
 *.zip
 
 geerlingguy.swap/
+geerlingguy.nodejs/
 tests/test-results/
 docs/plans/

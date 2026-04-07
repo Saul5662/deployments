@@ -66,9 +66,8 @@ ai_horde_group: "aihorde"
 ai_horde_venv_dir: "{{ ai_horde_base_dir }}/venv"
 
 # uv installer (pinned version + checksum).
-# Keep in sync with roles/horde_stats_exporter/defaults/main.yml.
+# Installation logic lives in the shared _uv_bootstrap micro-role.
 ai_horde_uv_version: "0.11.2"
-ai_horde_uv_installer_url: "https://astral.sh/uv/{{ ai_horde_uv_version }}/install.sh"
 ai_horde_uv_installer_checksum: "sha256:a6ccba649ac029ce18500400019d60de389838d13a6751aa2908ede1b2aa3a87"
 ai_horde_uv_allow_unverified_installer: false
 
