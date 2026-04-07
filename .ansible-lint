@@ -5,12 +5,17 @@ exclude_paths:
   - .venv/
   - .git/
   - .ansible/
+  - roles/geerlingguy.*/
 
 skip_list:
   # 586 violations — renaming all role vars is too disruptive for existing playbooks
   - var-naming[no-role-prefix]
   # Jinja2 in task names is used intentionally for clarity
   - name[template]
+  # Internal roles use "role-name — description" prefix pattern (lowercase by design)
+  - name[casing]
 
 warn_list:
   - yaml[comments]
+  # Change-gated tasks are intentional; converting to handlers would lose context
+  - no-handler

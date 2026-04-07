@@ -499,5 +499,3 @@
       ansible.builtin.assert:
         that:
           - not _safe_edit_render_cfg.stat.exists
-
-

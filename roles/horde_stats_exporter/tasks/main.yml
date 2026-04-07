@@ -60,8 +60,6 @@
     group: "{{ exporter_user }}"
     recurse: true
   become: true
-  when: _exporter_venv_create is changedrue
-  become: true
   when: _exporter_venv_create is changed
 
 - name: Read installed exporter ref marker

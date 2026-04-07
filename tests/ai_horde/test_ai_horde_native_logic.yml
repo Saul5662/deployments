@@ -234,7 +234,6 @@
         state: absent
 
 
-
 # ── HAProxy safe-edit validation failure → non-promotion test ──
 
 - name: Test HAProxy validation failure prevents promotion

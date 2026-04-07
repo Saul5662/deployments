@@ -57,7 +57,8 @@ jobs:
       - name: yamllint
         run: |
           yamllint -d '{extends: default, rules: {line-length: {max: 200}, truthy: {check-keys: false}}}' \
-            roles/ tests/**/*.yml examples/
+            $(find roles/ -name '*.yml' -not -path 'roles/geerlingguy.*/*') \
+            tests/**/*.yml examples/
 
       - name: ansible-lint
         run: |

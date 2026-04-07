@@ -50,7 +50,6 @@
   become: true
   loop: "{{ range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) | list }}"
   throttle: 1
-  throttle: 1
   when: ai_horde_start_services | bool
 
 - name: Wait for restarted instance health
