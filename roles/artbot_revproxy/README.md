@@ -1,8 +1,16 @@
 # Artbot RevProxy
 
-Deploys an haproxy reverse proxy installation in order to serve the artbot service from a standard https.
+Deploys an HAProxy reverse proxy with TLS termination for the Artbot service.
 
-The artbot reverse proxy config is separated from the artbot service deployment code in different roles, in case you want to provide your own haproxy configuration or other reverse proxy configuration.
+> **Scope:** This role manages both the reverse proxy (HAProxy) and TLS
+> certificates (Let's Encrypt or self-signed) because the Artbot topology
+> always co-locates them. It is not a general-purpose HAProxy or certificate
+> management role. If you already have your own reverse proxy or TLS setup,
+> skip this role and point your existing proxy at the Artbot port.
+
+The reverse proxy config is separated from the artbot service deployment code
+in different roles, in case you want to provide your own haproxy configuration
+or other reverse proxy configuration.
 
 # Instructions
 

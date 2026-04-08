@@ -1,19 +1,17 @@
 ---
 galaxy_info:
   role_name: amd_gpu_drivers
-  author: db0
-  description: Setup AMD drivers and ROCM on a linux server
-  license: AGPLv3
-  min_ansible_version: "2.10"
+  author: Haidra-Org
+  description: Setup AMD GPU drivers and ROCm on Ubuntu 22.04 (Jammy) hosts
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.14"
   platforms:
-    - name: Debian
-      versions:
-        - all
     - name: Ubuntu
       versions:
-        - all
+        - jammy
   galaxy_tags:
-    - python
     - amd
-    - drivers
+    - gpu
+    - rocm
+    - horde
 dependencies: []

@@ -1,6 +1,18 @@
 # Artbot
 
-Deploys an artbot npm/pm2 service installation.
+Deploys an [Artbot](https://github.com/Haidra-Org/artbot) npm/pm2 service
+installation for the AI Horde stack.
+
+> **Scope:** This role deploys the Artbot web frontend specifically. It is not
+> a general-purpose Node.js or pm2 role.
+>
+> **Known limitations:**
+> - Source is cloned at `HEAD` (not pinned to a specific commit).
+> - The nvm installer is fetched without checksum verification.
+> - Old build directories under `/home/artbot/builds/` are never pruned and
+>   will accumulate over time.
+> - There is no `start_services: false` render-only mode; the role always
+>   attempts to start pm2.
 
 Every time this role is run, if there's a new commit in the relevant repository, this will rebuild artbot and redeploy it in a new directory named after the commit hash. The `latest` symlink will then always point the the currently used deploy directory.
 
