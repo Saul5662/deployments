@@ -3,6 +3,14 @@
 Deploys a complete metrics storage and visualization stack for AI Horde via
 Docker Compose, managed by a single systemd service.
 
+> **Scope:** This role deploys the monitoring backend for the AI Horde stack.
+> It is not a general-purpose Prometheus, Grafana, or Mimir role. Component
+> toggles (Loki, Tempo, Pyroscope) and multi-tenant retention are tuned to
+> AI Horde operational needs. HAProxy integration is opt-in
+> (`horde_monitoring_configure_haproxy: false` by default) — enable it only
+> when the monitoring host also runs HAProxy as the access proxy for Grafana
+> and Mimir.
+
 ## What This Role Deploys
 
 | Component          | Purpose                                                                   | Toggle                              |

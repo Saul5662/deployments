@@ -4,6 +4,11 @@ Deploys [Grafana Alloy](https://grafana.com/docs/alloy/) on application hosts
 as a unified telemetry collector for metrics, logs, and traces. Alloy replaces
 the need for separate `node_exporter`, log shippers, and trace forwarders.
 
+> **Scope:** This role configures Alloy with pipelines tuned for the AI Horde
+> monitoring stack (Mimir, Loki, Tempo). It is not a general-purpose Alloy
+> role. If you need Alloy for non-Horde workloads, the upstream Grafana
+> collection is a better starting point.
+
 ## What This Role Deploys
 
 - **Grafana Alloy** as a native systemd package (APT or DNF)

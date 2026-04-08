@@ -1,6 +1,14 @@
 # AI Horde regen Worker
 
-Deploys all the necessary components to turn a debian-based linux server into an AI Horde worker instance running via systemd
+Deploys all the necessary components to turn a Debian-based Linux server into
+an [AI Horde worker](https://github.com/Haidra-Org/horde-worker-regen)
+instance running via systemd.
+
+> **Scope:** This role deploys the AI Horde worker specifically. It is not a
+> general-purpose GPU workload or Python service role. GPU drivers (CUDA or
+> ROCm) must be installed separately before running this role. The worker
+> runs as an unprivileged systemd user service and does not require root
+> access at runtime.
 
 The default variables contain all the arguments required for a worker's [bridgeData](https://github.com/Haidra-Org/horde-worker-regen/blob/main/bridgeData_template.yaml) so you can provide any of them in your role variables to override the defaults from the template.
 

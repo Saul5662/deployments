@@ -4,6 +4,9 @@ Deploys the [AI Horde Prometheus exporter](https://github.com/Haidra-Org/horde-e
 as a systemd service. The exporter polls the AI Horde public API and exposes
 metrics at a `/metrics` endpoint for Prometheus to scrape.
 
+> **Scope:** This exporter is specific to the AI Horde API. It is not a
+> general-purpose Prometheus exporter framework.
+
 ## What This Role Deploys
 
 - **horde-exporter** systemd service — polls the AI Horde API and serves

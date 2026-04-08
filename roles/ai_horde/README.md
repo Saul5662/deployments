@@ -3,6 +3,14 @@
 Deploys the **AI-Horde backend** (Flask + PostgreSQL + Redis) as either a
 Docker Compose stack or a native bare-metal service managed by systemd.
 
+> **Scope:** This role is purpose-built for the
+> [AI-Horde](https://github.com/Haidra-Org/AI-Horde) application. It is not a
+> general-purpose Flask, PostgreSQL, or Redis deployment role. The optional
+> local PostgreSQL/Redis provisioning is bootstrap-oriented for development and
+> single-host testing — it does not replace mature community roles or managed
+> database services for production use. Schema migrations, backups,
+> replication, and tuning are explicitly out of scope.
+
 ## Deploy Modes
 
 | Mode | Description | Multi-instance | Requires Docker |

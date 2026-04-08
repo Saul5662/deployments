@@ -1,18 +1,21 @@
 ---
 galaxy_info:
   role_name: artbot_revproxy
-  author: Divided by Zer0 <mail@dbzer0.com>
-  description: Configure a haproxy for artbot
-  license: AGPLv3
-  min_ansible_version: "2.10"
+  author: Haidra-Org
+  description: HAProxy reverse proxy with TLS for Artbot
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.14"
   platforms:
-    - name: Debian
-      versions:
-        - all
     - name: Ubuntu
       versions:
-        - all
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
   galaxy_tags:
-    - haidra
+    - horde
     - haproxy
+    - certbot
+    - tls
 dependencies: []
