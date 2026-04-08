@@ -37,6 +37,7 @@
     force: true
   become: true
   register: aihorde_frontpage__clone
+  notify: Restart AiHordeFrontpage stack
   when: aihorde_frontpage_start_services | bool
 
 - name: Template Docker Compose for AiHordeFrontpage
@@ -58,6 +59,15 @@
   become: true
   notify:
     - Reload systemd
+
+- name: Force Docker image rebuild when requested
+  ansible.builtin.debug:
+    msg: "Force rebuild requested — will build and restart via handler"
+  changed_when: true
+  notify: Restart AiHordeFrontpage stack
+  when:
+    - aihorde_frontpage_start_services | bool
+    - aihorde_frontpage_force_build | bool
 
 - name: Enable and start AiHordeFrontpage service
   ansible.builtin.systemd:
