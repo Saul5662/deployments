@@ -6,8 +6,10 @@ The default variables contain all the arguments required for a worker's [bridgeD
 
 In addition you can pass the following 2 vars
 
-- `worker_username`: The Worker service will run in userspace using systemd, this is the username under which the service should run. It doesn't have to be be root or have sudo access.
-- `worker_environment`: Any environment args you might need to pass to the worker process such as `ROCR_VISIBLE_DEVICES=0` etc
+- `horde_regen_worker_username`: The worker service runs in userspace via systemd under this account. It does not need root or sudo access.
+- `horde_regen_worker_environment`: Optional environment variables passed to the worker process (for example `ROCR_VISIBLE_DEVICES=0`).
+
+The role fails fast if `horde_regen_worker_api_key` is left at its default placeholder value. Set a real worker API key in inventory or vault variables.
 
 # Instructions
 

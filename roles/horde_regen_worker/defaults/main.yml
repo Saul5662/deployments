@@ -29,6 +29,7 @@ horde_regen_worker_initialize: false
 
 # Common
 horde_regen_worker_horde_url: "https://aihorde.net"
+# Placeholder only. Override with a real key; role fails fast otherwise.
 horde_regen_worker_api_key: "0000000000"
 horde_regen_worker_priority_usernames: []
 horde_regen_worker_max_threads: 1

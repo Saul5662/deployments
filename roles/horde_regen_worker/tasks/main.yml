@@ -10,6 +10,18 @@
     - packages
     - worker
 
+- name: Fail if worker API key is missing or placeholder
+  ansible.builtin.assert:
+    that:
+      - horde_regen_worker_api_key is defined
+      - horde_regen_worker_api_key | length > 0
+      - horde_regen_worker_api_key != "0000000000"
+    fail_msg: >-
+      horde_regen_worker_api_key must be set to a real worker API key.
+      The default placeholder value is not valid for runtime deployments.
+  tags:
+    - worker
+
 - name: Ensure worker user exists ({{ horde_regen_worker_username }})
   ansible.builtin.user:
     name: "{{ horde_regen_worker_username }}"
