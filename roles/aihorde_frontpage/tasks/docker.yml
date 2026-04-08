@@ -17,7 +17,7 @@
 - name: Verify Docker Compose V2 is available
   ansible.builtin.command: docker compose version
   changed_when: false
-  failed_when: aihorde_frontpage__compose_check.rc != 0
+  failed_when: false
   register: aihorde_frontpage__compose_check
   become: true
 

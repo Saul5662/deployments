@@ -3,6 +3,21 @@
 Ansible collection for deploying Haidra services — AI Horde workers, monitoring
 infrastructure, and supporting applications.
 
+## Scope and Audience
+
+This collection is intentionally opinionated and is not a general-purpose
+Ansible toolkit. It targets three audiences:
+
+1. The AI Horde team operating the stack.
+2. Developers contributing to AI Horde services.
+3. External groups adopting the AI Horde stack as a package.
+
+### Non-goals
+
+- Generic, vendor-neutral deployment abstractions for arbitrary software.
+- Replacing mature community roles for broad infrastructure concerns.
+- Hiding stack assumptions required by AI Horde topology and workflows.
+
 ## Usage
 
 Install [Ansible](https://www.ansible.com/) (Linux only):

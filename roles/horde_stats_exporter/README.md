@@ -30,7 +30,7 @@ The exporter runs under a dedicated unprivileged system user and uses
   roles:
     - role: haidra.deployments.horde_stats_exporter
       vars:
-        exporter_port: 9150
+        horde_stats_exporter_port: 9150
 ```
 
 Then configure Prometheus to scrape it:
@@ -52,24 +52,24 @@ for the full integrated stack.
 
 | Variable               | Default                                         | Description                          |
 | ---------------------- | ----------------------------------------------- | ------------------------------------ |
-| `exporter_user`        | `horde-exporter`                                | Unprivileged system user             |
-| `exporter_install_dir` | `/opt/horde-exporter`                           | Installation directory               |
-| `exporter_repo_url`    | `https://github.com/Haidra-Org/horde-exporters` | Git repository                       |
-| `exporter_repo_ref`    | `main`                                          | Git ref (branch, tag, or commit SHA) |
-| `exporter_port`        | `9150`                                          | Metrics endpoint port                |
-| `exporter_log_level`   | `INFO`                                          | Log verbosity                        |
-| `exporter_log_file`    | `/var/log/horde-stats/exporter.log`             | Log file path                        |
+| `horde_stats_exporter_user`        | `horde-exporter`                                | Unprivileged system user             |
+| `horde_stats_exporter_install_dir` | `/opt/horde-exporter`                           | Installation directory               |
+| `horde_stats_exporter_repo_url`    | `https://github.com/Haidra-Org/horde-exporters` | Git repository                       |
+| `horde_stats_exporter_repo_ref`    | `096c1fb8451b27e0a3dd0fc32092dda92e0e52e3`      | Git ref (branch, tag, or commit SHA) |
+| `horde_stats_exporter_port`        | `9150`                                          | Metrics endpoint port                |
+| `horde_stats_exporter_log_level`   | `INFO`                                          | Log verbosity                        |
+| `horde_stats_exporter_log_file`    | `/var/log/horde-stats/exporter.log`             | Log file path                        |
 
-For reproducible deployments, pin `exporter_repo_ref` to a release tag or
+For reproducible deployments, pin `horde_stats_exporter_repo_ref` to a release tag or
 commit SHA.
 
 ### API Configuration
 
 | Variable                | Default                      | Description                   |
 | ----------------------- | ---------------------------- | ----------------------------- |
-| `exporter_api_base_url` | `https://aihorde.net/api/v2` | AI Horde API base URL         |
-| `exporter_api_timeout`  | `10`                         | API request timeout (seconds) |
-| `exporter_user_agent`   | `horde_prometheus_exporter`  | HTTP User-Agent header        |
+| `horde_stats_exporter_api_base_url` | `https://aihorde.net/api/v2` | AI Horde API base URL         |
+| `horde_stats_exporter_api_timeout`  | `10`                         | API request timeout (seconds) |
+| `horde_stats_exporter_user_agent`   | `horde_prometheus_exporter`  | HTTP User-Agent header        |
 
 ### Scrape Intervals
 
@@ -77,12 +77,12 @@ Each metric group is polled on its own interval (seconds):
 
 | Variable                      | Default | What It Collects                      |
 | ----------------------------- | ------- | ------------------------------------- |
-| `exporter_scrape_models`      | `8`     | Model queue depths and worker counts  |
-| `exporter_scrape_workers`     | `300`   | Individual worker stats               |
-| `exporter_scrape_performance` | `2`     | Global queue and performance counters |
-| `exporter_scrape_stats`       | `120`   | Historical generation statistics      |
-| `exporter_scrape_modes`       | `30`    | Heartbeat and maintenance mode flags  |
-| `exporter_scrape_teams`       | `300`   | Team-level statistics                 |
+| `horde_stats_exporter_scrape_models`      | `8`     | Model queue depths and worker counts  |
+| `horde_stats_exporter_scrape_workers`     | `300`   | Individual worker stats               |
+| `horde_stats_exporter_scrape_performance` | `2`     | Global queue and performance counters |
+| `horde_stats_exporter_scrape_stats`       | `120`   | Historical generation statistics      |
+| `horde_stats_exporter_scrape_modes`       | `30`    | Heartbeat and maintenance mode flags  |
+| `horde_stats_exporter_scrape_teams`       | `300`   | Team-level statistics                 |
 
 ### Downsampling (Opt-in)
 
@@ -92,13 +92,13 @@ public-facing dashboards.
 
 | Variable                            | Default                 | Description                     |
 | ----------------------------------- | ----------------------- | ------------------------------- |
-| `exporter_enable_downsampling`      | `true`                  | Enable daily downsampling timer |
-| `exporter_downsample_schedule`      | `daily`                 | systemd calendar spec           |
-| `exporter_prometheus_url`           | `http://localhost:9090` | Prometheus read endpoint        |
-| `exporter_downsample_source_tenant` | `ai-horde-app`          | Source Mimir tenant             |
-| `exporter_downsample_target_tenant` | `ai-horde-public`       | Target Mimir tenant             |
-| `exporter_downsample_mimir_url`     | `http://localhost:9009` | Mimir write endpoint            |
-| `exporter_downsample_resolution`    | `5m`                    | Output resolution               |
+| `horde_stats_exporter_enable_downsampling`      | `true`                  | Enable daily downsampling timer |
+| `horde_stats_exporter_downsample_schedule`      | `daily`                 | systemd calendar spec           |
+| `horde_stats_exporter_prometheus_url`           | `http://localhost:9090` | Prometheus read endpoint        |
+| `horde_stats_exporter_downsample_source_tenant` | `ai-horde-app`          | Source Mimir tenant             |
+| `horde_stats_exporter_downsample_target_tenant` | `ai-horde-public`       | Target Mimir tenant             |
+| `horde_stats_exporter_downsample_mimir_url`     | `http://localhost:9009` | Mimir write endpoint            |
+| `horde_stats_exporter_downsample_resolution`    | `5m`                    | Output resolution               |
 
 ## Metrics Exposed
 

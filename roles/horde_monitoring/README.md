@@ -120,7 +120,7 @@ stats exporter.
 | `horde_monitoring_grafana_root_url`             | `""`                     | External URL (set when behind a reverse proxy)      |
 | `horde_monitoring_grafana_anonymous_enabled`    | `true`                   | Enable anonymous access to public org               |
 | `horde_monitoring_grafana_provision_dashboards` | `true`                   | Auto-provision dashboards from horde-exporters repo |
-| `horde_monitoring_grafana_dashboards_repo_ref`  | `main`                   | Git ref for dashboard source                        |
+| `horde_monitoring_grafana_dashboards_repo_ref`  | `096c1fb8451b27e0a3dd0fc32092dda92e0e52e3` | Git ref for dashboard source                        |
 
 ### Offsite Backup
 
