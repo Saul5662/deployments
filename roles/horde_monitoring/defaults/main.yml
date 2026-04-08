@@ -304,3 +304,4 @@ horde_monitoring_pyroscope_ingestion_burst_size_mb: 8
 # HAProxy configuration (safe edit with permanent rolling backups)
 horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
 horde_monitoring_haproxy_backup_dir: "/var/backups/haproxy"
+horde_monitoring_haproxy_backup_retention_count: 20
