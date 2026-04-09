@@ -38,7 +38,14 @@ WORKER_DIR="$LOCAL_ROOT/worker"
 
 WITH_WORKER=false
 USE_LATEST_REF=false
-AI_HORDE_REF="${AI_HORDE_REF:-af0a85a78613cdba9863e16bbec0c179a4b2b132}"
+AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
+if [ -z "${AI_HORDE_REF+x}" ]; then
+  AI_HORDE_REF="$AI_HORDE_REF_DEFAULT"
+  AI_HORDE_REF_EXPLICIT=false
+else
+  AI_HORDE_REF="$AI_HORDE_REF"
+  AI_HORDE_REF_EXPLICIT=true
+fi
 
 # Docker compose wrapper for AI-Horde stack
 dc() {
@@ -73,7 +80,7 @@ render_configs() {
 
 clone_source() {
   local ref="$AI_HORDE_REF"
-  if [ "$USE_LATEST_REF" = true ]; then
+  if [ "$USE_LATEST_REF" = true ] && [ "$AI_HORDE_REF_EXPLICIT" = false ]; then
     ref="main"
   fi
 
@@ -82,7 +89,7 @@ clone_source() {
     "$AI_HORDE_DIR/src" \
     "$ref"
 
-  if [ "$USE_LATEST_REF" = true ]; then
+  if [ "$USE_LATEST_REF" = true ] || [ "$AI_HORDE_REF_EXPLICIT" = true ]; then
     _patch_dockerfile "$AI_HORDE_DIR/src/Dockerfile"
   fi
 }

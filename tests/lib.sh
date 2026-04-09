@@ -100,6 +100,8 @@ compose_down() {
   if [ -d "$root_dir" ]; then
     log "Removing $root_dir ..."
     sudo rm -rf "$root_dir"
+    # Restore any git-tracked files that lived inside the directory.
+    git -C "$REPO_ROOT" checkout -- "$root_dir" 2>/dev/null || true
   fi
   log "Local deployment cleaned up."
 }

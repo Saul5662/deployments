@@ -121,7 +121,7 @@ Prometheus splits data by job: `horde-exporter` → app tenant, everything else
 - HAProxy integration uses backup → validate → promote workflow
 - Container images are pinned to immutable version tags
 
-See [docs/CREDENTIALS.md](docs/CREDENTIALS.md) for credential rotation
+See [docs/monitoring/CREDENTIALS.md](docs/monitoring/CREDENTIALS.md) for credential rotation
 procedures.
 
 ## Grafana Dashboards
@@ -181,11 +181,11 @@ Any `changed` tasks indicate drift from the Ansible-managed state.
 
 | Topic                                  | Document                                       |
 | -------------------------------------- | ---------------------------------------------- |
-| Logs, traces, and Alloy deep-dive      | [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) |
-| Backup & restore (RPO/RTO, procedures) | [docs/BACKUP.md](docs/BACKUP.md)               |
-| Credential management and rotation     | [docs/CREDENTIALS.md](docs/CREDENTIALS.md)     |
-| Component version upgrades             | [docs/UPGRADING.md](docs/UPGRADING.md)         |
-| Host migration (planned and forced)    | [docs/MIGRATION.md](docs/MIGRATION.md)         |
+| Logs, traces, and Alloy deep-dive      | [docs/monitoring/OBSERVABILITY.md](docs/monitoring/OBSERVABILITY.md) |
+| Backup & restore (RPO/RTO, procedures) | [docs/monitoring/BACKUP.md](docs/monitoring/BACKUP.md)               |
+| Credential management and rotation     | [docs/monitoring/CREDENTIALS.md](docs/monitoring/CREDENTIALS.md)     |
+| Component version upgrades             | [docs/monitoring/UPGRADING.md](docs/monitoring/UPGRADING.md)         |
+| Host migration (planned and forced)    | [docs/monitoring/MIGRATION.md](docs/monitoring/MIGRATION.md)         |
 
 ## Further Reading
 

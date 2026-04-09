@@ -24,7 +24,14 @@ export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 USE_LATEST_REF=false
-AI_HORDE_REF="${AI_HORDE_REF:-af0a85a78613cdba9863e16bbec0c179a4b2b132}"
+AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
+if [ -z "${AI_HORDE_REF+x}" ]; then
+  AI_HORDE_REF="$AI_HORDE_REF_DEFAULT"
+  AI_HORDE_REF_EXPLICIT=false
+else
+  AI_HORDE_REF="$AI_HORDE_REF"
+  AI_HORDE_REF_EXPLICIT=true
+fi
 
 # Docker compose wrapper
 dc() {
@@ -46,7 +53,7 @@ render_configs() {
 
 clone_source() {
   local ref="$AI_HORDE_REF"
-  if [ "$USE_LATEST_REF" = true ]; then
+  if [ "$USE_LATEST_REF" = true ] && [ "$AI_HORDE_REF_EXPLICIT" = false ]; then
     ref="main"
   fi
 
@@ -55,7 +62,7 @@ clone_source() {
     "$LOCAL_ROOT/src" \
     "$ref"
 
-  if [ "$USE_LATEST_REF" = true ]; then
+  if [ "$USE_LATEST_REF" = true ] || [ "$AI_HORDE_REF_EXPLICIT" = true ]; then
     _patch_dockerfile "$LOCAL_ROOT/src/Dockerfile"
   fi
 }

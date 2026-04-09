@@ -37,9 +37,33 @@ USE_LATEST_REFS=false
 
 # Pinned refs for reproducible local deploys.
 # Use --latest (or set USE_LATEST_REFS=true in env) to follow branch heads.
-AI_HORDE_REF="${AI_HORDE_REF:-af0a85a78613cdba9863e16bbec0c179a4b2b132}"
-FRONTPAGE_REF="${FRONTPAGE_REF:-a56aec53f46470ca3796e1a7eabbe029e32563d3}"
-ARTBOT_REF="${ARTBOT_REF:-main}"
+AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
+FRONTPAGE_REF_DEFAULT="a56aec53f46470ca3796e1a7eabbe029e32563d3"
+ARTBOT_REF_DEFAULT="main"
+
+if [ -z "${AI_HORDE_REF+x}" ]; then
+  AI_HORDE_REF="$AI_HORDE_REF_DEFAULT"
+  AI_HORDE_REF_EXPLICIT=false
+else
+  AI_HORDE_REF="$AI_HORDE_REF"
+  AI_HORDE_REF_EXPLICIT=true
+fi
+
+if [ -z "${FRONTPAGE_REF+x}" ]; then
+  FRONTPAGE_REF="$FRONTPAGE_REF_DEFAULT"
+  FRONTPAGE_REF_EXPLICIT=false
+else
+  FRONTPAGE_REF="$FRONTPAGE_REF"
+  FRONTPAGE_REF_EXPLICIT=true
+fi
+
+if [ -z "${ARTBOT_REF+x}" ]; then
+  ARTBOT_REF="$ARTBOT_REF_DEFAULT"
+  ARTBOT_REF_EXPLICIT=false
+else
+  ARTBOT_REF="$ARTBOT_REF"
+  ARTBOT_REF_EXPLICIT=true
+fi
 
 
 # Each tier has its own wrapper so that the compose project name and
@@ -179,9 +203,15 @@ clone_sources() {
   local fp_ref="$FRONTPAGE_REF"
   local artbot_ref="$ARTBOT_REF"
   if [ "${USE_LATEST_REFS:-false}" = true ]; then
-    ai_ref="main"
-    fp_ref="master"
-    artbot_ref="main"
+    if [ "$AI_HORDE_REF_EXPLICIT" = false ]; then
+      ai_ref="main"
+    fi
+    if [ "$FRONTPAGE_REF_EXPLICIT" = false ]; then
+      fp_ref="master"
+    fi
+    if [ "$ARTBOT_REF_EXPLICIT" = false ]; then
+      artbot_ref="main"
+    fi
   fi
 
   # AI-Horde backend source
@@ -190,7 +220,7 @@ clone_sources() {
     "$LOCAL_ROOT/ai-horde/src" \
     "$ai_ref"
 
-  if [ "${USE_LATEST_REFS:-false}" = true ]; then
+  if [ "${USE_LATEST_REFS:-false}" = true ] || [ "$AI_HORDE_REF_EXPLICIT" = true ]; then
     _patch_dockerfile "$LOCAL_ROOT/ai-horde/src/Dockerfile"
   fi
 

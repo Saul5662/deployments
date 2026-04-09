@@ -3,6 +3,10 @@
 Ansible collection for deploying Haidra services — AI Horde workers, monitoring
 infrastructure, and supporting applications.
 
+> **New here?** Start with the [Quick Start guide](QUICKSTART.md) — test an
+> AI-Horde code change in ~4 minutes or run the full stack locally in ~6.
+> **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Scope and Audience
 
 This collection is intentionally opinionated and is not a general-purpose
@@ -69,12 +73,14 @@ and how the monitoring roles work together.
 
 | Document                                     | Contents                                          |
 | -------------------------------------------- | ------------------------------------------------- |
+| [Quick Start](QUICKSTART.md)                 | Get running in minutes — 4 tiers from code change to production |
+| [Contributing](CONTRIBUTING.md)              | Dev setup, test conventions, PR guidelines         |
 | [Monitoring Guide](MONITORING.md)            | Architecture, quick start, troubleshooting        |
-| [Observability Stack](docs/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive                  |
-| [Backup & Restore](docs/BACKUP.md)           | RPO/RTO, backup configuration, restore procedures |
-| [Credentials](docs/CREDENTIALS.md)           | Credential management and rotation                |
-| [Upgrading](docs/UPGRADING.md)               | Component version upgrade procedures              |
-| [Migration](docs/MIGRATION.md)               | Host migration runbook (planned and forced)       |
+| [Observability Stack](docs/monitoring/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive                  |
+| [Backup & Restore](docs/monitoring/BACKUP.md)           | RPO/RTO, backup configuration, restore procedures |
+| [Credentials](docs/monitoring/CREDENTIALS.md)           | Credential management and rotation                |
+| [Upgrading](docs/monitoring/UPGRADING.md)               | Component version upgrade procedures              |
+| [Migration](docs/monitoring/MIGRATION.md)               | Host migration runbook (planned and forced)       |
 
 ## Testing
 
