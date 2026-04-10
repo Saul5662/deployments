@@ -37,6 +37,13 @@ USE_LATEST_REFS=false
 
 # Pinned refs for reproducible local deploys.
 # Use --latest (or set USE_LATEST_REFS=true in env) to follow branch heads.
+AI_HORDE_REPO_DEFAULT="https://github.com/Haidra-Org/AI-Horde.git"
+if [ -z "${AI_HORDE_REPO+x}" ]; then
+  AI_HORDE_REPO="$AI_HORDE_REPO_DEFAULT"
+else
+  AI_HORDE_REPO="$AI_HORDE_REPO"
+fi
+
 AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
 FRONTPAGE_REF_DEFAULT="a56aec53f46470ca3796e1a7eabbe029e32563d3"
 ARTBOT_REF_DEFAULT="main"
@@ -216,7 +223,7 @@ clone_sources() {
 
   # AI-Horde backend source
   clone_or_update_source \
-    "https://github.com/Haidra-Org/AI-Horde.git" \
+    "$AI_HORDE_REPO" \
     "$LOCAL_ROOT/ai-horde/src" \
     "$ai_ref"
 
@@ -237,6 +244,57 @@ clone_sources() {
       "$LOCAL_ROOT/artbot/src" \
       "$artbot_ref"
   fi
+}
+
+
+cleanup_monitoring_container_name_conflicts() {
+  [ "$WITH_MONITORING" = true ] || return 0
+
+  local auto_clean="${HORDE_FULLSTACK_AUTO_CLEAN_MONITORING_CONFLICTS:-true}"
+  local -a known_names=(
+    minio
+    minio-init
+    memcached
+    mimir
+    grafana
+    loki
+    tempo
+    pyroscope
+    alertmanager
+    prometheus
+    horde-exporter
+    alloy
+  )
+  local -a conflicts=()
+  local name project
+
+  for name in "${known_names[@]}"; do
+    if docker ps -a --format '{{.Names}}' | grep -Fxq "$name"; then
+      project=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$name" 2>/dev/null || true)
+      if [ "$project" != "horde-monitoring" ]; then
+        conflicts+=("$name")
+      fi
+    fi
+  done
+
+  if [ "${#conflicts[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  warn "Found conflicting containers with global monitoring names: ${conflicts[*]}"
+  if [ "$auto_clean" != "true" ]; then
+    err "Auto-clean disabled (HORDE_FULLSTACK_AUTO_CLEAN_MONITORING_CONFLICTS=$auto_clean)."
+    err "Remove conflicts manually, or rerun with HORDE_FULLSTACK_AUTO_CLEAN_MONITORING_CONFLICTS=true."
+    return 1
+  fi
+
+  warn "Removing conflicting monitoring containers before startup ..."
+  if ! docker rm -f "${conflicts[@]}" >/dev/null 2>&1; then
+    err "Failed to remove one or more conflicting containers: ${conflicts[*]}"
+    return 1
+  fi
+
+  log "Removed conflicting containers: ${conflicts[*]}"
 }
 
 
@@ -439,6 +497,7 @@ cmd_up() {
   # Tier 3: Monitoring (optional)
   if [ "$WITH_MONITORING" = true ]; then
     log "═══ Tier 3: Monitoring Stack ═══"
+    cleanup_monitoring_container_name_conflicts || return 1
     log "Starting monitoring stack ..."
     dc_monitoring up -d
     wait_for_url "http://127.0.0.1:3000/api/health" "Grafana" 200 || {

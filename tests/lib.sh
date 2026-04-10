@@ -129,6 +129,20 @@ compose_logs() {
 clone_or_update_source() {
   local repo_url="$1" dest_dir="$2" ref="$3"
   if [ -d "$dest_dir/.git" ]; then
+    local current_origin
+    current_origin="$(git -C "$dest_dir" remote get-url origin 2>/dev/null || true)"
+    if [ "$current_origin" != "$repo_url" ]; then
+      warn "Source remote changed for $dest_dir"
+      warn "  old: ${current_origin:-<none>}"
+      warn "  new: $repo_url"
+      warn "Recloning to match requested repository."
+      rm -rf "$dest_dir"
+      log "Cloning $repo_url into $dest_dir (ref: $ref) ..."
+      git clone "$repo_url" "$dest_dir"
+      git -C "$dest_dir" checkout --quiet "$ref"
+      return 0
+    fi
+
     log "Updating source in $dest_dir to ref: $ref ..."
     git -C "$dest_dir" fetch --quiet --tags origin
     git -C "$dest_dir" checkout --quiet "$ref"
@@ -146,8 +160,8 @@ clone_or_update_source() {
 #   2) The run stage uses --no-index but needs network for git+https deps.
 #
 # This function MUTATES the upstream Dockerfile in-place. It is only
-# called when the operator opts in via USE_LATEST_REF(S)=true; pinned
-# ref deploys do not trigger patching.
+# called when the operator opts in via USE_LATEST_REF(S)=true, or when
+# an explicit ref/repository is requested by the operator.
 _patch_dockerfile() {
   local dockerfile="$1"
   [ -f "$dockerfile" ] || return 0

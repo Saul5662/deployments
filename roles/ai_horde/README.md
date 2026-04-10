@@ -343,6 +343,22 @@ depend on schema changes.
         ai_horde_haproxy_port: 80
 ```
 
+### Deploy from a fork
+
+```yaml
+- name: Deploy AI-Horde from a fork
+  hosts: horde_server
+  become: true
+  roles:
+    - role: ai_horde
+      vars:
+        ai_horde_deploy_mode: docker
+        ai_horde_repo: "https://github.com/your-org/AI-Horde.git"
+        ai_horde_repo_version: "my-release-branch"
+        ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
+        ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
+```
+
 Before using privileged ingress (`80/443`), ensure all are true:
 
 - No conflicting service already binds `80/443`.

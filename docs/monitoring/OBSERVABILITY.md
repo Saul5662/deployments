@@ -1,314 +1,258 @@
-# Observability Stack — Logs, Traces, and Alloy
+# Observability Stack - Metrics, Logs, Traces, and Profiles
 
-This document covers the Loki (logs), Tempo (traces), and Alloy (telemetry
-collector) components added to the monitoring stack. For the core
-Mimir + Grafana + Prometheus setup, see [MONITORING.md](../MONITORING.md).
+This runbook documents the full observability topology used by this
+repository, including:
 
-## Architecture Overview
+- Core metrics plane: Prometheus, Mimir, Grafana, and horde-exporter
+- Optional signal backends: Loki (logs), Tempo (traces), Pyroscope (profiles)
+- Host-side telemetry collector: Grafana Alloy on application hosts
 
+For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md).
+
+## Topology At A Glance
+
+```text
+┌──────────────────────────── Application Hosts (N) ───────────────────────────┐
+│                                                                              │
+│     [ --- AI-Horde services / workers / sidecars --- ]                       │
+│                                                                              │
+│      │                    │                       │                          │
+│      │ app metrics        │ logs                  │ traces (OTLP)            │
+│      ▼                    ▼                       ▼                          │
+│  optional scrape targets  journal/files/docker    Grafana Alloy OTLP receiver│
+│      └────────────────────────────┬───────────────────────────┘              │
+│                                   ▼                                          │
+│                        Grafana Alloy pipelines                               │
+│                   metrics -> Mimir, logs -> Loki, traces -> Tempo            │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    │ TLS/basic_auth if routed via HAProxy
+                                    ▼
+             ┌─────────────── Monitoring Host ────────────────────┐
+             │                                                    │
+             │ Native services (playbook-managed):                │
+             │   Prometheus, Alertmanager, horde-exporter         │
+             │                                                    │
+             │ Docker Compose services (horde_monitoring role):   │
+             │   Mimir <-> MinIO (+ Memcached) <-> Grafana        │
+             │   + optional Loki / Tempo / Pyroscope              │
+             │                                                    │
+             │ Tenant model:                                      │
+             │   ai-horde-app, infrastructure, ai-horde-public    │
+             └────────────────────────────────────────────────────┘
 ```
-┌─────────────────── App Host (N hosts) ──────────────────┐
-│                                                         │
-│  ┌─── Your App ───┐       ┌──── Grafana Alloy ───────┐ │
-│  │  OTLP traces   │──────>│ otelcol.receiver.otlp    │ │
-│  │  /metrics       │       │ prometheus.exporter.unix  │ │
-│  └────────────────┘       │ loki.source.journal       │ │
-│                            └───────┬──────────────────┘ │
-└────────────────────────────────────┼────────────────────┘
-                                     │ TLS + basic_auth
-                    ┌────────────────┼────────────────────┐
-                    ▼                ▼                     ▼
-┌──────────── Monitoring Host ──────────────────────────────────┐
-│ HAProxy (TLS termination / basic_auth)                        │
-│ ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐ │
-│ │  Mimir   │  │   Loki   │  │  Tempo   │  │    Grafana    │ │
-│ │ (metrics)│  │  (logs)  │  │ (traces) │  │  (dashboards) │ │
-│ └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬───────┘ │
-│      └──────┬──────┴─────┬───────┘                │         │
-│             ▼            ▼                         │         │
-│         ┌──────────┐ ┌──────────┐                  │         │
-│         │  MinIO   │ │Memcached │                  │         │
-│         │  (S3)    │ │ (cache)  │                  │         │
-│         └──────────┘ └──────────┘                  │         │
-│                                                    │         │
-│  Prometheus (native) ──remote_write──> Mimir ◄─────┘         │
-└──────────────────────────────────────────────────────────────┘
-```
 
-**Data flows:**
+## Role Ownership
 
-- **Metrics**: Alloy's `prometheus.exporter.unix` → `remote_write` → Mimir
-- **Logs**: Alloy's journal/file/docker sources → Loki push API
-- **Traces**: App → OTLP → Alloy → Tempo OTLP HTTP
-- **Trace→metrics**: Tempo's `metrics_generator` → `remote_write` → Mimir
-  (service graphs + span metrics)
+| Role | What it owns |
+| --- | --- |
+| `horde_monitoring` | Mimir, MinIO, Memcached, Grafana, optional Loki/Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
+| `horde_stats_exporter` | `horde-exporter` systemd service and optional downsampling timer |
+| `horde_alloy` | App-host telemetry collection and forwarding (metrics/logs/traces) |
+| `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager, node_exporter (not managed by `horde_monitoring`) |
 
-## Enabling Loki and Tempo
+## Full Stack Components
 
-Both components are **opt-in** and do not deploy unless enabled:
+| Component | Default | Toggle/Variable |
+| --- | --- | --- |
+| Mimir | enabled | `horde_monitoring_install_mimir: true` |
+| Grafana | enabled | `horde_monitoring_install_grafana: true` |
+| MinIO (Mimir object storage) | enabled | `horde_monitoring_mimir_enable_minio: true` |
+| Memcached (Mimir cache) | enabled | `horde_monitoring_mimir_enable_memcached: true` |
+| Loki | disabled | `horde_monitoring_install_loki: false` |
+| Tempo | disabled | `horde_monitoring_install_tempo: false` |
+| Pyroscope | disabled | `horde_monitoring_install_pyroscope: false` |
+
+When MinIO is enabled, the compose init step creates buckets for enabled
+components automatically (`mimir-blocks`, `mimir-ruler`, plus optional
+Loki/Tempo/Pyroscope buckets).
+
+## Enabling Optional Backends
 
 ```yaml
-# In your playbook vars:
-monitoring_install_loki: true
-monitoring_install_tempo: true
+# Example play vars
+horde_monitoring_install_loki: true
+horde_monitoring_install_tempo: true
+horde_monitoring_install_pyroscope: true
 ```
 
-This adds Loki and Tempo containers to the existing Docker Compose stack.
-MinIO buckets are created automatically by the init container.
+### Loki (logs)
 
-### Loki Configuration
+| Variable | Default |
+| --- | --- |
+| `horde_monitoring_loki_image` | `grafana/loki:3.4.2` |
+| `horde_monitoring_loki_port` | `3100` |
+| `horde_monitoring_loki_retention_period` | `2160h` |
+| `horde_monitoring_loki_retention_enabled` | `true` |
+| `horde_monitoring_loki_auth_enabled` | `true` |
+| `horde_monitoring_loki_chunks_bucket` | `loki-chunks` |
 
-| Variable                         | Default              | Description                       |
-| -------------------------------- | -------------------- | --------------------------------- |
-| `monitoring_install_loki`        | `false`              | Enable Loki deployment            |
-| `loki_image`                     | `grafana/loki:3.4.2` | Loki Docker image                 |
-| `loki_port`                      | `3100`               | HTTP listen port                  |
-| `loki_retention_period`          | `2160h`              | How long to keep log data (90d)   |
-| `loki_retention_enabled`         | `true`               | Enable compactor retention        |
-| `loki_ingestion_rate_mb`         | `10`                 | Per-tenant ingestion rate (MB/s)  |
-| `loki_ingestion_burst_size_mb`   | `20`                 | Per-tenant burst size (MB)        |
-| `loki_allow_structured_metadata` | `true`               | Enable for OTLP trace correlation |
-| `loki_chunks_bucket`             | `loki-chunks`        | MinIO bucket name                 |
+### Tempo (traces)
 
-### Tempo Configuration
+| Variable | Default |
+| --- | --- |
+| `horde_monitoring_tempo_image` | `grafana/tempo:2.7.1` |
+| `horde_monitoring_tempo_http_port` | `3200` |
+| `horde_monitoring_tempo_otlp_grpc_port` | `4317` |
+| `horde_monitoring_tempo_otlp_http_port` | `4318` |
+| `horde_monitoring_tempo_trace_retention` | `168h` |
+| `horde_monitoring_tempo_metrics_generator_enabled` | `true` |
+| `horde_monitoring_tempo_metrics_generator_tenant_id` | `infrastructure` |
+| `horde_monitoring_tempo_traces_bucket` | `tempo-traces` |
 
-| Variable                            | Default               | Description                        |
-| ----------------------------------- | --------------------- | ---------------------------------- |
-| `monitoring_install_tempo`          | `false`               | Enable Tempo deployment            |
-| `tempo_image`                       | `grafana/tempo:2.7.1` | Tempo Docker image                 |
-| `tempo_http_port`                   | `3200`                | HTTP API port                      |
-| `tempo_otlp_grpc_port`              | `4317`                | OTLP gRPC receiver port            |
-| `tempo_otlp_http_port`              | `4318`                | OTLP HTTP receiver port            |
-| `tempo_trace_retention`             | `168h`                | Trace block retention (7d)         |
-| `tempo_metrics_generator_enabled`   | `true`                | Generate metrics from traces       |
-| `tempo_metrics_generator_tenant_id` | `infrastructure`      | Mimir tenant for generated metrics |
-| `tempo_traces_bucket`               | `tempo-traces`        | MinIO bucket name                  |
+Tempo metrics-generator output is remote-written to Mimir and powers Grafana
+service-map/span-metrics views.
 
-### Grafana Integration
+### Pyroscope (profiles)
 
-When Loki and/or Tempo are enabled, the role automatically provisions:
+| Variable | Default |
+| --- | --- |
+| `horde_monitoring_pyroscope_image` | `grafana/pyroscope:1.19.0` |
+| `horde_monitoring_pyroscope_port` | `4040` |
+| `horde_monitoring_pyroscope_auth_enabled` | `true` |
+| `horde_monitoring_pyroscope_blocks_bucket` | `pyroscope-data` |
+| `horde_monitoring_pyroscope_retention_period` | `0s` |
+| `horde_monitoring_pyroscope_application_retention` | `0` |
+| `horde_monitoring_pyroscope_infrastructure_retention` | `30d` |
+| `horde_monitoring_pyroscope_public_retention` | `90d` |
 
-- **Loki datasources** per tenant (app, infrastructure, public) with
-  `X-Scope-OrgID` headers
-- **Tempo datasource** with trace-to-logs correlation (links to Loki),
-  trace-to-metrics (links to Mimir), service map, and node graph
-- **Log-to-trace** derived fields: clicking a `traceID` in Loki logs
-  opens the corresponding trace in Tempo
+Pyroscope per-tenant retention is rendered into runtime overrides, matching
+the same tenant IDs used by Mimir datasources.
 
-### Alerting
+## Tenant Model And Datasource Provisioning
 
-Self-monitoring alerts are added automatically:
+Default tenants:
 
-- `LokiDown` / `LokiRequestErrors` / `LokiIngestionStalled`
-- `TempoDown` / `TempoRequestErrors` / `TempoIngestionStalled`
+- `horde_monitoring_application_tenant_id: ai-horde-app`
+    - For core AI-Horde application metrics, currently indefinately retained
+- `horde_monitoring_infrastructure_tenant_id: infrastructure`
+    - For host and infrastructure metrics, retained for 30 days by default
+- `horde_monitoring_public_tenant_id: ai-horde-public`
+    - Downsampled and restricted metrics suitable for public dashboards.
 
-### Backup
+Grafana datasource provisioning is automatic:
 
-The MinIO backup service automatically mirrors Loki and Tempo buckets
-to the offsite target when those components are enabled.
+- Org 1: Mimir app + infrastructure datasources
+    - Optional Org 1 datasources when enabled: Loki, Tempo, Pyroscope
+- Org 2 (public, anonymous) datasource set when
+  `horde_monitoring_grafana_anonymous_enabled: true`
+    - Note that public dashboards should use the `ai-horde-public` tenant datasource, which has downsampled
+      and restricted metrics to limit performance impact.
 
-## Deploying Alloy on Application Hosts
+Cross-signal features auto-configure when components are enabled:
 
-Grafana Alloy replaces `node_exporter` on hosts where it is deployed,
-providing metrics collection, log shipping, and trace forwarding in a
-single agent.
+- Loki derived field links (`trace_id`/`traceID`/`traceId`) to Tempo
+- Tempo trace-to-metrics service map to Mimir infrastructure datasource
+
+## Alerting Coverage
+
+When `horde_monitoring_install_alerting_rules: true`, the role renders
+Prometheus rules for stack self-monitoring. Coverage includes:
+
+- Core: `Watchdog`, `MimirDown`, `MimirRequestErrors`, `MimirIngestionStalled`
+- MinIO: `MinIODown`, disk usage alerts
+- Optional Loki: `LokiDown`, `LokiRequestErrors`, `LokiIngestionStalled`
+- Optional Tempo: `TempoDown`, `TempoRequestErrors`, `TempoIngestionStalled`
+- Optional Pyroscope: `PyroscopeDown`, `PyroscopeRequestErrors`, `PyroscopeIngestionStalled`
+- Host disk alerts (node_exporter dependent): `HostDiskUsageCritical`, `HostDiskUsageHigh`
+
+## Deploying Alloy On Application Hosts
+
+`horde_alloy` is the host collector role for metrics, logs, and traces.
 
 ### Quick Start
 
 ```yaml
-# In your inventory group_vars:
-alloy_mimir_endpoint: "https://mimir.example.com/api/v1/push"
-alloy_loki_endpoint: "https://loki.example.com/loki/api/v1/push"
-alloy_tempo_endpoint: "https://tempo.example.com:4318"
-alloy_tenant_id: "infrastructure"
-alloy_basic_auth_username: "alloy"
-alloy_basic_auth_password: "{{ vault_alloy_basic_auth_password }}"
-alloy_tls_ca_cert: "tls/ca.crt"
+# group_vars / inventory vars
+horde_alloy_mimir_endpoint: "https://mimir.example.com/api/v1/push"
+horde_alloy_loki_endpoint: "https://loki.example.com/loki/api/v1/push"
+horde_alloy_tempo_endpoint: "https://tempo.example.com:4318"
+horde_alloy_tenant_id: "infrastructure"
+horde_alloy_basic_auth_username: "alloy"
+horde_alloy_basic_auth_password: "{{ vault_alloy_basic_auth_password }}"
+horde_alloy_tls_ca_cert: "tls/ca.crt"
 ```
 
 ```yaml
-# In your playbook:
 - hosts: app_workers
   become: true
   roles:
     - haidra.deployments.horde_alloy
 ```
 
-See [examples/alloy_app_host.yml](../examples/alloy_app_host.yml) for a
-complete example playbook.
+Complete example: [examples/alloy_app_host.yml](../../examples/alloy_app_host.yml)
 
-### What Alloy Collects
+### Alloy Pipeline Toggles
 
-| Pipeline | Source                                    | Destination | Toggle                       |
-| -------- | ----------------------------------------- | ----------- | ---------------------------- |
-| Metrics  | `prometheus.exporter.unix` (host metrics) | Mimir       | `alloy_collect_metrics`      |
-| Metrics  | Extra scrape targets                      | Mimir       | `alloy_extra_scrape_targets` |
-| Logs     | systemd journal                           | Loki        | `alloy_collect_journal`      |
-| Logs     | Log file globs                            | Loki        | `alloy_collect_log_files`    |
-| Logs     | Docker container logs                     | Loki        | `alloy_collect_docker_logs`  |
-| Traces   | OTLP gRPC/HTTP receiver                   | Tempo       | `alloy_collect_traces`       |
+| Signal | Main toggle | Supporting toggles |
+| --- | --- | --- |
+| Metrics | `horde_alloy_collect_metrics` | `horde_alloy_extra_scrape_targets`, `horde_alloy_external_labels` |
+| Logs | `horde_alloy_collect_logs` | `horde_alloy_collect_journal`, `horde_alloy_collect_log_files`, `horde_alloy_collect_docker_logs`, `horde_alloy_log_labels` |
+| Traces | `horde_alloy_collect_traces` | `horde_alloy_otlp_listen_address`, `horde_alloy_otlp_grpc_port`, `horde_alloy_otlp_http_port` |
+| OTLP metrics forwarding | `horde_alloy_forward_otlp_metrics` | `horde_alloy_otlp_metrics_tenant_id` |
 
-### Alloy Variables Reference
+Role validation fails fast if enabled pipelines do not have endpoints, or if
+`horde_alloy_basic_auth_password` is left at `changeme-alloy`.
 
-| Variable                    | Default          | Description                           |
-| --------------------------- | ---------------- | ------------------------------------- |
-| `alloy_version`             | `1.8.1`          | Pinned Alloy version                  |
-| `alloy_config_dir`          | `/etc/alloy`     | Configuration directory               |
-| `alloy_data_dir`            | `/var/lib/alloy` | Persistent data directory             |
-| `alloy_http_listen_address` | `127.0.0.1`      | Health/UI endpoint bind               |
-| `alloy_http_port`           | `12345`          | Health/UI endpoint port               |
-| `alloy_scrape_interval`     | `15s`            | Metrics scrape interval               |
-| `alloy_external_labels`     | `{}`             | Extra labels on all metrics           |
-| `alloy_collect_journal`     | `true`           | Collect systemd journal logs          |
-| `alloy_journal_max_age`     | `24h`            | Max journal entry age on first start  |
-| `alloy_collect_log_files`   | `[]`             | Glob patterns for file log collection |
-| `alloy_collect_docker_logs` | `false`          | Collect Docker container logs         |
-| `alloy_log_labels`          | `{}`             | Extra labels on all log streams       |
-| `alloy_otlp_listen_address` | `127.0.0.1`      | OTLP receiver bind address            |
-| `alloy_otlp_grpc_port`      | `4317`           | OTLP gRPC port                        |
-| `alloy_otlp_http_port`      | `4318`           | OTLP HTTP port                        |
-| `alloy_trace_batch_timeout` | `5s`             | Batch processor flush interval        |
-| `alloy_trace_batch_size`    | `8192`           | Max batch size (spans)                |
+## End-To-End Data Flows
 
-## Instrumenting Applications with OTLP
+- Exporter metrics: `horde-exporter` -> Prometheus scrape -> Mimir
+- Host metrics: Alloy `prometheus.exporter.unix` -> Mimir remote_write
+- Logs: Alloy journal/file/docker sources -> Loki push API
+- Traces: app OTLP -> Alloy OTLP receiver -> Tempo OTLP HTTP exporter
+- Trace-derived metrics: Tempo metrics generator -> Mimir remote_write
+- Profiles: app profiler SDK/agent -> Pyroscope HTTP ingest endpoint
 
-Applications running on Alloy hosts can send traces (and optionally metrics
-and logs) via OTLP to the local Alloy receiver.
+Note: profile ingestion is not handled by `horde_alloy` today; applications
+push profiles directly to Pyroscope.
 
-### Environment Variables
+## Retention Defaults
 
-The standard OpenTelemetry SDK environment variables configure any
-OTEL-instrumented application:
+| Signal | Storage backend | Default retention | Variable |
+| --- | --- | --- | --- |
+| Mimir application tenant | Mimir | infinite (`0`) | `horde_monitoring_application_retention` |
+| Mimir infrastructure tenant | Mimir | `30d` | `horde_monitoring_infrastructure_retention` |
+| Mimir public tenant | Mimir | `90d` | `horde_monitoring_public_retention` |
+| Logs | Loki | `2160h` (90 days) | `horde_monitoring_loki_retention_period` |
+| Traces | Tempo | `168h` (7 days) | `horde_monitoring_tempo_trace_retention` |
+| Profiles (global default) | Pyroscope | `0s` (infinite) | `horde_monitoring_pyroscope_retention_period` |
+| Profiles (application tenant) | Pyroscope | `0` | `horde_monitoring_pyroscope_application_retention` |
+| Profiles (infrastructure tenant) | Pyroscope | `30d` | `horde_monitoring_pyroscope_infrastructure_retention` |
+| Profiles (public tenant) | Pyroscope | `90d` | `horde_monitoring_pyroscope_public_retention` |
+| Prometheus local TSDB | Prometheus | `48h` in example playbook | `prometheus_storage_retention` |
 
-```bash
-# Point the SDK at the local Alloy OTLP receiver
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+## HAProxy Integration Notes
 
-# Required resource attributes
-export OTEL_SERVICE_NAME="my-service"
-export OTEL_RESOURCE_ATTRIBUTES="service.namespace=ai-horde,deployment.environment=production"
-```
+When `horde_monitoring_configure_haproxy: true`, the role inserts backends for:
 
-### Python (opentelemetry-sdk)
+- Grafana
+- Mimir
+- Loki (when enabled)
+- Tempo OTLP HTTP ingest (`horde_monitoring_tempo_otlp_http_port`) when enabled
 
-```bash
-pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
-```
-
-```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-
-resource = Resource.create({"service.name": "my-service"})
-provider = TracerProvider(resource=resource)
-provider.add_span_processor(
-    BatchSpanProcessor(OTLPSpanExporter(endpoint="http://127.0.0.1:4318/v1/traces"))
-)
-trace.set_tracer_provider(provider)
-
-tracer = trace.get_tracer(__name__)
-with tracer.start_as_current_span("my-operation"):
-    pass  # your code here
-```
-
-### Node.js (@opentelemetry/sdk-node)
-
-```bash
-npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
-```
-
-```javascript
-const { NodeSDK } = require("@opentelemetry/sdk-node");
-const {
-  OTLPTraceExporter,
-} = require("@opentelemetry/exporter-trace-otlp-http");
-
-const sdk = new NodeSDK({
-  traceExporter: new OTLPTraceExporter({
-    url: "http://127.0.0.1:4318/v1/traces",
-  }),
-  serviceName: "my-service",
-});
-
-sdk.start();
-```
-
-### Correlating Logs and Traces
-
-To link logs to traces in Grafana, include the trace ID in your log output.
-Most OTEL SDKs inject `trace_id` and `span_id` into the logging context
-automatically when using the appropriate log bridge.
-
-For manual correlation, extract the trace context and include it:
-
-```python
-import logging
-from opentelemetry import trace
-
-span = trace.get_current_span()
-ctx = span.get_span_context()
-logging.info("Processing request", extra={
-    "trace_id": format(ctx.trace_id, '032x'),
-    "span_id": format(ctx.span_id, '016x'),
-})
-```
-
-Loki's derived field `traceID` (configured automatically by the role)
-will turn these into clickable links to Tempo in Grafana.
-
-## Retention Summary
-
-| Signal            | Component  | Default Retention      | Variable                       |
-| ----------------- | ---------- | ---------------------- | ------------------------------ |
-| Metrics           | Mimir      | Per-tenant (0/30d/90d) | `monitoring_*_retention`       |
-| Logs              | Loki       | 90 days                | `loki_retention_period`        |
-| Traces            | Tempo      | 7 days                 | `tempo_trace_retention`        |
-| Metrics (on-host) | Prometheus | 48 hours               | `prometheus_storage_retention` |
+Pyroscope backend/frontends are not auto-inserted by the role; add those in
+your HAProxy config if you need proxied profile ingest/query access.
 
 ## Health Checks
 
 ```bash
-# Loki
-curl -s http://127.0.0.1:3100/ready
+# Core
+curl -sf http://127.0.0.1:9009/ready             # Mimir
+curl -sf http://127.0.0.1:9000/minio/health/live # MinIO
+curl -sf http://127.0.0.1:3000/api/health        # Grafana
 
-# Tempo
-curl -s http://127.0.0.1:3200/ready
+# Optional
+curl -sf http://127.0.0.1:3100/ready             # Loki
+curl -sf http://127.0.0.1:3200/ready             # Tempo
+curl -sf http://127.0.0.1:4040/ready             # Pyroscope
 
-# Alloy (on app host)
-curl -s http://127.0.0.1:12345/-/healthy
+# App host
+curl -sf http://127.0.0.1:12345/-/healthy        # Alloy
 ```
+## Related Documents
 
-## Troubleshooting
-
-### Alloy can't reach Loki/Tempo/Mimir
-
-1. Verify the endpoint URLs are correct and include the protocol scheme.
-2. Check that HAProxy is configured with backends for Loki and Tempo
-   (`monitoring_configure_haproxy: true`).
-3. Verify the CA certificate was deployed: `ls /etc/alloy/ca.crt`
-4. Test connectivity from the app host:
-   ```bash
-   curl -v --cacert /etc/alloy/ca.crt -u alloy:password https://loki.example.com/ready
-   ```
-
-### No logs appearing in Grafana
-
-1. Check Alloy status: `systemctl status alloy`
-2. Check Alloy logs: `journalctl -u alloy -f`
-3. Verify Loki is accepting pushes:
-   ```bash
-   curl -s http://127.0.0.1:3100/ready
-   ```
-4. Check Loki ingestion metrics in Grafana (Mimir datasource):
-   `loki_distributor_bytes_received_total`
-
-### No traces appearing
-
-1. Verify the app is sending to the correct OTLP endpoint.
-2. Check Alloy logs for exporter errors: `journalctl -u alloy -f | grep otelcol`
-3. Verify Tempo is ready: `curl -s http://127.0.0.1:3200/ready`
-4. Check `tempo_distributor_spans_received_total` in Grafana.
+- [MONITORING.md](../../MONITORING.md)
+- [BACKUP.md](BACKUP.md)
+- [CREDENTIALS.md](CREDENTIALS.md)
+- [UPGRADING.md](UPGRADING.md)
+- [examples/horde_monitoring_stack.yml](../../examples/horde_monitoring_stack.yml)
