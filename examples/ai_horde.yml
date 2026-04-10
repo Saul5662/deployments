@@ -22,6 +22,8 @@
         ai_horde_deploy_mode: docker
         # Pin source and runtime image explicitly; bump only after validation.
         ai_horde_repo_version: "af0a85a78613cdba9863e16bbec0c179a4b2b132"
+        # Optional source override (public fork):
+        # ai_horde_repo: "https://github.com/your-org/AI-Horde.git"
         ai_horde_postgres_image: "ghcr.io/haidra-org/ai-horde-postgres@sha256:25984d05fdb328d3283166222efd569303c0221736fc332b8f4be1b8ff37e1e4"
         ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"

@@ -8,6 +8,9 @@ Not sure where to start? Pick the scenario that matches your goal:
 - [Run the Ansible test suite](#run-the-ansible-test-suite) — ~3 min per suite
 - [Deploy to a real host](#deploy-to-a-real-host) — varies
 
+Need help choosing a path quickly? See the
+[Operator Decision Tree](docs/OPERATOR_DECISION_TREE.md).
+
 ## Fast Paths (TL;DR)
 
 | If you are trying to... | Do this | Monitoring needed? |
@@ -82,7 +85,7 @@ Heartbeat     →  http://localhost:7001/api/v2/status/heartbeat
 ### Verify
 
 ```bash
-for i in {1..20}; do
+for i in {1..2}; do
   curl -sf http://localhost:7001/api/v2/status/heartbeat && break
   sleep 2
 done
@@ -103,7 +106,7 @@ docker compose -f local-deploy/ai-horde/docker-compose.yml build
 docker compose -f local-deploy/ai-horde/docker-compose.yml up -d
 
 # Verify your change (service may take a few seconds to accept traffic)
-for i in {1..20}; do
+for i in {1..2}; do
   curl -sf http://localhost:7001/api/v2/status/heartbeat && break
   sleep 2
 done
@@ -126,13 +129,23 @@ AI_HORDE_REF=my-feature-branch ./tests/ai_horde/local_deploy.sh up --latest
 When `AI_HORDE_REF` is set, that explicit ref is used. If `AI_HORDE_REF` is
 not set, `--latest` follows `main`.
 
-### Use your local checkout safely
+### Use your fork as the implementation source
+
+To test your own repository fork:
+
+```bash
+AI_HORDE_REPO=https://github.com/<you>/AI-Horde.git \
+AI_HORDE_REF=<branch-or-tag-or-sha> \
+./tests/ai_horde/local_deploy.sh up --latest
+```
+
+### Use your local checkout
 
 If you want to test uncommitted local changes, copy your checkout into the
 local deploy source tree, then rebuild:
 
 ```bash
-# Copy your working tree (safe: does not mutate your original checkout)
+# Copy your working tree (avoid symlinking to avoid unintentional edits during ansible cleanup)
 rm -rf local-deploy/ai-horde/src
 cp -a /path/to/your/AI-Horde local-deploy/ai-horde/src
 
@@ -161,10 +174,26 @@ without changing Ansible role code.
 AI_HORDE_REF=<branch-or-tag-or-sha> ./tests/ai_horde/local_deploy.sh up
 ```
 
+### Local update from a fork/source override
+
+```bash
+AI_HORDE_REPO=https://github.com/<you>/AI-Horde.git \
+AI_HORDE_REF=<branch-or-tag-or-sha> \
+./tests/ai_horde/local_deploy.sh up --latest
+```
+
 ### Update a real host to a specific ref
 
 ```bash
 ansible-playbook -i my_inventory.yml examples/ai_horde.yml \
+  -e ai_horde_repo_version=<branch-or-tag-or-sha>
+```
+
+To deploy from your fork on a real host:
+
+```bash
+ansible-playbook -i my_inventory.yml examples/ai_horde.yml \
+  -e ai_horde_repo=https://github.com/<you>/AI-Horde.git \
   -e ai_horde_repo_version=<branch-or-tag-or-sha>
 ```
 
@@ -241,10 +270,20 @@ If startup fails with `... container name ... is already in use`, remove stale
 monitoring containers from older runs and retry:
 
 ```bash
-docker rm -f minio minio-init memcached mimir grafana loki tempo pyroscope \
-  alertmanager prometheus horde-exporter alloy 2>/dev/null || true
 ./tests/full_stack/local_deploy.sh down
 ./tests/full_stack/local_deploy.sh up --latest --with-monitoring
+```
+
+By default, `tests/full_stack/local_deploy.sh` auto-cleans stale known
+monitoring container names before starting monitoring.
+
+If you disabled auto-clean with
+`HORDE_FULLSTACK_AUTO_CLEAN_MONITORING_CONFLICTS=false`, either re-enable it
+or clean conflicts manually with:
+
+```bash
+docker rm -f minio minio-init memcached mimir grafana loki tempo pyroscope \
+  alertmanager prometheus horde-exporter alloy 2>/dev/null || true
 ```
 
 ---

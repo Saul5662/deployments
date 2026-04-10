@@ -24,6 +24,13 @@ export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 USE_LATEST_REF=false
+AI_HORDE_REPO_DEFAULT="https://github.com/Haidra-Org/AI-Horde.git"
+if [ -z "${AI_HORDE_REPO+x}" ]; then
+  AI_HORDE_REPO="$AI_HORDE_REPO_DEFAULT"
+else
+  AI_HORDE_REPO="$AI_HORDE_REPO"
+fi
+
 AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
 if [ -z "${AI_HORDE_REF+x}" ]; then
   AI_HORDE_REF="$AI_HORDE_REF_DEFAULT"
@@ -58,7 +65,7 @@ clone_source() {
   fi
 
   clone_or_update_source \
-    "https://github.com/Haidra-Org/AI-Horde.git" \
+    "$AI_HORDE_REPO" \
     "$LOCAL_ROOT/src" \
     "$ref"
 

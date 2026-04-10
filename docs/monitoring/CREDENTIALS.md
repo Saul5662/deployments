@@ -54,9 +54,7 @@ See `examples/horde_monitoring_stack.yml` for a working example.
 
 ## Credential Rotation
 
-Changing credentials requires a full stack restart. There is no rolling
-rotation support — this is acceptable for a single-host monitoring stack
-where the credentials are internal (loopback network only).
+Changing credentials requires a full stack restart.
 
 ### MinIO password rotation
 
@@ -109,5 +107,3 @@ credential loading:
 
 - **MinIO:** `MINIO_ROOT_PASSWORD_FILE`
 - **Grafana:** `GF_SECURITY_ADMIN_PASSWORD__FILE`
-
-This is tracked as decision D4 in the plan README.
