@@ -16,9 +16,44 @@ logging {
 // ============================================================================
 // METRICS PIPELINE
 // ============================================================================
-{% if horde_alloy_collect_metrics %}
+{% if horde_alloy_collect_metrics | bool %}
 
-prometheus.exporter.unix "node" { }
+prometheus.exporter.unix "node" {
+{% if (horde_alloy_unix_exporter_set_collectors | default([])) | length > 0 %}
+  set_collectors = {{ horde_alloy_unix_exporter_set_collectors | to_json }}
+{% endif %}
+{% if (horde_alloy_unix_exporter_enable_collectors | default([])) | length > 0 %}
+  enable_collectors = {{ horde_alloy_unix_exporter_enable_collectors | to_json }}
+{% endif %}
+{% if (horde_alloy_unix_exporter_disable_collectors | default([])) | length > 0 %}
+  disable_collectors = {{ horde_alloy_unix_exporter_disable_collectors | to_json }}
+{% endif %}
+{% if horde_alloy_unix_exporter_include_exporter_metrics | default(false) %}
+  include_exporter_metrics = true
+{% endif %}
+
+{% if (horde_alloy_unix_exporter_textfile_directory | default('')) | length > 0 %}
+  textfile {
+    directory = {{ horde_alloy_unix_exporter_textfile_directory | to_json }}
+  }
+{% endif %}
+
+{% if ((horde_alloy_unix_exporter_filesystem_fs_types_exclude | default('')) | length > 0)
+   or ((horde_alloy_unix_exporter_filesystem_mount_points_exclude | default('')) | length > 0)
+   or ((horde_alloy_unix_exporter_filesystem_mount_timeout | default('5s')) != '5s') %}
+  filesystem {
+{% if (horde_alloy_unix_exporter_filesystem_fs_types_exclude | default('')) | length > 0 %}
+    fs_types_exclude     = {{ horde_alloy_unix_exporter_filesystem_fs_types_exclude | to_json }}
+{% endif %}
+{% if (horde_alloy_unix_exporter_filesystem_mount_points_exclude | default('')) | length > 0 %}
+    mount_points_exclude = {{ horde_alloy_unix_exporter_filesystem_mount_points_exclude | to_json }}
+{% endif %}
+{% if (horde_alloy_unix_exporter_filesystem_mount_timeout | default('5s')) != '5s' %}
+    mount_timeout        = {{ horde_alloy_unix_exporter_filesystem_mount_timeout | to_json }}
+{% endif %}
+  }
+{% endif %}
+}
 
 prometheus.scrape "node" {
   targets         = prometheus.exporter.unix.node.targets
@@ -73,9 +108,9 @@ prometheus.remote_write "mimir" {
 // ============================================================================
 // LOG PIPELINE
 // ============================================================================
-{% if horde_alloy_collect_logs %}
+{% if horde_alloy_collect_logs | bool %}
 
-{% if horde_alloy_collect_journal %}
+{% if horde_alloy_collect_journal | bool %}
 // Relabel journal fields into useful labels.
 loki.relabel "journal" {
   forward_to = []
@@ -131,7 +166,7 @@ loki.source.file "log_files" {
 }
 
 {% endif %}
-{% if horde_alloy_collect_docker_logs %}
+{% if horde_alloy_collect_docker_logs | bool %}
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
@@ -194,7 +229,7 @@ loki.write "loki" {
 // ============================================================================
 // OTLP PIPELINE (traces + metrics from instrumented applications)
 // ============================================================================
-{% if horde_alloy_collect_traces %}
+{% if horde_alloy_collect_traces | bool %}
 
 otelcol.receiver.otlp "local" {
   grpc {
@@ -206,7 +241,7 @@ otelcol.receiver.otlp "local" {
   }
 
   output {
-{% if horde_alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics | bool %}
     metrics = [otelcol.processor.batch.default.input]
 {% endif %}
     traces  = [otelcol.processor.batch.default.input]
@@ -218,14 +253,14 @@ otelcol.processor.batch "default" {
   send_batch_max_size = {{ horde_alloy_trace_batch_size }}
 
   output {
-{% if horde_alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics | bool %}
     metrics = [otelcol.exporter.prometheus.mimir.input]
 {% endif %}
     traces  = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
-{% if horde_alloy_forward_otlp_metrics %}
+{% if horde_alloy_forward_otlp_metrics | bool %}
 otelcol.exporter.prometheus "mimir" {
   forward_to = [prometheus.remote_write.otlp_metrics.receiver]
 }

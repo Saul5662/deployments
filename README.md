@@ -74,7 +74,6 @@ and how the monitoring roles work together.
 | Document                                     | Contents                                          |
 | -------------------------------------------- | ------------------------------------------------- |
 | [Quick Start](QUICKSTART.md)                 | Get running in minutes — 4 tiers from code change to production |
-| [Operator Decision Tree](docs/OPERATOR_DECISION_TREE.md) | Choose the right workflow in under a minute |
 | [Contributing](CONTRIBUTING.md)              | Dev setup, test conventions, PR guidelines         |
 | [Monitoring Guide](MONITORING.md)            | Architecture, quick start, troubleshooting        |
 | [Observability Stack](docs/monitoring/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive                  |

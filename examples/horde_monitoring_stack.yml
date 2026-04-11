@@ -3,7 +3,7 @@
 # Usage: ansible-playbook -i inventory.yml horde_monitoring_stack.yml
 #
 # Architecture:
-#   Play 1: Deploy node_exporter on ALL scraped hosts (TLS + basic_auth)
+#   Play 1: Deploy node_exporter only on hosts that resolve to node_exporter source
 #   Play 2: Deploy Mimir + Grafana + Prometheus + stats exporter on the monitoring host
 #
 #   Prometheus (native) --remote_write--> Mimir (Docker) <-- Grafana (Docker)
@@ -14,13 +14,27 @@
 #   Generate a self-signed CA and per-host TLS certs (see community.crypto)
 
 # ---------------------------------------------------------------------------
-# Play 1: node_exporter on every scraped host
+# Play 1: node_exporter on hosts using node_exporter as host metrics source
 # ---------------------------------------------------------------------------
 - name: Deploy node_exporter on all hosts
   hosts: all
   become: true
 
   vars:
+    # Host metrics source selection (per-host):
+    # - auto (default): use Alloy when host indicates Alloy metrics are configured,
+    #                   otherwise use node_exporter
+    # - node_exporter: always install node_exporter
+    # - alloy: never install node_exporter
+    #
+    # Alloy indicators checked in auto mode:
+    # - horde_alloy_enabled: true
+    # - horde_alloy_collect_metrics: true
+    horde_host_metrics_source_allowed:
+      - auto
+      - node_exporter
+      - alloy
+
     # TLS: expects CA-signed per-host certs in files/tls/
     node_exporter_tls_server_config:
       cert_file: /etc/node_exporter/tls.crt
@@ -30,20 +44,47 @@
       prometheus: "{{ vault_node_exporter_bcrypt_password }}"
 
   pre_tasks:
+    - name: Validate host metrics source selection
+      ansible.builtin.assert:
+        that:
+          - (horde_host_metrics_source | default('auto') | lower) in horde_host_metrics_source_allowed
+        fail_msg: >-
+          horde_host_metrics_source must be one of: auto, node_exporter, alloy.
+
+    - name: Resolve whether host uses Alloy metrics
+      ansible.builtin.set_fact:
+        horde_host_uses_alloy_metrics: >-
+          {{
+            (horde_host_metrics_source | default('auto') | lower) == 'alloy'
+            or (
+              (horde_host_metrics_source | default('auto') | lower) == 'auto'
+              and (
+                (horde_alloy_enabled | default(false) | bool)
+                or (
+                  (horde_alloy_collect_metrics is defined)
+                  and (horde_alloy_collect_metrics | bool)
+                )
+              )
+            )
+          }}
+
     - name: Push TLS cert for node_exporter
       ansible.builtin.copy:
         src: "tls/{{ inventory_hostname }}.crt"
         dest: /etc/node_exporter/tls.crt
         mode: "0644"
+      when: not (horde_host_uses_alloy_metrics | bool)
 
     - name: Push TLS key for node_exporter
       ansible.builtin.copy:
         src: "tls/{{ inventory_hostname }}.key"
         dest: /etc/node_exporter/tls.key
         mode: "0600"
+      when: not (horde_host_uses_alloy_metrics | bool)
 
   roles:
-    - prometheus.prometheus.node_exporter
+    - role: prometheus.prometheus.node_exporter
+      when: not (horde_host_uses_alloy_metrics | bool)
 
 # ---------------------------------------------------------------------------
 # Play 2: Mimir + Grafana stack, Prometheus, stats exporter on monitoring host
@@ -64,6 +105,7 @@
     horde_monitoring_infrastructure_retention: "30d"
     horde_monitoring_public_tenant_id: "ai-horde-public"
     horde_monitoring_public_retention: "90d"
+    horde_monitoring_install_host_disk_alerts: true
     horde_monitoring_grafana_anonymous_enabled: true
     horde_monitoring_grafana_provision_dashboards: true
     # horde_monitoring_grafana_root_url: "https://grafana.example.com"

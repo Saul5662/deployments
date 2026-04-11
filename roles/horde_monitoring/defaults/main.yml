@@ -163,8 +163,8 @@ horde_monitoring_alertmanager_url: ""
 # Set to false if you provide your own rules or don't use Prometheus alerting.
 horde_monitoring_install_alerting_rules: true
 # Host-level disk alerts (HostDiskUsageCritical, HostDiskUsageHigh) depend on
-# node_exporter being deployed and scraped by Prometheus. If you don't run
-# node_exporter, set this to false — the alerts will silently never fire without it.
+# node_filesystem_* metrics being present in Prometheus. If your Prometheus
+# setup does not ingest host filesystem metrics, set this to false.
 horde_monitoring_install_host_disk_alerts: true
 horde_monitoring_alerting_rules_dir: "/etc/prometheus/rules"
 horde_monitoring_alerting_rules_file: "monitoring-stack.rules"

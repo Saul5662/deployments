@@ -1,5 +1,6 @@
 ---
 # idempotency: skip
+# risk-category: deploy-safety, fail-fast
 # Test playbook: Grafana Alloy role (config rendering only, no service start)
 - name: Test horde_alloy - Config rendering
   hosts: testhost
@@ -40,6 +41,19 @@
       environment: "test"
     horde_alloy_log_labels:
       app: "testapp"
+    horde_alloy_unix_exporter_set_collectors:
+      - cpu
+      - filesystem
+      - textfile
+    horde_alloy_unix_exporter_enable_collectors:
+      - systemd
+    horde_alloy_unix_exporter_disable_collectors:
+      - cpu
+    horde_alloy_unix_exporter_include_exporter_metrics: true
+    horde_alloy_unix_exporter_textfile_directory: "/var/lib/node_exporter/textfile_collector"
+    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs)$"
+    horde_alloy_unix_exporter_filesystem_mount_points_exclude: "^/(proc|sys)($|/)"
+    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
     horde_alloy_extra_scrape_targets:
       - job: "myapp"
         address: "127.0.0.1:8080"
@@ -68,9 +82,17 @@
     - name: Validate Alloy endpoint configuration
       ansible.builtin.assert:
         that:
-          - horde_alloy_mimir_endpoint | length > 0 or not horde_alloy_collect_metrics
-          - horde_alloy_loki_endpoint  | length > 0 or not horde_alloy_collect_logs
-          - horde_alloy_tempo_endpoint | length > 0 or not horde_alloy_collect_traces
+          - >-
+            horde_alloy_mimir_endpoint | length > 0
+            or not (
+              (horde_alloy_collect_metrics | bool)
+              or (
+                (horde_alloy_collect_traces | bool)
+                and (horde_alloy_forward_otlp_metrics | bool)
+              )
+            )
+          - horde_alloy_loki_endpoint  | length > 0 or not (horde_alloy_collect_logs | bool)
+          - horde_alloy_tempo_endpoint | length > 0 or not (horde_alloy_collect_traces | bool)
 
     - name: Ensure Alloy config directory exists
       ansible.builtin.file:
@@ -128,6 +150,20 @@
           - "'myapp' in (horde_alloy_config.content | b64decode)"
           - "'127.0.0.1:8080' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Extra scrape targets must be rendered in config"
+
+    - name: Assert unix exporter collector options are present
+      ansible.builtin.assert:
+        that:
+          - "'set_collectors' in (horde_alloy_config.content | b64decode)"
+          - "'enable_collectors' in (horde_alloy_config.content | b64decode)"
+          - "'disable_collectors' in (horde_alloy_config.content | b64decode)"
+          - "'include_exporter_metrics = true' in (horde_alloy_config.content | b64decode)"
+          - "'/var/lib/node_exporter/textfile_collector' in (horde_alloy_config.content | b64decode)"
+          - "'fs_types_exclude' in (horde_alloy_config.content | b64decode)"
+          - "'mount_points_exclude' in (horde_alloy_config.content | b64decode)"
+          - "'mount_timeout' in (horde_alloy_config.content | b64decode)"
+          - "'systemd' in (horde_alloy_config.content | b64decode)"
+        fail_msg: "Alloy unix exporter collector options must be rendered when configured"
 
     - name: Assert log pipeline is present
       ansible.builtin.assert:
@@ -303,3 +339,101 @@
         - name: Confirm expected failure
           ansible.builtin.debug:
             msg: "PASS — Fail-fast correctly rejected default Alloy password"
+
+# ---------------------------------------------------------------------------
+# Play 4: String toggle behavior (inventory-style values)
+# ---------------------------------------------------------------------------
+- name: Test horde_alloy - String toggle behavior
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_mimir_endpoint: ""
+    horde_alloy_loki_endpoint: ""
+    horde_alloy_tempo_endpoint: ""
+    horde_alloy_basic_auth_username: ""
+    horde_alloy_basic_auth_password: ""
+    horde_alloy_collect_metrics: "false"
+    horde_alloy_collect_logs: "false"
+    horde_alloy_collect_traces: "false"
+    horde_alloy_collect_journal: "false"
+    horde_alloy_collect_docker_logs: "false"
+    horde_alloy_collect_log_files: []
+    horde_alloy_forward_otlp_metrics: "false"
+    horde_alloy_external_labels: {}
+    horde_alloy_log_labels: {}
+    horde_alloy_extra_scrape_targets: []
+    horde_alloy_scrape_interval: "15s"
+    horde_alloy_otlp_listen_address: "127.0.0.1"
+    horde_alloy_otlp_grpc_port: 4317
+    horde_alloy_otlp_http_port: 4318
+    horde_alloy_trace_batch_timeout: "5s"
+    horde_alloy_trace_batch_size: 8192
+    horde_alloy_log_level: "warn"
+    horde_alloy_tenant_id: "infra"
+    horde_alloy_otlp_metrics_tenant_id: "infra"
+
+  tasks:
+    - name: Validate endpoint gating with string false toggles
+      ansible.builtin.assert:
+        that:
+          - >-
+            horde_alloy_mimir_endpoint | length > 0
+            or not (
+              (horde_alloy_collect_metrics | bool)
+              or (
+                (horde_alloy_collect_traces | bool)
+                and (horde_alloy_forward_otlp_metrics | bool)
+              )
+            )
+          - horde_alloy_loki_endpoint  | length > 0 or not (horde_alloy_collect_logs | bool)
+          - horde_alloy_tempo_endpoint | length > 0 or not (horde_alloy_collect_traces | bool)
+        fail_msg: "String false toggles must disable endpoint requirements"
+
+    - name: Assert OTLP metric forwarding requires Mimir endpoint
+      block:
+        - name: Run validation with traces/OTLP metrics enabled and no Mimir endpoint
+          ansible.builtin.assert:
+            that:
+              - >-
+                horde_alloy_mimir_endpoint | length > 0
+                or not (
+                  (false | bool)
+                  or (
+                    (true | bool)
+                    and (true | bool)
+                  )
+                )
+            fail_msg: "Mimir endpoint required when OTLP metrics forwarding is enabled"
+
+        - name: Fail if validation did not reject missing Mimir endpoint
+          ansible.builtin.fail:
+            msg: "Expected validation failure for OTLP metric forwarding without Mimir endpoint"
+
+      rescue:
+        - name: Confirm expected OTLP forwarding validation failure
+          ansible.builtin.debug:
+            msg: "PASS — OTLP metrics forwarding correctly requires Mimir endpoint"
+
+    - name: Deploy Alloy configuration (string toggles)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/horde_alloy/templates/config.alloy.j2"
+        dest: "{{ horde_alloy_config_dir }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: "0640"
+
+    - name: Read rendered Alloy config (string toggles)
+      ansible.builtin.slurp:
+        path: "{{ horde_alloy_config_dir }}/config.alloy"
+      register: horde_alloy_string_toggles
+
+    - name: Assert all pipelines are absent when toggles are string false
+      ansible.builtin.assert:
+        that:
+          - '''prometheus.exporter.unix "node"'' not in (horde_alloy_string_toggles.content | b64decode)'
+          - '''loki.source.journal "systemd"'' not in (horde_alloy_string_toggles.content | b64decode)'
+          - '''otelcol.receiver.otlp "local"'' not in (horde_alloy_string_toggles.content | b64decode)'
+        fail_msg: "String false toggles must disable template pipelines"

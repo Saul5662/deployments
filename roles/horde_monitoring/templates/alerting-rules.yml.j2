@@ -327,12 +327,10 @@ groups:
   # where monitoring data lives. They fire regardless of which service
   # consumes the space (MinIO, Mimir, Docker logs, etc.).
   #
-  # DEPENDENCY: Requires node_exporter running on the host and scraped
-  # by Prometheus. If node_exporter is not deployed, these alerts will
-  # silently never fire. The example playbook deploys node_exporter via
-  # the prometheus.prometheus role, but this role does not install it.
+  # DEPENDENCY: Requires node_filesystem_* metrics in Prometheus from a
+  # host collector (for example node_exporter or Alloy prometheus.exporter.unix).
   # Set horde_monitoring_install_host_disk_alerts: false to disable these rules
-  # if node_exporter is not available.
+  # if host filesystem metrics are not available.
 {% if horde_monitoring_install_host_disk_alerts | default(true) | bool %}
   - name: host-disk-usage
     rules:

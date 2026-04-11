@@ -34,8 +34,7 @@ AI Horde APIs                 │                                               
                               └───────────────────────────┘
                                         ▲
 ┌──── App Hosts ──────────┐             │
-│  Grafana Alloy           ├── metrics/logs/traces ──┘
-│  (replaces node_exporter)│
+│  Grafana Alloy           ├── logs/traces (and optional host metrics) ──┘
 └──────────────────────────┘
 ```
 
@@ -62,9 +61,21 @@ ansible-playbook -i inventory.yml examples/horde_monitoring_stack.yml -K
 
 This runs a two-play playbook:
 
-- **Play 1**: `node_exporter` on all hosts (TLS + basic_auth)
+- **Play 1**: `node_exporter` on hosts that resolve to `node_exporter` source
 - **Play 2**: Mimir + Grafana + Prometheus + Alertmanager + stats exporter
   on the monitoring host
+
+### Host Metrics Source
+
+- `horde_host_metrics_source: auto` (recommended)
+  - If a host has `horde_alloy_enabled: true` or `horde_alloy_collect_metrics: true`,
+    the playbook skips `node_exporter` on that host.
+  - Otherwise, the playbook installs `node_exporter` on that host.
+- `horde_host_metrics_source: node_exporter` forces install on all hosts.
+- `horde_host_metrics_source: alloy` forces skip on all hosts.
+
+This decision is made per host from inventory variables in Play 1 of
+`examples/horde_monitoring_stack.yml`.
 
 ### 3. Deploy Stats Exporter Only
 

@@ -1,8 +1,10 @@
 # horde_alloy
 
 Deploys [Grafana Alloy](https://grafana.com/docs/alloy/) on application hosts
-as a unified telemetry collector for metrics, logs, and traces. Alloy replaces
-the need for separate `node_exporter`, log shippers, and trace forwarders.
+as a unified telemetry collector for metrics, logs, and traces.
+
+Use `horde_alloy_collect_metrics: false` when host metrics are sourced from
+standalone `node_exporter`.
 
 > **Scope:** This role configures Alloy with pipelines tuned for the AI Horde
 > monitoring stack (Mimir, Loki, Tempo). It is not a general-purpose Alloy
@@ -60,6 +62,11 @@ endpoint to `127.0.0.1` by default.
 See [examples/alloy_app_host.yml](../../examples/alloy_app_host.yml) for a
 complete example playbook.
 
+## Host Metrics Source
+
+- Use standalone `node_exporter`: set `horde_alloy_collect_metrics: false`
+- Use Alloy host metrics (`prometheus.exporter.unix`): set `horde_alloy_collect_metrics: true`
+
 ## Role Variables
 
 ### General
@@ -92,6 +99,14 @@ complete example playbook.
 | `horde_alloy_scrape_interval`      | `15s`   | Metrics scrape interval                              |
 | `horde_alloy_external_labels`      | `{}`    | Extra labels added to all metrics                    |
 | `horde_alloy_extra_scrape_targets` | `[]`    | Additional scrape targets (list of `{job, targets}`) |
+| `horde_alloy_unix_exporter_set_collectors` | `[]` | Replace default collector set with an explicit list |
+| `horde_alloy_unix_exporter_enable_collectors` | `[]` | Enable additional collectors (for example `systemd`) |
+| `horde_alloy_unix_exporter_disable_collectors` | `[]` | Disable selected collectors |
+| `horde_alloy_unix_exporter_include_exporter_metrics` | `false` | Include exporter self-metrics |
+| `horde_alloy_unix_exporter_textfile_directory` | `""` | Enable `textfile` collector from a directory of `*.prom` files |
+| `horde_alloy_unix_exporter_filesystem_fs_types_exclude` | `""` | Override filesystem type exclude regex |
+| `horde_alloy_unix_exporter_filesystem_mount_points_exclude` | `""` | Override mount-point exclude regex |
+| `horde_alloy_unix_exporter_filesystem_mount_timeout` | `5s` | Filesystem collector mount timeout override |
 
 ### Logs Pipeline
 

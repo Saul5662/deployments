@@ -57,7 +57,7 @@ horde_alloy_basic_auth_username: "alloy"
 horde_alloy_basic_auth_password: "changeme-alloy"
 
 # ---------------------------------------------------------------------------
-# Metrics collection (replaces node_exporter on hosts where Alloy is deployed)
+# Metrics collection (optional host metrics via prometheus.exporter.unix)
 # ---------------------------------------------------------------------------
 horde_alloy_collect_metrics: true
 horde_alloy_scrape_interval: "15s"
@@ -69,6 +69,21 @@ horde_alloy_external_labels: {}
 # Extra Prometheus scrape targets on the local host.
 # Each entry: { job: "name", address: "host:port", metrics_path: "/metrics" }
 horde_alloy_extra_scrape_targets: []
+
+# Optional collector controls for prometheus.exporter.unix.
+horde_alloy_unix_exporter_set_collectors: []
+horde_alloy_unix_exporter_enable_collectors: []
+horde_alloy_unix_exporter_disable_collectors: []
+horde_alloy_unix_exporter_include_exporter_metrics: false
+
+# Optional textfile collector directory for host-local *.prom metrics.
+# Example: "/var/lib/node_exporter/textfile_collector"
+horde_alloy_unix_exporter_textfile_directory: ""
+
+# Optional filesystem collector overrides.
+horde_alloy_unix_exporter_filesystem_fs_types_exclude: ""
+horde_alloy_unix_exporter_filesystem_mount_points_exclude: ""
+horde_alloy_unix_exporter_filesystem_mount_timeout: "5s"
 # ---------------------------------------------------------------------------
 # Log collection
 # ---------------------------------------------------------------------------

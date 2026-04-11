@@ -6,9 +6,17 @@
 - name: Validate Alloy endpoint configuration
   ansible.builtin.assert:
     that:
-      - horde_alloy_mimir_endpoint | length > 0 or not horde_alloy_collect_metrics
-      - horde_alloy_loki_endpoint  | length > 0 or not horde_alloy_collect_logs
-      - horde_alloy_tempo_endpoint | length > 0 or not horde_alloy_collect_traces
+      - >-
+        horde_alloy_mimir_endpoint | length > 0
+        or not (
+          (horde_alloy_collect_metrics | bool)
+          or (
+            (horde_alloy_collect_traces | bool)
+            and (horde_alloy_forward_otlp_metrics | bool)
+          )
+        )
+      - horde_alloy_loki_endpoint  | length > 0 or not (horde_alloy_collect_logs | bool)
+      - horde_alloy_tempo_endpoint | length > 0 or not (horde_alloy_collect_traces | bool)
     fail_msg: >-
       Alloy endpoints must be configured when the corresponding collection
       pipeline is enabled. Set horde_alloy_mimir_endpoint, horde_alloy_loki_endpoint,

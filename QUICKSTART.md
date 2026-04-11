@@ -8,9 +8,6 @@ Not sure where to start? Pick the scenario that matches your goal:
 - [Run the Ansible test suite](#run-the-ansible-test-suite) — ~3 min per suite
 - [Deploy to a real host](#deploy-to-a-real-host) — varies
 
-Need help choosing a path quickly? See the
-[Operator Decision Tree](docs/OPERATOR_DECISION_TREE.md).
-
 ## Fast Paths (TL;DR)
 
 | If you are trying to... | Do this | Monitoring needed? |

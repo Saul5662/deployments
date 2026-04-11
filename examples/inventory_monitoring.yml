@@ -5,7 +5,7 @@
 #   mimir     - hosts running Mimir + Grafana + Prometheus
 #   haproxy   - hosts with HAProxy (may overlap with mimir)
 #   artbot    - hosts running the artbot service
-#   all       - every host gets node_exporter (Play 1)
+#   all       - host metrics source policy for node_exporter deployment
 
 all:
   children:
@@ -43,6 +43,18 @@ all:
           ansible_host: 192.168.1.101
           ansible_user: admin
           ansible_become: true
+          # If this host is managed by examples/alloy_app_host.yml for host metrics,
+          # set horde_alloy_enabled: true so monitoring stack auto mode skips
+          # node_exporter on this host.
+          # horde_alloy_enabled: true
 
   vars:
+    # Host metrics source for examples/horde_monitoring_stack.yml:
+    # - auto (default): per-host decision
+    #   - skip node_exporter when host has horde_alloy_enabled: true OR
+    #     horde_alloy_collect_metrics: true
+    #   - otherwise install node_exporter
+    # - node_exporter: force install on all hosts
+    # - alloy: force skip on all hosts
+    horde_host_metrics_source: "auto"
     ansible_python_interpreter: /usr/bin/python3

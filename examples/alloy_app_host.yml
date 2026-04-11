@@ -4,7 +4,7 @@
 #
 # Architecture:
 #   Alloy runs as a native systemd service on each app host. It:
-#     - Replaces node_exporter for host metrics (prometheus.exporter.unix)
+#     - Can collect host metrics via prometheus.exporter.unix
 #     - Collects systemd journal logs and forwards to Loki
 #     - Receives OTLP traces from local apps and forwards to Tempo
 #
@@ -30,6 +30,14 @@
     # --- Tenant ---
     horde_alloy_tenant_id: "infrastructure"
 
+    # --- Host metrics source ---
+    # "node_exporter" keeps host metrics in Prometheus scrape path.
+    # "alloy" enables host metrics from Alloy prometheus.exporter.unix.
+    # When using examples/horde_monitoring_stack.yml with
+    # horde_host_metrics_source: auto, set horde_alloy_enabled: true
+    # in inventory for these hosts so node_exporter is skipped implicitly.
+    horde_host_metrics_source: "node_exporter"
+
     # --- Authentication ---
     horde_alloy_basic_auth_username: "alloy"
     horde_alloy_basic_auth_password: "{{ vault_alloy_basic_auth_password }}"
@@ -40,10 +48,15 @@
     horde_alloy_tls_ca_cert: "tls/ca.crt"
 
     # --- Metrics ---
-    horde_alloy_collect_metrics: true
+    horde_alloy_collect_metrics: "{{ (horde_host_metrics_source | lower) == 'alloy' }}"
     horde_alloy_scrape_interval: "15s"
     horde_alloy_external_labels:
       environment: "production"
+
+    # Optional collector tuning when using Alloy for host metrics.
+    # horde_alloy_unix_exporter_enable_collectors:
+    #   - systemd
+    # horde_alloy_unix_exporter_textfile_directory: "/var/lib/node_exporter/textfile_collector"
 
     # Extra scrape targets for local application metrics:
     # horde_alloy_extra_scrape_targets:
@@ -88,6 +101,7 @@
           - "OTLP gRPC: {{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_grpc_port }}"
           - "OTLP HTTP: {{ horde_alloy_otlp_listen_address }}:{{ horde_alloy_otlp_http_port }}"
           - "Tenant: {{ horde_alloy_tenant_id }}"
-          - "Metrics: {{ horde_alloy_collect_metrics }} → {{ horde_alloy_mimir_endpoint }}"
+          - "Host metrics source: {{ horde_host_metrics_source }}"
+          - "Metrics enabled in Alloy: {{ horde_alloy_collect_metrics }}"
           - "Logs: {{ horde_alloy_collect_logs }} → {{ horde_alloy_loki_endpoint }}"
           - "Traces: {{ horde_alloy_collect_traces }} → {{ horde_alloy_tempo_endpoint }}"
