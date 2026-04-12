@@ -117,7 +117,7 @@
           - "'PROFILE=docker' in _env_content.content | b64decode"
           - "'REDIS_IP=redis' in _env_content.content | b64decode"
           - "'USE_SQLITE=0' in _env_content.content | b64decode"
-          - "'POSTGRES_URL=postgres/postgres' in _env_content.content | b64decode"
+          - "'POSTGRES_URL=postgres/aihorde' in _env_content.content | b64decode"
           - "'POSTGRES_PASS=\"test-pg-password\"' in _env_content.content | b64decode"
           - "'secret_key=\"test-secret-key-12345\"' in _env_content.content | b64decode"
           - "'test_admin#1' in _env_content.content | b64decode"

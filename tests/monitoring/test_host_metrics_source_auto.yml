@@ -74,14 +74,32 @@
           - "'horde_alloy_collect_metrics | bool' in horde_monitoring_stack_example"
         fail_msg: "Monitoring example must treat horde_alloy_enabled and horde_alloy_collect_metrics as auto-mode indicators"
 
-    - name: Assert node_exporter install/cert tasks all use resolved host decision
+    - name: Assert node_exporter HAProxy reverse proxy markers are present in example playbook
+      ansible.builtin.assert:
+        that:
+          - "'horde_node_exporter_haproxy_port' in horde_monitoring_stack_example"
+          - "'node_exporter_auth' in horde_monitoring_stack_example"
+          - "'_haproxy_safe_edit' in horde_monitoring_stack_example"
+          - "'127.0.0.1:9101' in horde_monitoring_stack_example"
+        fail_msg: "Monitoring example must include HAProxy reverse proxy for node_exporter with basic auth"
+
+    - name: Assert node_exporter target discovery is auto-rendered in example playbook
+      ansible.builtin.assert:
+        that:
+          - "'Ensure Prometheus file_sd directory exists for node_exporter discovery' in horde_monitoring_stack_example"
+          - "'Build node_exporter file_sd entries from inventory' in horde_monitoring_stack_example"
+          - "'Render node_exporter file_sd target list' in horde_monitoring_stack_example"
+          - "'/etc/prometheus/file_sd/node_exporter.yml' in horde_monitoring_stack_example"
+        fail_msg: "Monitoring example must generate Prometheus node_exporter file_sd targets from inventory"
+
+    - name: Assert node_exporter install/proxy tasks all use resolved host decision
       ansible.builtin.assert:
         that:
           - >-
             (horde_monitoring_stack_example
             | regex_findall('when: not \\(horde_host_uses_alloy_metrics \\| bool\\)')
-            | length) == 3
-        fail_msg: "Monitoring example must gate cert/key copy and node_exporter role with horde_host_uses_alloy_metrics"
+            | length) == 5
+        fail_msg: "Monitoring example must gate HAProxy proxy setup and node_exporter role with horde_host_uses_alloy_metrics"
 
     - name: Assert monitoring guide documents auto host metrics source behavior
       ansible.builtin.assert:
@@ -90,6 +108,21 @@
           - "'horde_alloy_enabled: true' in horde_monitoring_guide"
           - "'horde_alloy_collect_metrics: true' in horde_monitoring_guide"
         fail_msg: "Monitoring guide must document auto source behavior and Alloy indicators"
+
+    - name: Assert monitoring guide documents node_exporter HAProxy proxy
+      ansible.builtin.assert:
+        that:
+          - "'HAProxy' in horde_monitoring_guide"
+          - "'127.0.0.1:9101' in horde_monitoring_guide"
+          - "'basic auth' in horde_monitoring_guide"
+        fail_msg: "Monitoring guide must document HAProxy reverse proxy for node_exporter"
+
+    - name: Assert monitoring guide documents automatic node_exporter target wiring
+      ansible.builtin.assert:
+        that:
+          - "'/etc/prometheus/file_sd/node_exporter.yml' in horde_monitoring_guide"
+          - "'job_name: node' in horde_monitoring_guide"
+        fail_msg: "Monitoring guide must document automatic node_exporter file_sd target wiring"
 
     - name: Assert host metrics source resolution matrix
       ansible.builtin.assert:

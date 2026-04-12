@@ -45,13 +45,26 @@
     mode: "0755"
   become: true
 
+- name: Ensure shared uv python install directory exists
+  ansible.builtin.file:
+    path: "{{ horde_stats_exporter_uv_python_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Create virtual environment with uv
   ansible.builtin.command: /usr/local/bin/uv venv {{ horde_stats_exporter_install_dir }}/venv --python 3.12 --managed-python
   args:
     creates: "{{ horde_stats_exporter_install_dir }}/venv"
+  environment:
+    UV_PYTHON_INSTALL_DIR: "{{ horde_stats_exporter_uv_python_install_dir }}"
   become: true
   register: horde_stats_exporter__venv_create
-  notify: Set venv ownership
+  notify:
+    - Set venv ownership
+    - Ensure shared python install is world-readable
 
 - name: Read installed exporter ref marker
   ansible.builtin.slurp:
@@ -73,13 +86,18 @@
     /usr/local/bin/uv pip install
     --python {{ horde_stats_exporter_install_dir }}/venv/bin/python
     "ai-horde-stats-exporter @ git+{{ horde_stats_exporter_repo_url }}@{{ horde_stats_exporter_repo_ref }}#subdirectory=packages/ai-horde-stats-exporter"
+  environment:
+    UV_PYTHON_INSTALL_DIR: "{{ horde_stats_exporter_uv_python_install_dir }}"
   become: true
   register: horde_stats_exporter__install
   changed_when: true
   when:
     - not ansible_check_mode
     - horde_stats_exporter__ref_current != horde_stats_exporter_repo_ref
-  notify: Restart horde-exporter
+  notify:
+    - Set venv ownership
+    - Ensure shared python install is world-readable
+    - Restart horde-exporter
 
 - name: Record installed exporter ref
   ansible.builtin.copy:
@@ -121,6 +139,18 @@
     dest: /etc/logrotate.d/horde-stats
     mode: "0644"
   become: true
+
+- name: Ensure exporter entry-points are owned and executable
+  ansible.builtin.file:
+    path: "{{ horde_stats_exporter_install_dir }}/venv/bin/{{ item }}"
+    owner: "{{ horde_stats_exporter_user }}"
+    group: "{{ horde_stats_exporter_user }}"
+    mode: "0755"
+  become: true
+  loop:
+    - horde-exporter
+    - ai-horde-downsample
+  when: not ansible_check_mode
 
 - name: Enable and start horde-exporter service
   ansible.builtin.systemd:

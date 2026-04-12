@@ -110,6 +110,30 @@
     - "{{ horde_monitoring_grafana_dashboard_dir }}"
   when: horde_monitoring_install_grafana | bool
 
+# Docker auto-creates missing bind-mount sources as directories.  If a
+# previous run started compose before configs were templated, the config
+# path is a directory instead of a file and the container crash-loops.
+- name: Check for stale Mimir config directories-as-files
+  ansible.builtin.stat:
+    path: "{{ horde_monitoring_mimir_config_dir }}/{{ item }}"
+  register: horde_monitoring__mimir_config_stats
+  become: true
+  loop:
+    - mimir.yaml
+    - runtime-overrides.yaml
+
+- name: Remove stale Mimir config directories-as-files
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_mimir_config_dir }}/{{ item.item }}"
+    state: absent
+  become: true
+  loop: "{{ horde_monitoring__mimir_config_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.stat.exists
+    - item.stat.isdir
+
 - name: Template Mimir configuration
   ansible.builtin.template:
     src: mimir.yaml.j2
@@ -152,39 +176,6 @@
   become: true
   notify:
     - Reload systemd
-
-- name: Enable and start monitoring stack
-  ansible.builtin.systemd:
-    name: mimir-monitoring
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
-  when: horde_monitoring_start_services | bool
-
-- name: Wait for MinIO to become ready
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_minio_api_port }}/minio/health/live"
-    method: GET
-    status_code: 200
-  register: horde_monitoring__minio_ready
-  until: horde_monitoring__minio_ready.status == 200
-  when: horde_monitoring_start_services | bool and horde_monitoring_mimir_enable_minio | bool
-  retries: 15
-  delay: 3
-  become: true
-
-- name: Wait for Mimir to become ready
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/ready"
-    method: GET
-    status_code: 200
-  register: horde_monitoring__mimir_ready
-  until: horde_monitoring__mimir_ready.status == 200
-  when: horde_monitoring_start_services | bool
-  retries: 20
-  delay: 5
-  become: true
 
 # --- Offsite backup via MinIO mirror (Plan 006) ---
 

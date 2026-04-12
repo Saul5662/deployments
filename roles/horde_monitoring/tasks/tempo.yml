@@ -2,6 +2,21 @@
 # Deploy Tempo distributed tracing backend via Docker Compose
 # Tempo runs as part of the monitoring Docker Compose stack
 
+- name: Check for stale Tempo config directory-as-file
+  ansible.builtin.stat:
+    path: "{{ horde_monitoring_tempo_config_dir }}/tempo.yaml"
+  register: horde_monitoring__tempo_config_stat
+  become: true
+
+- name: Remove stale Tempo config directory-as-file
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_tempo_config_dir }}/tempo.yaml"
+    state: absent
+  become: true
+  when:
+    - horde_monitoring__tempo_config_stat.stat.exists
+    - horde_monitoring__tempo_config_stat.stat.isdir
+
 - name: Create Tempo config directory
   ansible.builtin.file:
     path: "{{ horde_monitoring_tempo_config_dir }}"

@@ -57,12 +57,25 @@
     that:
       - (ai_horde_postgres_user | lower) != 'postgres' or (ai_horde_allow_postgres_superuser_management | bool)
     fail_msg: >-
-      ai_horde_install_postgres=true with ai_horde_postgres_user=postgres would
-      mutate the shared-cluster PostgreSQL superuser.
+      ai_horde_postgres_user=postgres in native mode would connect to
+      PostgreSQL as the cluster superuser, risking unintended privilege
+      escalation or credential mutation on the database cluster.
       Use a dedicated application role (recommended), or set
       ai_horde_allow_postgres_superuser_management=true as an explicit
-      bootstrap-only opt-in.
-  when: ai_horde_install_postgres | bool
+      opt-in.
+
+- name: Guard against use of PostgreSQL system database in native mode
+  ansible.builtin.assert:
+    that:
+      - (ai_horde_postgres_db | lower) not in ['postgres', 'template0', 'template1'] or (ai_horde_allow_postgres_superuser_management | bool)
+    fail_msg: >-
+      ai_horde_postgres_db={{ ai_horde_postgres_db }} is a PostgreSQL system
+      database.  Placing application tables in a system database risks
+      namespace collisions, complicates backup/restore, and may be
+      destroyed by administrative operations on the database cluster.
+      Use a dedicated database name (recommended), or set
+      ai_horde_allow_postgres_superuser_management=true as an explicit
+      opt-in.
 
 - name: Validate local Redis provisioning contract
   ansible.builtin.assert:

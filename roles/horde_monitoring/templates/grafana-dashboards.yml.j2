@@ -25,7 +25,12 @@ providers:
     options:
       path: /etc/grafana/dashboards/infra
       foldersFromFilesStructure: false
-{% if horde_monitoring_grafana_anonymous_enabled | default(false) | bool %}
+{# Include the public-org provider only when anonymous access is enabled
+   AND the public org is confirmed to exist.  The role sets the internal
+   flag horde_monitoring__public_org_exists after creating (or verifying)
+   the org via the Grafana API, avoiding a chicken-and-egg crash where
+   Grafana refuses to start because the referenced org isn't in the DB yet. #}
+{% if horde_monitoring_grafana_anonymous_enabled | default(false) | bool and horde_monitoring__public_org_exists | default(false) | bool %}
   - name: public
     orgId: {{ horde_monitoring_grafana_public_org_id }}
     folder: ''

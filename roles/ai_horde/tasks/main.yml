@@ -43,6 +43,23 @@
       ai_horde_secret_key must be defined and non-empty.
       Set it in your inventory, group_vars, or vault.
 
+# ── PostgreSQL data-safety guardrails ────────────────────────
+- name: Validate deployment paths do not collide with system PostgreSQL directories
+  ansible.builtin.assert:
+    that:
+      - ai_horde_data_dir is not regex('^/var/lib/postgres(ql)?(/|$)')
+      - ai_horde_data_dir is not regex('^/var/lib/pgsql(/|$)')
+      - ai_horde_data_dir not in ['/', '/var', '/var/lib', '/tmp', '/home']
+      - ai_horde_base_dir is not regex('^/var/lib/postgres(ql)?(/|$)')
+      - ai_horde_base_dir is not regex('^/var/lib/pgsql(/|$)')
+      - ai_horde_base_dir not in ['/', '/var', '/var/lib', '/tmp', '/home']
+    fail_msg: >-
+      ai_horde_data_dir ({{ ai_horde_data_dir }}) or ai_horde_base_dir
+      ({{ ai_horde_base_dir }}) overlaps with system PostgreSQL data paths
+      or critical system directories. This could destroy existing PostgreSQL
+      data or other system state. Use dedicated paths such as
+      /var/lib/ai-horde or /opt/ai-horde.
+
 - name: Include Docker deployment tasks
   ansible.builtin.include_tasks: docker.yml
   when: ai_horde_deploy_mode == 'docker'

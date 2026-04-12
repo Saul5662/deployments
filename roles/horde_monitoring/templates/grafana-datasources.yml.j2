@@ -131,7 +131,7 @@ datasources:
     secureJsonData:
       httpHeaderValue1: {{ horde_monitoring_infrastructure_tenant_id }}
 {% endif %}
-{% if horde_monitoring_grafana_anonymous_enabled | bool %}
+{% if horde_monitoring_grafana_anonymous_enabled | bool and horde_monitoring__public_org_exists | default(false) | bool %}
   # --- Org 2 (public / anonymous) datasource ---
   - name: {{ horde_monitoring_public_datasource_name }}
     uid: mimir-public

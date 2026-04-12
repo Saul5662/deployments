@@ -48,6 +48,39 @@
             '    server horde_monitoring_tempo_local 127.0.0.1:' ~ horde_monitoring_tempo_otlp_http_port ~ ' check',
           ] if (horde_monitoring_install_tempo | bool) else []
         )
+        + (
+          [
+            '',
+            'backend horde_monitoring_pyroscope_backend',
+            '    balance leastconn',
+            '    timeout queue 30s',
+            '    retries 3',
+            '    option httpchk',
+            '    option forwardfor if-none',
+            '    server horde_monitoring_pyroscope_local 127.0.0.1:' ~ horde_monitoring_pyroscope_port ~ ' check observe layer7',
+            '    http-check expect ! rstatus ^5',
+          ] if (horde_monitoring_install_pyroscope | bool) else []
+        )
+        + (
+          [
+            '',
+            'backend horde_monitoring_alertmanager_backend',
+            '    balance leastconn',
+            '    option httpchk',
+            '    option forwardfor if-none',
+            '    server horde_monitoring_alertmanager_local 127.0.0.1:' ~ horde_monitoring_alertmanager_port ~ ' check observe layer7',
+            '    http-check expect ! rstatus ^5',
+          ] if (horde_monitoring_configure_alertmanager_backend | bool) else []
+        )
+        + (
+          [
+            '',
+            'backend horde_monitoring_stats_exporter_backend',
+            '    balance leastconn',
+            '    option forwardfor if-none',
+            '    server horde_monitoring_stats_exporter_local 127.0.0.1:' ~ horde_monitoring_stats_exporter_port ~ ' check',
+          ] if (horde_monitoring_configure_stats_exporter_backend | bool) else []
+        )
         ) }}
 
 - name: Join backends into multi-line block

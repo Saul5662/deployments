@@ -52,6 +52,13 @@
   ansible.builtin.include_tasks: pyroscope.yml
   when: horde_monitoring_install_pyroscope | bool
 
+# Start compose AFTER all config files are templated.  Starting earlier
+# causes Docker to auto-create missing bind-mount sources as empty
+# directories, which corrupt the config paths and crash containers.
+- name: Start monitoring stack and wait for health
+  ansible.builtin.include_tasks: service.yml
+  when: horde_monitoring_install_mimir | bool
+
 - name: Configure Grafana provisioning
   ansible.builtin.include_tasks: grafana.yml
   when:

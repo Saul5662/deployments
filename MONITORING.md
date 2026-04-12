@@ -77,6 +77,37 @@ This runs a two-play playbook:
 This decision is made per host from inventory variables in Play 1 of
 `examples/horde_monitoring_stack.yml`.
 
+### Node Exporter TLS Automation
+
+- `examples/horde_monitoring_stack.yml` defaults to
+  `horde_node_exporter_tls_mode: internal_ca`.
+- In `internal_ca` mode, the playbook generates:
+  - `tls/ca.crt` and `tls/ca.key` on the Ansible controller
+  - `tls/<inventory_hostname>.crt` and `tls/<inventory_hostname>.key` per host
+- Generated artifacts are idempotent (`creates:`) and reused on re-runs.
+- Use `horde_node_exporter_tls_mode: provided` to keep external/manual certs.
+  In that mode, the playbook expects `tls/ca.crt` plus per-host cert/key files.
+
+Prometheus trusts node_exporter certificates via `/etc/prometheus/ca.crt`.
+
+Node exporter scrape target wiring is automatic:
+- `site_monitoring.yml` and `examples/horde_monitoring_stack.yml` generate
+  `/etc/prometheus/file_sd/node_exporter.yml` on the monitoring host from
+  inventory hosts.
+- For the monitoring host itself, generated targets use `127.0.0.1` to avoid
+  public-IP hairpin/NAT issues.
+- For remote hosts, target address defaults to `ansible_host` and can be
+  overridden per host with `horde_node_exporter_scrape_address`.
+- Hosts resolved to Alloy metrics (`horde_host_metrics_source: alloy`, or
+  `auto` plus Alloy indicators) are excluded from node_exporter discovery.
+- Prometheus `job_name: node` consumes these generated file_sd targets.
+
+For Alloy hosts:
+- If Alloy endpoints use this same internal CA, set
+  `horde_alloy_tls_ca_cert: "tls/ca.crt"`.
+- If Alloy talks to HTTP endpoints or public-CA HTTPS endpoints, no additional
+  Alloy CA configuration is required.
+
 ### 3. Deploy Stats Exporter Only
 
 If you already have Prometheus and Grafana running elsewhere:

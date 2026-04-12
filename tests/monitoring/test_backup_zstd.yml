@@ -37,6 +37,15 @@
   roles:
     - role: horde_monitoring
 
+  pre_tasks:
+    # Remove artifacts left by prior test runs (e.g. test_full_stack) so
+    # "feature disabled" assertions are not polluted by stale files.
+    - name: Clean stale alerting rules from prior runs
+      ansible.builtin.file:
+        path: /etc/prometheus/rules/monitoring-stack.rules
+        state: absent
+      become: true
+
   post_tasks:
     - name: Read rendered Mimir runtime overrides
       ansible.builtin.slurp:
