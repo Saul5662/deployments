@@ -21,6 +21,28 @@
   roles:
     - role: horde_monitoring
 
+  pre_tasks:
+    # Remove artifacts left by prior test runs (e.g. test_full_stack) so
+    # "feature disabled" assertions are not polluted by stale files.
+    - name: Clean stale Grafana provisioning from prior runs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/grafana/provisioning/datasources
+        - /etc/grafana/provisioning/dashboards
+      become: true
+
+    - name: Clean stale backup artifacts from prior runs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/mimir-backup.service
+        - /etc/systemd/system/mimir-backup.timer
+        - /etc/mimir/mimir-backup.env
+      become: true
+
   post_tasks:
     - name: Read rendered Mimir config
       ansible.builtin.slurp:

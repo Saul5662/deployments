@@ -28,6 +28,13 @@ local-deploy/compose/*
 *.log
 *.bak
 *.swp
+
+# Production deployment files (host-specific, may contain secrets)
+inventory_orc.yml
+group_vars/
+site_monitoring.yml
+DEPLOY_NOTES.md
+tls/
 *.swo
 *.tmp
 *.pyc

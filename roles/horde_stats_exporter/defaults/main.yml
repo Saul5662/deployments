@@ -60,6 +60,9 @@ horde_stats_exporter_downsample_resolution: "5m"
 # uv installer pinning  (installation logic: roles/_uv_bootstrap)
 # ---------------------------------------------------------------------------
 horde_stats_exporter_uv_version: "0.11.2"
+# Shared directory for uv managed-python installs.  Must be readable by the
+# service user — do NOT place under /root.
+horde_stats_exporter_uv_python_install_dir: /opt/uv-python
 horde_stats_exporter_uv_installer_checksum: "sha256:a6ccba649ac029ce18500400019d60de389838d13a6751aa2908ede1b2aa3a87"
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,65 @@
+---
+# Start the monitoring Docker Compose stack and wait for health.
+#
+# This file is included from main.yml AFTER all config templates
+# (mimir, loki, tempo, pyroscope) have been written.  Starting compose
+# only after configs exist avoids Docker auto-creating bind-mount
+# sources as empty directories when the target files are missing.
+
+- name: Flush pending handlers before starting services
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start monitoring stack
+  ansible.builtin.systemd:
+    name: mimir-monitoring
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: horde_monitoring_start_services | bool
+
+# The systemd unit is Type=oneshot + RemainAfterExit=yes.  After manual
+# "docker compose down", a host reboot that killed containers, or a
+# failed previous run, systemd still reports "active (exited)" while the
+# actual containers are gone.  "state: started" above is a no-op in that
+# situation.  Detect this and force a restart so health checks don't fail.
+- name: Check if Mimir container is actually running
+  ansible.builtin.command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' mimir
+  register: horde_monitoring__mimir_container_state
+  changed_when: false
+  failed_when: false
+  become: true
+  when: horde_monitoring_start_services | bool
+
+- name: Restart monitoring stack if containers are not running
+  ansible.builtin.systemd:
+    name: mimir-monitoring
+    state: restarted
+  become: true
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring__mimir_container_state.stdout | default('false') != 'true'
+
+- name: Wait for MinIO to become ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_minio_api_port }}/minio/health/live"
+    method: GET
+    status_code: 200
+  register: horde_monitoring__minio_ready
+  until: horde_monitoring__minio_ready.status == 200
+  when: horde_monitoring_start_services | bool and horde_monitoring_mimir_enable_minio | bool
+  retries: 15
+  delay: 3
+  become: true
+
+- name: Wait for Mimir to become ready
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/ready"
+    method: GET
+    status_code: 200
+  register: horde_monitoring__mimir_ready
+  until: horde_monitoring__mimir_ready.status == 200
+  when: horde_monitoring_start_services | bool
+  retries: 20
+  delay: 5
+  become: true

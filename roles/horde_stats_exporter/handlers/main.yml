@@ -15,6 +15,10 @@
     recurse: true
   become: true
 
+- name: Ensure shared python install is world-readable
+  ansible.builtin.command: chmod -R o+rX {{ horde_stats_exporter_uv_python_install_dir }}
+  become: true
+
 - name: Restart horde-exporter
   ansible.builtin.systemd:
     name: horde-exporter

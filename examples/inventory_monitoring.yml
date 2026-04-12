@@ -43,6 +43,10 @@ all:
           ansible_host: 192.168.1.101
           ansible_user: admin
           ansible_become: true
+          # Optional: override the address Prometheus should use for
+          # node_exporter scraping if ansible_host is not routable from
+          # the monitoring host.
+          # horde_node_exporter_scrape_address: "10.0.0.101"
           # If this host is managed by examples/alloy_app_host.yml for host metrics,
           # set horde_alloy_enabled: true so monitoring stack auto mode skips
           # node_exporter on this host.
@@ -56,5 +60,7 @@ all:
     #   - otherwise install node_exporter
     # - node_exporter: force install on all hosts
     # - alloy: force skip on all hosts
+    # Prometheus node_exporter targets are generated automatically from
+    # inventory into /etc/prometheus/file_sd/node_exporter.yml.
     horde_host_metrics_source: "auto"
     ansible_python_interpreter: /usr/bin/python3

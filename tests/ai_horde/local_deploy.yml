@@ -18,7 +18,7 @@
     ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde/data"
     ai_horde_postgres_password: "localdev"
     ai_horde_secret_key: "localdev-secret-key-not-for-production"
-    ai_horde_postgres_user: "postgres"
+    ai_horde_postgres_user: "aihorde"
     ai_horde_listen: "0.0.0.0"
     ai_horde_port: 7001
     ai_horde_admins: ["test_user#1"]

@@ -27,12 +27,13 @@ ai_horde_data_dir: "/var/lib/ai-horde"
 # ai_horde_postgres_password:
 # ai_horde_secret_key:
 
-ai_horde_postgres_user: "postgres"
-ai_horde_postgres_db: "postgres"
+ai_horde_postgres_user: "aihorde"
+ai_horde_postgres_db: "aihorde"
 ai_horde_postgres_host: "127.0.0.1"
 ai_horde_postgres_port: 5432
-# Safety valve for local bootstrap mode: keep false to avoid mutating
-# shared-cluster postgres superuser credentials by accident.
+# Safety valve: keep false to prevent connecting as the PostgreSQL
+# superuser or placing application data in system databases (postgres,
+# template0, template1).  Set true only as a one-time bootstrap opt-in.
 ai_horde_allow_postgres_superuser_management: false
 # Override for POSTGRES_URL fragment (host[:port]/db[?opts]). See README.
 ai_horde_postgres_url_override: ""

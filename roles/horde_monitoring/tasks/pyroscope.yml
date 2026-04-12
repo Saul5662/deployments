@@ -2,6 +2,27 @@
 # Deploy Pyroscope continuous profiling backend via Docker Compose
 # Pyroscope runs as part of the monitoring Docker Compose stack
 
+- name: Check for stale Pyroscope config directories-as-files
+  ansible.builtin.stat:
+    path: "{{ horde_monitoring_pyroscope_config_dir }}/{{ item }}"
+  register: horde_monitoring__pyroscope_config_stats
+  become: true
+  loop:
+    - pyroscope.yaml
+    - runtime-overrides.yaml
+
+- name: Remove stale Pyroscope config directories-as-files
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_pyroscope_config_dir }}/{{ item.item }}"
+    state: absent
+  become: true
+  loop: "{{ horde_monitoring__pyroscope_config_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - item.stat.exists
+    - item.stat.isdir
+
 - name: Create Pyroscope config directory
   ansible.builtin.file:
     path: "{{ horde_monitoring_pyroscope_config_dir }}"

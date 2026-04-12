@@ -1,6 +1,23 @@
 ---
 # Grafana provisioning (datasources and dashboards)
 # Grafana runs as part of the Mimir Docker Compose stack
+#
+# The public-org dashboard provider references orgId 2 which the role
+# creates via the Grafana API.  On a fresh DB (first deploy or after a
+# data wipe), org 2 doesn't exist yet, and Grafana fatally errors if
+# the dashboard provisioning config references a nonexistent org.
+#
+# To break the chicken-and-egg cycle:
+#   Phase 1 — Probe whether the public org already exists.
+#             Template the dashboard provider *without* the public
+#             section if it doesn't, flush handlers so Grafana restarts
+#             with a safe config, then create the org via the API.
+#   Phase 2 — Re-template the dashboard provider with the public
+#             section now that the org is guaranteed to exist.
+#             The restart handler fires at end-of-role.
+#
+# On idempotent re-runs where org 2 already exists, Phase 1 detects it,
+# includes the public section from the start, and Phase 2 is a no-op.
 
 - name: Template Grafana datasource provisioning
   ansible.builtin.template:
@@ -15,7 +32,45 @@
   become: true
   notify: Restart monitoring stack
 
-- name: Template Grafana dashboard provider
+# ── Phase 1: probe public org, template safe config, create org ──
+
+- name: Probe Grafana health (failure is expected on fresh installs)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: horde_monitoring__grafana_probe
+  failed_when: false
+  changed_when: false
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool
+
+- name: Check if public org already exists in Grafana
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/orgs/{{ horde_monitoring_grafana_public_org_id }}"
+    method: GET
+    user: "{{ horde_monitoring_grafana_admin_user }}"
+    password: "{{ horde_monitoring_grafana_admin_password }}"
+    force_basic_auth: true
+    status_code: [200, 404]
+  register: horde_monitoring__public_org_probe
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool
+    - horde_monitoring__grafana_probe.status | default(0) == 200
+
+- name: Set public org existence flag
+  ansible.builtin.set_fact:
+    horde_monitoring__public_org_exists: >-
+      {{ (not (horde_monitoring_start_services | bool) and
+          horde_monitoring_grafana_anonymous_enabled | bool) or
+         (horde_monitoring__public_org_probe.status | default(0) == 200) }}
+
+- name: Template Grafana dashboard provider (Phase 1)
   ansible.builtin.template:
     src: grafana-dashboards.yml.j2
     dest: "{{ horde_monitoring_grafana_provisioning_dir }}/dashboards/default.yml"
@@ -24,6 +79,9 @@
     mode: "0600"
   become: true
   notify: Restart monitoring stack
+
+- name: Flush handlers to restart Grafana with safe config
+  ansible.builtin.meta: flush_handlers
 
 # --- Public org creation (requires running Grafana) ---
 - name: Wait for Grafana to be healthy
@@ -40,19 +98,64 @@
     - horde_monitoring_start_services | bool
 
 - name: Create public Grafana organization
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/orgs"
-    method: POST
-    user: "{{ horde_monitoring_grafana_admin_user }}"
-    password: "{{ horde_monitoring_grafana_admin_password }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      name: "{{ horde_monitoring_grafana_public_org_name }}"
-    status_code: [200, 409]
-  register: horde_monitoring_org_create_result
-  changed_when: horde_monitoring_org_create_result.status == 200
-  no_log: true
+  block:
+    - name: Create public Grafana organization via API
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ horde_monitoring_grafana_port }}/api/orgs"
+        method: POST
+        user: "{{ horde_monitoring_grafana_admin_user }}"
+        password: "{{ horde_monitoring_grafana_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "{{ horde_monitoring_grafana_public_org_name }}"
+        status_code: [200, 409]
+      register: horde_monitoring_org_create_result
+      changed_when: horde_monitoring_org_create_result.status == 200
+      no_log: true
+  rescue:
+    - name: Show Grafana org creation failure details (password redacted)
+      ansible.builtin.fail:
+        msg: >-
+          Failed to create public Grafana organization '{{ horde_monitoring_grafana_public_org_name }}'.
+          Status: {{ horde_monitoring_org_create_result.status | default('N/A') }}.
+          Body: {{ horde_monitoring_org_create_result.json | default(horde_monitoring_org_create_result.msg | default('unknown error')) }}.
+          Common causes: wrong admin password (stale Grafana DB), Grafana not
+          reachable, or authentication misconfiguration. If migrating from a
+          manual install, remove the old Grafana data directory and re-run.
   when:
     - horde_monitoring_grafana_anonymous_enabled | bool
     - horde_monitoring_start_services | bool
+
+# ── Phase 2: re-template with public org now guaranteed to exist ──
+
+- name: Update public org existence flag after creation
+  ansible.builtin.set_fact:
+    horde_monitoring__public_org_exists: true
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool
+
+- name: Template Grafana dashboard provider (Phase 2 — public org ready)
+  ansible.builtin.template:
+    src: grafana-dashboards.yml.j2
+    dest: "{{ horde_monitoring_grafana_provisioning_dir }}/dashboards/default.yml"
+    owner: "472"
+    group: "472"
+    mode: "0600"
+  become: true
+  notify: Restart monitoring stack
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool
+
+- name: Template Grafana datasource provisioning (Phase 2 — public org ready)
+  ansible.builtin.template:
+    src: grafana-datasources.yml.j2
+    dest: "{{ horde_monitoring_grafana_provisioning_dir }}/datasources/mimir.yml"
+    owner: "472"
+    group: "472"
+    mode: "0600"
+  become: true
+  notify: Restart monitoring stack
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool

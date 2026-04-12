@@ -9,7 +9,7 @@
 
 - name: Restart monitoring stack
   ansible.builtin.shell: >
-    docker compose up -d
+    docker compose up -d --force-recreate
   args:
     chdir: "{{ horde_monitoring_mimir_compose_dir }}"
   become: true

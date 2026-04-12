@@ -11,7 +11,8 @@
 #
 # Prerequisites:
 #   ansible-galaxy collection install -r requirements.yml
-#   Generate a self-signed CA and per-host TLS certs (see community.crypto)
+#   HAProxy is installed on each monitored host to front node_exporter
+#   with basic auth. node_exporter listens on localhost only.
 
 # ---------------------------------------------------------------------------
 # Play 1: node_exporter on hosts using node_exporter as host metrics source
@@ -35,13 +36,15 @@
       - node_exporter
       - alloy
 
-    # TLS: expects CA-signed per-host certs in files/tls/
-    node_exporter_tls_server_config:
-      cert_file: /etc/node_exporter/tls.crt
-      key_file: /etc/node_exporter/tls.key
-    node_exporter_web_listen_address: "0.0.0.0:9100"
-    node_exporter_basic_auth_users:
-      prometheus: "{{ vault_node_exporter_bcrypt_password }}"
+    # node_exporter listens on localhost only; HAProxy fronts it on the
+    # public port with basic auth.  No TLS certificates or passlib required.
+    node_exporter_web_listen_address: "127.0.0.1:9101"
+
+    # HAProxy reverse proxy settings for node_exporter
+    horde_node_exporter_haproxy_port: 9100
+    horde_node_exporter_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
+    horde_node_exporter_haproxy_backup_dir: "/var/backups/haproxy"
+    horde_node_exporter_haproxy_backup_retention_count: 20
 
   pre_tasks:
     - name: Validate host metrics source selection
@@ -68,18 +71,49 @@
             )
           }}
 
-    - name: Push TLS cert for node_exporter
-      ansible.builtin.copy:
-        src: "tls/{{ inventory_hostname }}.crt"
-        dest: /etc/node_exporter/tls.crt
-        mode: "0644"
+    - name: Install HAProxy for node_exporter reverse proxy
+      ansible.builtin.apt:
+        name: haproxy
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
       when: not (horde_host_uses_alloy_metrics | bool)
 
-    - name: Push TLS key for node_exporter
-      ansible.builtin.copy:
-        src: "tls/{{ inventory_hostname }}.key"
-        dest: /etc/node_exporter/tls.key
-        mode: "0600"
+    - name: Build node_exporter HAProxy block
+      ansible.builtin.set_fact:
+        _horde_node_exporter_haproxy_block: |-
+          userlist node_exporter_auth
+              user prometheus insecure-password {{ vault_node_exporter_password }}
+
+          frontend node_exporter_front
+              bind 0.0.0.0:{{ horde_node_exporter_haproxy_port }}
+              mode http
+              acl authenticated http_auth(node_exporter_auth)
+              http-request auth realm node_exporter unless authenticated
+              default_backend node_exporter_back
+
+          backend node_exporter_back
+              mode http
+              server node_exporter_local 127.0.0.1:9101 check
+      when: not (horde_host_uses_alloy_metrics | bool)
+
+    - name: Apply node_exporter HAProxy block via safe-edit pipeline  # noqa: var-naming[no-role-prefix]
+      ansible.builtin.include_role:
+        name: haidra.deployments._haproxy_safe_edit
+      vars:
+        _haproxy_safe_edit_config_path: "{{ horde_node_exporter_haproxy_config_path }}"
+        _haproxy_safe_edit_backup_dir: "{{ horde_node_exporter_haproxy_backup_dir }}"
+        _haproxy_safe_edit_marker: "NODE-EXPORTER PROXY"
+        _haproxy_safe_edit_block: "{{ _horde_node_exporter_haproxy_block }}"
+        _haproxy_safe_edit_backup_retention: "{{ horde_node_exporter_haproxy_backup_retention_count }}"
+        _haproxy_safe_edit_apply: true
+      when: not (horde_host_uses_alloy_metrics | bool)
+
+    - name: Enable and start HAProxy for node_exporter
+      ansible.builtin.systemd:
+        name: haproxy
+        enabled: true
+        state: started
       when: not (horde_host_uses_alloy_metrics | bool)
 
   roles:
@@ -208,7 +242,7 @@
           X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
         write_relabel_configs:
           - source_labels: [job]
-            regex: horde-exporter
+            regex: horde-exportepasslibr
             action: drop
       - url: "http://localhost:9009/api/v1/push"
         headers:
@@ -223,12 +257,9 @@
           - targets:
               - "localhost:9009"
       - job_name: node
-        scheme: https
         basic_auth:
           username: prometheus
           password: "{{ vault_node_exporter_password }}"
-        tls_config:
-          ca_file: /etc/prometheus/ca.crt
         file_sd_configs:
           - files:
               - /etc/prometheus/file_sd/*.yml
@@ -255,12 +286,9 @@
               - "localhost:4040"
     # Uncomment if running postgres_exporter:
     # - job_name: postgres
-    #   scheme: https
     #   basic_auth:
     #     username: prometheus
     #     password: "{{ vault_postgres_exporter_password }}"
-    #   tls_config:
-    #     ca_file: /etc/prometheus/ca.crt
     #   static_configs:
     #     - targets:
     #         - "localhost:9187"
@@ -270,11 +298,88 @@
     horde_stats_exporter_enable_downsampling: true
 
   pre_tasks:
-    - name: Push CA certificate for Prometheus
+    - name: Validate node_exporter scrape password is configured
+      ansible.builtin.assert:
+        that:
+          - vault_node_exporter_password is defined
+          - (vault_node_exporter_password | string | length) > 0
+          - vault_node_exporter_password != 'CHANGE_ME'
+        fail_msg: >-
+          vault_node_exporter_password must be set in your inventory or vault
+          to scrape node_exporter over basic auth.
+
+    - name: Ensure Prometheus file_sd directory exists for node_exporter discovery
+      ansible.builtin.file:
+        path: /etc/prometheus/file_sd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Initialize node_exporter file_sd entries
+      ansible.builtin.set_fact:
+        horde_node_exporter_file_sd_entries: []
+      run_once: true
+
+    - name: Build node_exporter file_sd entries from inventory
+      ansible.builtin.set_fact:
+        horde_node_exporter_file_sd_entries: >-
+          {{
+            horde_node_exporter_file_sd_entries
+            + [
+              {
+                'targets': [
+                  (
+                    (
+                      '127.0.0.1'
+                      if item == inventory_hostname
+                      else (
+                        hostvars[item].horde_node_exporter_scrape_address
+                        | default(hostvars[item].ansible_host | default(item))
+                        | string
+                      )
+                    )
+                    ~ ':'
+                    ~ (
+                      hostvars[item].horde_node_exporter_scrape_port
+                      | default(horde_node_exporter_scrape_port | default(9100))
+                      | string
+                    )
+                  )
+                ],
+                'labels': {
+                  'inventory_host': item
+                }
+              }
+            ]
+          }}
+      loop: "{{ groups['all'] | sort }}"
+      run_once: true
+      vars:
+        horde_host_metrics_source_resolved: "{{ hostvars[item].horde_host_metrics_source | default(horde_host_metrics_source | default('auto')) | lower }}"
+        horde_node_exporter_target_host_uses_alloy_metrics: >-
+          {{
+            horde_host_metrics_source_resolved == 'alloy'
+            or (
+              horde_host_metrics_source_resolved == 'auto'
+              and (
+                (hostvars[item].horde_alloy_enabled | default(false) | bool)
+                or (
+                  (hostvars[item].horde_alloy_collect_metrics is defined)
+                  and (hostvars[item].horde_alloy_collect_metrics | bool)
+                )
+              )
+            )
+          }}
+      when: not (horde_node_exporter_target_host_uses_alloy_metrics | bool)
+
+    - name: Render node_exporter file_sd target list
       ansible.builtin.copy:
-        src: tls/ca.crt
-        dest: /etc/prometheus/ca.crt
+        dest: /etc/prometheus/file_sd/node_exporter.yml
+        owner: root
+        group: root
         mode: "0644"
+        content: "{{ horde_node_exporter_file_sd_entries | default([]) | to_nice_yaml(indent=2, sort_keys=false) }}"
 
   roles:
     - haidra.deployments.horde_monitoring

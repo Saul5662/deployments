@@ -301,6 +301,17 @@ horde_monitoring_pyroscope_self_profiling: true
 horde_monitoring_pyroscope_ingestion_rate_mb: 4
 horde_monitoring_pyroscope_ingestion_burst_size_mb: 8
 
+# Backend port overrides for services not directly managed by this role.
+# These allow the HAProxy backends block to proxy to alertmanager and the
+# stats exporter without coupling this role to their install logic.
+horde_monitoring_alertmanager_port: 9093
+horde_monitoring_stats_exporter_port: 9150
+
+# Opt-in flags — set to true in group_vars when the corresponding service
+# is deployed alongside the monitoring stack.
+horde_monitoring_configure_alertmanager_backend: false
+horde_monitoring_configure_stats_exporter_backend: false
+
 # HAProxy configuration (safe edit with permanent rolling backups)
 horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
 horde_monitoring_haproxy_backup_dir: "/var/backups/haproxy"

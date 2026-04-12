@@ -2,6 +2,24 @@
 # Deploy Loki log aggregation backend via Docker Compose
 # Loki runs as part of the monitoring Docker Compose stack
 
+# Docker auto-creates missing bind-mount sources as directories.  If a
+# previous run started compose before configs were templated, the config
+# path is a directory instead of a file and the container crash-loops.
+- name: Check for stale Loki config directory-as-file
+  ansible.builtin.stat:
+    path: "{{ horde_monitoring_loki_config_dir }}/loki.yaml"
+  register: horde_monitoring__loki_config_stat
+  become: true
+
+- name: Remove stale Loki config directory-as-file
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_loki_config_dir }}/loki.yaml"
+    state: absent
+  become: true
+  when:
+    - horde_monitoring__loki_config_stat.stat.exists
+    - horde_monitoring__loki_config_stat.stat.isdir
+
 - name: Create Loki config directory
   ansible.builtin.file:
     path: "{{ horde_monitoring_loki_config_dir }}"

@@ -60,6 +60,8 @@
     address: "{{ item }}"
     method: scram-sha-256
     state: present
+    backup: true
+    backup_file: /etc/postgresql/{{ ai_horde__pg_version.stdout | trim }}/main/pg_hba.conf.ansible-backup
   loop:
     - "127.0.0.1/32"
     - "::1/128"
