@@ -178,9 +178,10 @@ horde_monitoring_pyroscope_job_name: "pyroscope"
 # ---------------------------------------------------------------------------
 # Loki (log aggregation — Docker-based, monolithic mode, S3 via MinIO)
 # ---------------------------------------------------------------------------
-# Opt-in: set to true to deploy Loki alongside Mimir in the Docker Compose stack.
+# Deploy Loki alongside Mimir in the Docker Compose stack.
 # When enabled, Loki stores logs in MinIO and is accessible at localhost:3100.
-horde_monitoring_install_loki: false
+# Set to false to skip Loki deployment (e.g. metrics-only monitoring).
+horde_monitoring_install_loki: true
 
 horde_monitoring_loki_image: "grafana/loki:3.4.2"
 horde_monitoring_loki_port: 3100

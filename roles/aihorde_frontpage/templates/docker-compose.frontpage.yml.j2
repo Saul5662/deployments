@@ -9,6 +9,10 @@ services:
     image: aihorde-frontpage:{{ aihorde_frontpage_repo_version }}
     container_name: aihorde-frontpage
     restart: unless-stopped
+    labels:
+      horde.logs: "true"
+      horde.app: "frontpage"
+      horde.component: "web"
     ports:
       - "{{ aihorde_frontpage_listen }}:{{ aihorde_frontpage_port }}:8006"
     env_file:

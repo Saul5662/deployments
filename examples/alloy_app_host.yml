@@ -71,7 +71,16 @@
     # Collect specific log files:
     # horde_alloy_collect_log_files:
     #   - "/var/log/myapp/*.log"
-    horde_alloy_collect_docker_logs: false
+
+    # Docker container log collection (for Docker-mode apps like ai_horde, frontpage).
+    # Only containers labeled horde.logs="true" are collected (opt-in).
+    # The ai_horde and aihorde_frontpage roles add this label automatically.
+    horde_alloy_collect_docker_logs: true
+    # Customise which Docker labels become Loki stream labels:
+    # horde_alloy_docker_label_map:
+    #   "horde.app": "app"
+    #   "horde.component": "component"
+    #   "com.example.team": "team"
 
     # --- Traces ---
     horde_alloy_collect_traces: true

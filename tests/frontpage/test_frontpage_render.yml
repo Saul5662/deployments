@@ -67,6 +67,14 @@
         that: "'max-size' in (compose_content.content | b64decode)"
         fail_msg: "Compose file missing log rotation"
 
+    - name: Assert compose has horde.logs labels for log collection
+      ansible.builtin.assert:
+        that:
+          - "'horde.logs' in (compose_content.content | b64decode)"
+          - "'horde.app' in (compose_content.content | b64decode)"
+          - "'horde.component' in (compose_content.content | b64decode)"
+        fail_msg: "Frontpage compose must have horde.logs/horde.app/horde.component labels for Alloy log collection"
+
     - name: Assert .env exists
       ansible.builtin.stat:
         path: "{{ aihorde_frontpage_base_dir }}/.env"

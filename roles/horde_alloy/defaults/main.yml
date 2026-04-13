@@ -100,6 +100,19 @@ horde_alloy_collect_log_files: []
 # Collect Docker container logs (requires Docker on the host)
 horde_alloy_collect_docker_logs: false
 
+# Docker container label used to opt-in to log collection.
+# Only containers with this label set to the filter value will be collected.
+# Set filter_label to "" to collect ALL containers (no filtering).
+horde_alloy_docker_log_filter_label: "horde.logs"
+horde_alloy_docker_log_filter_value: "true"
+
+# Docker container labels to promote to Loki stream labels.
+# Each entry maps a Docker label name to the Loki label name.
+# Example: { "horde.app": "app", "horde.component": "component" }
+horde_alloy_docker_label_map:
+  "horde.app": "app"
+  "horde.component": "component"
+
 # Static labels added to all log streams from this host.
 horde_alloy_log_labels: {}
 # ---------------------------------------------------------------------------
