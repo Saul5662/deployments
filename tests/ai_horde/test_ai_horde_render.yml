@@ -64,6 +64,14 @@
           - "'max-size' in _compose_content.content | b64decode"
           - "'max-file' in _compose_content.content | b64decode"
 
+    - name: Assert compose has horde.logs labels for log collection
+      ansible.builtin.assert:
+        that:
+          - "'horde.logs' in _compose_content.content | b64decode"
+          - "'horde.app' in _compose_content.content | b64decode"
+          - "'horde.component' in _compose_content.content | b64decode"
+        fail_msg: "AI-Horde compose services must have horde.logs/horde.app/horde.component labels for Alloy log collection"
+
     - name: Assert compose has depends_on with health condition
       ansible.builtin.assert:
         that:

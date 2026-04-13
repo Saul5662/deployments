@@ -7,6 +7,10 @@ services:
     image: ai-horde:{{ ai_horde_repo_version }}
     container_name: aihorde
     restart: unless-stopped
+    labels:
+      horde.logs: "true"
+      horde.app: "ai-horde"
+      horde.component: "backend"
     ports:
       - "{{ ai_horde_listen }}:{{ ai_horde_port }}:7001"
     env_file:
@@ -34,6 +38,10 @@ services:
     image: {{ ai_horde_postgres_image }}
     container_name: aihorde-postgres
     restart: always
+    labels:
+      horde.logs: "true"
+      horde.app: "ai-horde"
+      horde.component: "postgres"
     environment:
       POSTGRES_USER: "{{ ai_horde_postgres_user }}"
       POSTGRES_PASSWORD: "{{ ai_horde_postgres_password }}"
@@ -58,6 +66,10 @@ services:
     image: {{ ai_horde_redis_image }}
     container_name: aihorde-redis
     restart: always
+    labels:
+      horde.logs: "true"
+      horde.app: "ai-horde"
+      horde.component: "redis"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

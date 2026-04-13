@@ -33,6 +33,13 @@ all:
           horde_stats_exporter_port: 9150
           horde_stats_exporter_enable_downsampling: true
 
+          # Loki log aggregation (enabled by default with horde_monitoring).
+          # To collect Docker container logs, deploy the horde_alloy role on
+          # this host with horde_alloy_collect_docker_logs: true (host daemon).
+          # See examples/alloy_app_host.yml for the full pattern.
+          # horde_monitoring_install_loki: true
+          # horde_monitoring_loki_retention_period: "2160h"
+
     haproxy:
       hosts:
         monitoring.example.com:  # same host — HAProxy co-located with monitoring

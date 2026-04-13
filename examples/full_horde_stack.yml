@@ -91,6 +91,10 @@
       vars:
         horde_monitoring_install_mimir: true
         horde_monitoring_install_grafana: true
+        # Loki is enabled by default.  To collect Docker container logs
+        # (monitoring stack + apps), deploy the horde_alloy role on each
+        # host with horde_alloy_collect_docker_logs: true (host daemon
+        # topology).  See examples/alloy_app_host.yml for the full pattern.
         horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
       tags: [monitoring]
 

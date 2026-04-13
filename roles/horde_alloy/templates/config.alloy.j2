@@ -174,10 +174,27 @@ discovery.docker "containers" {
 discovery.relabel "docker_containers" {
   targets = discovery.docker.containers.targets
 
+{% if horde_alloy_docker_log_filter_label | default('') | length > 0 %}
+  // Keep only containers with the opt-in label.
+  rule {
+    source_labels = ["__meta_docker_container_label_{{ horde_alloy_docker_log_filter_label | replace('.', '_') }}"]
+    regex         = {{ horde_alloy_docker_log_filter_value | to_json }}
+    action        = "keep"
+  }
+
+{% endif %}
   rule {
     source_labels = ["__meta_docker_container_name"]
     target_label  = "container"
   }
+
+{% for docker_label, loki_label in horde_alloy_docker_label_map.items() %}
+  rule {
+    source_labels = ["__meta_docker_container_label_{{ docker_label | replace('.', '_') }}"]
+    target_label  = {{ loki_label | to_json }}
+  }
+
+{% endfor %}
 }
 
 loki.source.docker "containers" {

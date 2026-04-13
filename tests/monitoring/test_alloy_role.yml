@@ -437,3 +437,136 @@
           - '''loki.source.journal "systemd"'' not in (horde_alloy_string_toggles.content | b64decode)'
           - '''otelcol.receiver.otlp "local"'' not in (horde_alloy_string_toggles.content | b64decode)'
         fail_msg: "String false toggles must disable template pipelines"
+
+# ---------------------------------------------------------------------------
+# Play 5: Docker log collection with label filtering
+# ---------------------------------------------------------------------------
+- name: Test horde_alloy - Docker log collection with label filtering
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_log_level: "warn"
+    horde_alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
+    horde_alloy_tenant_id: "test-tenant"
+    horde_alloy_basic_auth_username: "alloy"
+    horde_alloy_basic_auth_password: "test-secret-not-default"
+    horde_alloy_tls_ca_cert: ""
+    horde_alloy_collect_metrics: false
+    horde_alloy_collect_logs: true
+    horde_alloy_collect_journal: false
+    horde_alloy_collect_log_files: []
+    horde_alloy_collect_docker_logs: true
+    horde_alloy_collect_traces: false
+    horde_alloy_forward_otlp_metrics: false
+    horde_alloy_log_labels: {}
+    horde_alloy_external_labels: {}
+    horde_alloy_extra_scrape_targets: []
+    horde_alloy_mimir_endpoint: ""
+    horde_alloy_tempo_endpoint: ""
+    horde_alloy_docker_log_filter_label: "horde.logs"
+    horde_alloy_docker_log_filter_value: "true"
+    horde_alloy_docker_label_map:
+      "horde.app": "app"
+      "horde.component": "component"
+
+  tasks:
+    - name: Deploy Alloy configuration (Docker log collection)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/horde_alloy/templates/config.alloy.j2"
+        dest: "{{ horde_alloy_config_dir }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: "0640"
+
+    - name: Read rendered Alloy config (Docker logs)
+      ansible.builtin.slurp:
+        path: "{{ horde_alloy_config_dir }}/config.alloy"
+      register: horde_alloy_docker_config
+
+    - name: Assert Docker discovery is present
+      ansible.builtin.assert:
+        that:
+          - "'discovery.docker' in (horde_alloy_docker_config.content | b64decode)"
+          - "'discovery.relabel' in (horde_alloy_docker_config.content | b64decode)"
+          - "'loki.source.docker' in (horde_alloy_docker_config.content | b64decode)"
+          - "'loki.process' in (horde_alloy_docker_config.content | b64decode)"
+        fail_msg: "Docker log collection pipeline must be present when enabled"
+
+    - name: Assert opt-in label filter is present
+      ansible.builtin.assert:
+        that:
+          - "'__meta_docker_container_label_horde_logs' in (horde_alloy_docker_config.content | b64decode)"
+          - "'action        = \"keep\"' in (horde_alloy_docker_config.content | b64decode)"
+        fail_msg: "Docker log filter must keep only containers with horde.logs label"
+
+    - name: Assert Docker label extraction rules are present
+      ansible.builtin.assert:
+        that:
+          - "'__meta_docker_container_label_horde_app' in (horde_alloy_docker_config.content | b64decode)"
+          - "'__meta_docker_container_label_horde_component' in (horde_alloy_docker_config.content | b64decode)"
+          - "'\"app\"' in (horde_alloy_docker_config.content | b64decode)"
+          - "'\"component\"' in (horde_alloy_docker_config.content | b64decode)"
+        fail_msg: "Docker label extraction must promote horde.app and horde.component to Loki stream labels"
+
+# ---------------------------------------------------------------------------
+# Play 6: Docker log collection WITHOUT label filtering
+# ---------------------------------------------------------------------------
+- name: Test horde_alloy - Docker logs without filter (collect all)
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_log_level: "warn"
+    horde_alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
+    horde_alloy_tenant_id: "test-tenant"
+    horde_alloy_basic_auth_username: ""
+    horde_alloy_basic_auth_password: ""
+    horde_alloy_tls_ca_cert: ""
+    horde_alloy_collect_metrics: false
+    horde_alloy_collect_logs: true
+    horde_alloy_collect_journal: false
+    horde_alloy_collect_log_files: []
+    horde_alloy_collect_docker_logs: true
+    horde_alloy_collect_traces: false
+    horde_alloy_forward_otlp_metrics: false
+    horde_alloy_log_labels: {}
+    horde_alloy_external_labels: {}
+    horde_alloy_extra_scrape_targets: []
+    horde_alloy_mimir_endpoint: ""
+    horde_alloy_tempo_endpoint: ""
+    # Empty filter label = collect ALL containers
+    horde_alloy_docker_log_filter_label: ""
+    horde_alloy_docker_log_filter_value: ""
+    horde_alloy_docker_label_map: {}
+
+  tasks:
+    - name: Deploy Alloy configuration (Docker logs, no filter)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/horde_alloy/templates/config.alloy.j2"
+        dest: "{{ horde_alloy_config_dir }}/config.alloy"
+        owner: alloy
+        group: alloy
+        mode: "0640"
+
+    - name: Read rendered Alloy config (Docker logs, no filter)
+      ansible.builtin.slurp:
+        path: "{{ horde_alloy_config_dir }}/config.alloy"
+      register: horde_alloy_nofilter_config
+
+    - name: Assert Docker discovery is present without filter
+      ansible.builtin.assert:
+        that:
+          - "'discovery.docker' in (horde_alloy_nofilter_config.content | b64decode)"
+          - "'loki.source.docker' in (horde_alloy_nofilter_config.content | b64decode)"
+        fail_msg: "Docker log collection must work without filter"
+
+    - name: Assert no keep action when filter label is empty
+      ansible.builtin.assert:
+        that:
+          - "'action        = \"keep\"' not in (horde_alloy_nofilter_config.content | b64decode)"
+        fail_msg: "No keep filter should appear when horde_alloy_docker_log_filter_label is empty"

@@ -77,6 +77,14 @@ This runs a two-play playbook:
 This decision is made per host from inventory variables in Play 1 of
 `examples/horde_monitoring_stack.yml`.
 
+### Node Exporter HAProxy Reverse Proxy
+
+- `node_exporter` listens on `127.0.0.1:9101` on each host.
+- HAProxy fronts `node_exporter` on `horde_node_exporter_haproxy_port`
+  (default `9100`) and enforces `basic auth`.
+- The HAProxy block uses a `node_exporter_auth` userlist and is applied via
+  the `_haproxy_safe_edit` safety pipeline.
+
 ### Node Exporter TLS Automation
 
 - `examples/horde_monitoring_stack.yml` defaults to

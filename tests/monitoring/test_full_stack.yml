@@ -407,6 +407,14 @@
           - "'loki-chunks' in (compose_lt.content | b64decode)"
         fail_msg: "Docker Compose must contain a Loki service with pinned image tag"
 
+    - name: Assert monitoring services have horde.logs labels
+      ansible.builtin.assert:
+        that:
+          - "'horde.logs' in (compose_lt.content | b64decode)"
+          - "'horde.app' in (compose_lt.content | b64decode)"
+          - "'horde.component' in (compose_lt.content | b64decode)"
+        fail_msg: "Monitoring compose services must have horde.logs/horde.app/horde.component labels"
+
     - name: Assert Tempo service is present in Compose
       ansible.builtin.assert:
         that:

@@ -7,6 +7,10 @@ services:
   minio:
     image: {{ horde_monitoring_minio_image }}
     container_name: minio
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "minio"
     command:
       - "server"
       - "/data"
@@ -77,6 +81,10 @@ services:
   memcached:
     image: {{ horde_monitoring_mimir_memcached_image }}
     container_name: memcached
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "memcached"
     command:
       - "-m"
       - "{{ horde_monitoring_mimir_memcached_memory_mb }}"
@@ -101,6 +109,10 @@ services:
   mimir:
     image: {{ horde_monitoring_mimir_image }}
     container_name: mimir
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "mimir"
     command:
       - "-config.file=/etc/mimir/mimir.yaml"
       - "-target=all"
@@ -145,6 +157,10 @@ services:
     image: {{ horde_monitoring_grafana_image }}
     container_name: grafana
     restart: unless-stopped
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "grafana"
     ports:
       - "127.0.0.1:{{ horde_monitoring_grafana_port }}:3000"
     volumes:
@@ -198,6 +214,10 @@ services:
   loki:
     image: {{ horde_monitoring_loki_image }}
     container_name: loki
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "loki"
     command:
       - "-config.file=/etc/loki/loki.yaml"
     ports:
@@ -234,6 +254,10 @@ services:
   tempo:
     image: {{ horde_monitoring_tempo_image }}
     container_name: tempo
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "tempo"
     command:
       - "-config.file=/etc/tempo/tempo.yaml"
     ports:
@@ -272,6 +296,10 @@ services:
   pyroscope:
     image: {{ horde_monitoring_pyroscope_image }}
     container_name: pyroscope
+    labels:
+      horde.logs: "true"
+      horde.app: "monitoring"
+      horde.component: "pyroscope"
     command:
       - "-config.file=/etc/pyroscope/pyroscope.yaml"
       - "-target=all"
