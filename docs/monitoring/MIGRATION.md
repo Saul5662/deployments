@@ -1,6 +1,6 @@
 # Host Migration Runbook
 
-This runbook covers migrating the monitoring stack (Mimir + Grafana + MinIO)
+This runbook covers migrating the monitoring stack (Mimir + Grafana + S3 storage)
 to a new host. It applies to planned migrations (hardware upgrade, cloud move)
 and forced migrations (hardware failure with or without backups).
 
@@ -14,7 +14,7 @@ and forced migrations (hardware failure with or without backups).
 
 | Path                                           | Contents                                  | Critical?   | Notes                                 |
 | ---------------------------------------------- | ----------------------------------------- | ----------- | ------------------------------------- |
-| `/var/lib/minio-data/`                         | MinIO object store (Mimir blocks, ruler)  | **YES**     | All historical metrics                |
+| `/var/lib/s3-data/`                            | S3 object store (Mimir blocks, ruler)     | **YES**     | All historical metrics                |
 | `/var/lib/mimir/`                              | Mimir WAL, ingester TSDB, compactor work  | **PARTIAL** | WAL holds ~2h of unflushed data       |
 | `/var/lib/grafana/`                            | Grafana SQLite DB (`grafana.db`), plugins | **YES**     | Orgs, users, prefs, annotations       |
 | `/var/lib/prometheus/`                         | Prometheus local TSDB (if co-hosted)      | **YES**     | Default 15d retention of scraped data |
@@ -35,9 +35,9 @@ Use this procedure when the old host is still running and accessible.
 ### On the old host
 
 ```bash
-# 1. Flush Mimir's in-memory data to MinIO (reduces WAL data loss to ~0)
+# 1. Flush Mimir's in-memory data to S3 storage (reduces WAL data loss to ~0)
 curl -X POST http://localhost:9009/ingester/flush
-# This blocks until all in-memory series are flushed to blocks in MinIO.
+# This blocks until all in-memory series are flushed to blocks in S3 storage.
 # In monolithic mode, the endpoint is on the default HTTP port (9009).
 # Ref: https://grafana.com/docs/mimir/latest/references/http-api/#ingester
 
@@ -52,10 +52,10 @@ systemctl stop prometheus
 
 ```bash
 # 4. Deploy the playbook (config-only, don't start services yet)
-ansible-playbook site.yml -e monitoring_start_services=false
+ansible-playbook site.yml -e horde_monitoring_start_services=false
 
 # 5. Sync data directories from old host
-rsync -avz old-host:/var/lib/minio-data/ /var/lib/minio-data/
+rsync -avz old-host:/var/lib/s3-data/ /var/lib/s3-data/
 rsync -avz old-host:/var/lib/mimir/     /var/lib/mimir/
 rsync -avz old-host:/var/lib/grafana/   /var/lib/grafana/
 
@@ -66,7 +66,7 @@ rsync -avz old-host:/var/lib/prometheus/ /var/lib/prometheus/
 systemctl start mimir-monitoring
 
 # 8. Verify health
-curl -sf http://localhost:9000/minio/health/live && echo "MinIO OK"
+curl -sf http://localhost:9000/health             && echo "S3 OK"
 curl -sf http://localhost:9009/ready             && echo "Mimir OK"
 curl -sf http://localhost:3000/api/health         && echo "Grafana OK"
 ```
@@ -82,24 +82,24 @@ curl -sf http://localhost:3000/api/health         && echo "Grafana OK"
 ```
 
 **Expected data loss:** Near-zero (the ingester flush writes all in-memory
-data to MinIO before shutdown).
+data to S3 storage before shutdown).
 
 ---
 
 ## Forced Migration — With Backup
 
-Use when the old host is unavailable but MinIO offsite backups exist
+Use when the old host is unavailable but S3 offsite backups exist
 (see [BACKUP.md](BACKUP.md)).
 
 ```bash
 # 1. Deploy the playbook (starts services fresh)
-ansible-playbook site.yml -e monitoring_start_services=true
-# MinIO starts empty; Grafana creates a fresh org 2.
+ansible-playbook site.yml -e horde_monitoring_start_services=true
+# S3 storage starts empty; Grafana creates a fresh org 2.
 
-# 2. Restore MinIO data from offsite backup
+# 2. Restore S3 data from offsite backup
 docker run --rm --network host minio/mc \
   /bin/sh -c "
-    mc alias set local http://localhost:9000 <MINIO_USER> <MINIO_PASS>;
+    mc alias set local http://localhost:9000 <S3_ACCESS_KEY> <S3_SECRET_KEY>;
     mc alias set remote <BACKUP_ENDPOINT> <BACKUP_KEY> <BACKUP_SECRET>;
     mc mirror remote/<BUCKET>-blocks local/mimir-blocks;
     mc mirror remote/<BUCKET>-ruler  local/mimir-ruler;
@@ -108,11 +108,11 @@ docker run --rm --network host minio/mc \
 # 3. Restart Mimir to discover restored blocks
 systemctl restart mimir-monitoring
 
-# 4. Restore Grafana DB if backed up (mimir_backup_grafana_db: true)
+# 4. Restore Grafana DB if backed up (horde_monitoring_mimir_backup_grafana_db: true)
 #    The DB is stored in the ruler bucket under grafana-backup/:
 docker run --rm --network host minio/mc \
   /bin/sh -c "
-    mc alias set local http://localhost:9000 <MINIO_USER> <MINIO_PASS>;
+    mc alias set local http://localhost:9000 <S3_ACCESS_KEY> <S3_SECRET_KEY>;
     mc cp local/mimir-ruler/grafana-backup/grafana.db /dev/stdout;
   " > /var/lib/grafana/grafana.db
 chown 472:472 /var/lib/grafana/grafana.db
@@ -136,7 +136,7 @@ Use as a last resort when the old host is unavailable and no backups exist.
 
 ```bash
 # 1. Deploy the playbook
-ansible-playbook site.yml -e monitoring_start_services=true
+ansible-playbook site.yml -e horde_monitoring_start_services=true
 
 # 2. All historical metric data is LOST.
 #    New data starts accumulating immediately.
@@ -176,7 +176,7 @@ managed by a separate role (`prometheus.prometheus`):
 - **Clean shutdown required:** Send `SIGTERM` (via `systemctl stop`) before
   copying data. This triggers a WAL checkpoint.
 - **Data directory:** `/var/lib/prometheus/` (default). Copy it alongside
-  the Mimir/MinIO data.
+  the Mimir/S3 data.
 - **Post-migration:** If the monitoring host's address changed, update the
   `remote_write` URL in every Prometheus instance's configuration.
 - **DNS recommendation:** Use a DNS name (e.g., `monitoring.horde.internal`)
@@ -189,7 +189,7 @@ managed by a separate role (`prometheus.prometheus`):
 
 After any migration, verify:
 
-- [ ] MinIO health: `curl -sf http://localhost:9000/minio/health/live`
+- [ ] S3 health: `curl -sf http://localhost:9000/health`
 - [ ] Mimir ready: `curl -sf http://localhost:9009/ready`
 - [ ] Grafana health: `curl -sf http://localhost:3000/api/health`
 - [ ] Historical data visible in Grafana dashboards (check a known time range)

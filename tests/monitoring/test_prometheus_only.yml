@@ -76,7 +76,7 @@
       ansible.builtin.assert:
         that:
           - "'backend: s3' in (horde_monitoring_mimir_config.content | b64decode)"
-          - "'minio' in (compose_config.content | b64decode)"
+          - "'s3-store' in (compose_config.content | b64decode)"
 
     - name: Assert performance and caching config
       ansible.builtin.assert:
@@ -133,13 +133,13 @@
           - _mimir_dir_stat.stat.gr_name == 'root'
         fail_msg: "Service directories must be owned by root:root, not docker group"
 
-- name: Test backup skipped when MinIO is disabled
+- name: Test backup skipped when S3 storage is disabled
   hosts: testhost
   become: true
   gather_facts: false
 
   tasks:
-    - name: Run role with MinIO disabled but backup left at default (enabled)
+    - name: Run role with S3 storage disabled but backup left at default (enabled)
       ansible.builtin.include_role:
         name: horde_monitoring
       vars:
@@ -148,7 +148,7 @@
         horde_monitoring_configure_firewall: false
         horde_monitoring_configure_haproxy: false
         horde_monitoring_start_services: false
-        horde_monitoring_mimir_enable_minio: false
+        horde_monitoring_mimir_enable_s3: false
         horde_monitoring_mimir_backup_enabled: true
 
     - name: Check backup service was NOT rendered
@@ -166,10 +166,10 @@
         path: /etc/mimir/mimir-backup.env
       register: _backup_env_stat
 
-    - name: Assert no backup artifacts when MinIO is disabled (F-2D)
+    - name: Assert no backup artifacts when S3 storage is disabled (F-2D)
       ansible.builtin.assert:
         that:
           - not _backup_svc_stat.stat.exists
           - not _backup_timer_stat.stat.exists
           - not _backup_env_stat.stat.exists
-        fail_msg: "Backup service/timer/env must not be rendered when horde_monitoring_mimir_enable_minio=false"
+        fail_msg: "Backup service/timer/env must not be rendered when horde_monitoring_mimir_enable_s3=false"

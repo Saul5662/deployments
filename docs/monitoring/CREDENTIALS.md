@@ -4,11 +4,11 @@
 
 The monitoring stack uses three sets of credentials:
 
-| Credential               | Where it appears                                           | Purpose                                             |
-| ------------------------ | ---------------------------------------------------------- | --------------------------------------------------- |
-| `minio_root_password`    | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin access (S3 API for Mimir block storage) |
-| `grafana_admin_password` | `docker-compose.yml`                                       | Grafana admin UI login                              |
-| `minio_root_user`        | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | MinIO admin username                                |
+| Credential               | Where it appears                                              | Purpose                                                  |
+| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------- |
+| `horde_monitoring_s3_secret_key` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin secret key (S3 API for block storage) |
+| `horde_monitoring_grafana_admin_password` | `docker-compose.yml`                           | Grafana admin UI login |
+| `horde_monitoring_s3_access_key` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin access key (username) |
 
 ## File Permissions
 
@@ -19,14 +19,14 @@ runs as root and can read these files for bind-mount purposes.
 ## Default Password Protection
 
 The role includes fail-fast checks that prevent deploying with default
-placeholder passwords when `monitoring_start_services: true`. The checks:
+placeholder passwords when `horde_monitoring_start_services: true`. The checks:
 
-- Fail if `minio_root_password == "changeme-minio-secret"` (when MinIO
+- Fail if `horde_monitoring_s3_secret_key == "changeme-s3-secret"` (when S3 storage
   is enabled)
-- Fail if `grafana_admin_password == "changeme"` (when Grafana is
+- Fail if `horde_monitoring_grafana_admin_password == "changeme"` (when Grafana is
   enabled)
 
-These checks are **skipped** when `monitoring_start_services: false`
+These checks are **skipped** when `horde_monitoring_start_services: false`
 (CI/test mode), since passwords are irrelevant when services aren't
 started.
 
@@ -39,15 +39,15 @@ Use Ansible Vault to encrypt credentials in your inventory:
 ansible-vault create group_vars/mimir/vault.yml
 
 # Contents:
-vault_minio_root_password: "<strong-random-password>"
+vault_s3_secret_key: "<strong-random-password>"
 vault_grafana_admin_password: "<strong-random-password>"
 ```
 
 Reference the vault variables in your playbook or group_vars:
 
 ```yaml
-minio_root_password: "{{ vault_minio_root_password }}"
-grafana_admin_password: "{{ vault_grafana_admin_password }}"
+horde_monitoring_s3_secret_key: "{{ vault_s3_secret_key }}"
+horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
 ```
 
 See `examples/horde_monitoring_stack.yml` for a working example.
@@ -56,33 +56,33 @@ See `examples/horde_monitoring_stack.yml` for a working example.
 
 Changing credentials requires a full stack restart.
 
-### MinIO password rotation
+### S3 secret key rotation
 
-The `minio_root_password` appears in:
+The `horde_monitoring_s3_secret_key` appears in:
 
-1. MinIO's `MINIO_ROOT_PASSWORD` environment variable (Compose)
+1. The S3 server's `RUSTFS_SECRET_KEY` environment variable (Compose)
 2. Mimir's `common.storage.s3.secret_access_key` (mimir.yaml)
-3. The `minio-init` sidecar's `mc alias set` command (Compose)
+3. The `s3-init` sidecar's `mc alias set` command (Compose)
 4. The backup service's `mc alias set` command (mimir-backup.service)
 
 **Procedure:**
 
-1. Update `minio_root_password` in your vault/inventory
+1. Update `horde_monitoring_s3_secret_key` in your vault/inventory
 2. Run the playbook — Ansible re-renders all affected templates
 3. The `restart monitoring stack` handler fires, pulling images and
    restarting all containers with the new credential
-4. Verify MinIO health: `curl http://127.0.0.1:9000/minio/health/live`
+4. Verify S3 health: `curl http://127.0.0.1:9000/health`
 5. Verify Mimir health: `curl http://127.0.0.1:9009/ready`
 
 ### Grafana password rotation
 
-The `grafana_admin_password` appears only in:
+The `horde_monitoring_grafana_admin_password` appears only in:
 
 1. Grafana's `GF_SECURITY_ADMIN_PASSWORD` environment variable (Compose)
 
 **Procedure:**
 
-1. Update `grafana_admin_password` in your vault/inventory
+1. Update `horde_monitoring_grafana_admin_password` in your vault/inventory
 2. Run the playbook — Ansible re-renders the Compose template
 3. The handler restarts the Compose stack
 4. Verify Grafana health: `curl http://127.0.0.1:3000/api/health`
@@ -102,8 +102,9 @@ curl -X PUT http://127.0.0.1:3000/api/admin/users/1/password \
 
 A potential improvement is migrating from environment variables to Docker
 Compose secrets, which would remove credentials from `docker inspect`
-output and `/proc/*/environ`. Both MinIO and Grafana support file-based
-credential loading:
+output and `/proc/*/environ`. Grafana supports file-based credential loading:
 
-- **MinIO:** `MINIO_ROOT_PASSWORD_FILE`
 - **Grafana:** `GF_SECURITY_ADMIN_PASSWORD__FILE`
+
+RustFS does not currently support file-based secret loading; this remains
+an environment variable for now.

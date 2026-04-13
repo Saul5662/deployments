@@ -229,12 +229,12 @@
       ansible.builtin.assert:
         that:
           - "'horde_monitoring_mimir_backup_enabled' in (_monitoring_main_raw.content | b64decode)"
-          - "'horde_monitoring_mimir_enable_minio' in (_monitoring_main_raw.content | b64decode)"
+          - "'horde_monitoring_mimir_enable_s3' in (_monitoring_main_raw.content | b64decode)"
           - "'horde_monitoring_grafana_anonymous_enabled' in (_monitoring_main_raw.content | b64decode)"
           - "'horde_monitoring_install_grafana' in (_monitoring_main_raw.content | b64decode)"
           - "'horde_monitoring_tempo_metrics_generator_enabled' in (_monitoring_main_raw.content | b64decode)"
           - "'horde_monitoring_install_tempo' in (_monitoring_main_raw.content | b64decode)"
-          - (_monitoring_main_raw.content | b64decode) is search('Warn when backup is enabled but MinIO is disabled')
+          - (_monitoring_main_raw.content | b64decode) is search('Warn when backup is enabled but S3 storage is disabled')
           - (_monitoring_main_raw.content | b64decode) is search('Warn when Grafana anonymous access is enabled')
           - (_monitoring_main_raw.content | b64decode) is search('Warn when Tempo metrics generator is enabled')
         fail_msg: >-

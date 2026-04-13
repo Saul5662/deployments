@@ -1,4 +1,4 @@
-# Grafana Tempo configuration - monolithic mode with S3 object storage (MinIO)
+# Grafana Tempo configuration - monolithic mode with S3-compatible object storage
 # Managed by Ansible - do not edit manually
 
 stream_over_http_enabled: true
@@ -27,17 +27,17 @@ compactor:
   compaction:
     block_retention: {{ horde_monitoring_tempo_trace_retention }}
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
 storage:
   trace:
     backend: s3
     s3:
-      endpoint: minio:{{ horde_monitoring_minio_api_port }}
-      access_key: {{ horde_monitoring_minio_root_user }}
-      secret_key: {{ horde_monitoring_minio_root_password }}
+      endpoint: {{ horde_monitoring_s3_endpoint }}
+      access_key: {{ horde_monitoring_s3_access_key }}
+      secret_key: {{ horde_monitoring_s3_secret_key }}
       bucket: {{ horde_monitoring_tempo_traces_bucket }}
-      insecure: true
-      forcepathstyle: true
+      insecure: {{ horde_monitoring_s3_insecure | bool | lower }}
+      forcepathstyle: {{ horde_monitoring_s3_force_path_style | bool | lower }}
     wal:
       path: /var/tempo/wal
     local:

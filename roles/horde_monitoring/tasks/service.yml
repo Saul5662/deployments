@@ -40,14 +40,18 @@
     - horde_monitoring_start_services | bool
     - horde_monitoring__mimir_container_state.stdout | default('false') != 'true'
 
-- name: Wait for MinIO to become ready
+- name: Wait for S3 storage health endpoint when enabled
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_minio_api_port }}/minio/health/live"
+    url: "{{ horde_monitoring_s3_healthcheck_url }}"
     method: GET
     status_code: 200
-  register: horde_monitoring__minio_ready
-  until: horde_monitoring__minio_ready.status == 200
-  when: horde_monitoring_start_services | bool and horde_monitoring_mimir_enable_minio | bool
+  register: horde_monitoring__s3_ready
+  until: horde_monitoring__s3_ready.status == 200
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_wait_for_ready | default(horde_monitoring_s3_deployment_mode == 'embedded') | bool
+    - horde_monitoring_s3_healthcheck_url | default('') | length > 0
   retries: 15
   delay: 3
   become: true

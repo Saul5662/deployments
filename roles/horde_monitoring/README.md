@@ -15,14 +15,14 @@ Docker Compose, managed by a single systemd service.
 
 | Component          | Purpose                                                                   | Toggle                              |
 | ------------------ | ------------------------------------------------------------------------- | ----------------------------------- |
-| **Grafana Mimir**  | Long-term metric storage (multi-tenant, S3-backed via MinIO)              | `horde_monitoring_install_mimir`          |
-| **MinIO**          | S3-compatible object storage for Mimir blocks and ruler data              | `horde_monitoring_mimir_enable_minio`                |
+| **Grafana Mimir**  | Long-term metric storage (multi-tenant, S3-backed)                        | `horde_monitoring_install_mimir`          |
+| **S3 storage**     | S3-compatible object storage backend (embedded RustFS or external service) | `horde_monitoring_mimir_enable_s3`                   |
 | **Memcached**      | Query and metadata caching for Mimir                                      | `horde_monitoring_mimir_enable_memcached`            |
 | **Grafana**        | Visualization and dashboarding (pre-provisioned datasources + dashboards) | `horde_monitoring_install_grafana`        |
 | **Loki**           | Log aggregation (opt-in)                                                  | `horde_monitoring_install_loki`           |
 | **Tempo**          | Distributed tracing (opt-in)                                              | `horde_monitoring_install_tempo`          |
 | **Pyroscope**      | Continuous profiling (opt-in)                                             | `horde_monitoring_install_pyroscope`      |
-| **Offsite backup** | Daily `mc mirror` of MinIO data to a remote S3 target                     | `horde_monitoring_mimir_backup_enabled`              |
+| **Offsite backup** | Daily `mc mirror` of S3 data to a remote S3 target                        | `horde_monitoring_mimir_backup_enabled`              |
 | **Alerting rules** | Prometheus recording/alerting rules for stack self-monitoring             | `horde_monitoring_install_alerting_rules` |
 
 > **Prometheus is NOT part of this role.** Deploy it directly in your playbook
@@ -33,10 +33,10 @@ Docker Compose, managed by a single systemd service.
 
 ```
 Prometheus (native) ──remote_write──► Mimir (Docker)
-                                          │
-                                      MinIO (S3)
-                                          │
-                                      Grafana (Docker) ──query──► Mimir
+                      │
+                 S3 backend (embedded or external)
+                      │
+                    Grafana (Docker) ──query──► Mimir
 ```
 
 All containers run on a shared `monitoring` Docker network. Every service
@@ -62,8 +62,9 @@ retention policies.
   roles:
     - role: haidra.deployments.horde_monitoring
       vars:
-        horde_monitoring_grafana_admin_password: "{{ vault_grafana_password }}"
-        horde_monitoring_minio_root_password: "{{ vault_minio_password }}"
+        horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+        horde_monitoring_s3_secret_key: "{{ vault_s3_secret_key }}"
+        horde_monitoring_host_filesystem_metrics_available: true
         horde_monitoring_configure_haproxy: true
 ```
 
@@ -77,7 +78,7 @@ stats exporter.
 
 | Variable                        | Default | Description                                                |
 | ------------------------------- | ------- | ---------------------------------------------------------- |
-| `horde_monitoring_install_mimir`      | `true`  | Deploy Mimir + MinIO + Memcached                           |
+| `horde_monitoring_install_mimir`      | `true`  | Deploy Mimir + S3 storage + Memcached                      |
 | `horde_monitoring_install_grafana`    | `true`  | Include Grafana in the Docker stack                        |
 | `horde_monitoring_configure_haproxy`  | `false` | Insert monitoring backends into an existing HAProxy config |
 | `horde_monitoring_configure_firewall` | `false` | Open ports with UFW                                        |
@@ -96,16 +97,51 @@ stats exporter.
 | `horde_monitoring_mimir_blocks_retention` | `""`                   | Global fallback retention (empty = use per-tenant) |
 | `horde_monitoring_mimir_memory_limit`     | `3g`                   | Container memory limit                             |
 
-### MinIO (S3 Backend)
+### S3-Compatible Storage Backend
 
-| Variable              | Default                                    | Description                              |
-| --------------------- | ------------------------------------------ | ---------------------------------------- |
-| `horde_monitoring_mimir_enable_minio`  | `true`                                     | Deploy MinIO alongside Mimir             |
-| `horde_monitoring_minio_image`         | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | MinIO image (pinned)                     |
-| `horde_monitoring_minio_root_user`     | `mimir`                                    | MinIO admin username                     |
-| `horde_monitoring_minio_root_password` | `changeme-minio-secret`                    | MinIO admin password (**must override**) |
-| `horde_monitoring_minio_data_dir`      | `/var/lib/minio-data`                      | Persistent data directory                |
-| `horde_monitoring_minio_memory_limit`  | `512m`                                     | Container memory limit                   |
+This role supports two explicit modes:
+
+- `embedded` (default): deploys local RustFS in the compose stack
+- `external`: does not deploy RustFS; points Mimir/Loki/Tempo/Pyroscope at an existing S3 backend
+
+Default image in embedded mode is **RustFS** (`rustfs/rustfs`) — Apache 2.0, drop-in S3-compatible storage.
+
+> **Note:** RustFS is currently alpha software; suitable for local/test deployments.
+
+| Variable                          | Default                        | Description |
+| --------------------------------- | ------------------------------ | ----------- |
+| `horde_monitoring_mimir_enable_s3` | `true`                         | Use S3 backend for object storage |
+| `horde_monitoring_s3_deployment_mode` | `embedded`                  | `embedded` (deploy RustFS) or `external` |
+| `horde_monitoring_s3_endpoint`    | `s3-store:9000`               | S3 endpoint (host:port) used in backend configs |
+| `horde_monitoring_s3_internal_url` | `http://s3-store:9000`       | URL used by compose-network init/bucket jobs |
+| `horde_monitoring_s3_api_url`     | `http://127.0.0.1:9000`       | URL used by host/systemd backup jobs and health checks |
+| `horde_monitoring_s3_wait_for_ready` | `true` in embedded mode, `false` in external mode | Wait for `horde_monitoring_s3_healthcheck_url` before Mimir readiness checks |
+| `horde_monitoring_s3_insecure`    | `true`                        | S3 client insecure mode (set `false` for TLS backends) |
+| `horde_monitoring_s3_force_path_style` | `true`                   | Force path-style S3 requests for compatible backends |
+| `horde_monitoring_s3_manage_buckets` | `true` in embedded mode, `false` in external mode | Run `s3-init` bucket bootstrap job |
+| `horde_monitoring_s3_image`       | `rustfs/rustfs:1.0.0-alpha.93` | Embedded-mode storage image (pinned) |
+| `horde_monitoring_s3_access_key`  | `mimir`                       | S3 access key |
+| `horde_monitoring_s3_secret_key`  | `changeme-s3-secret`          | S3 secret key (**must override**) |
+| `horde_monitoring_s3_data_dir`    | `/var/lib/s3-data`            | Embedded-mode data directory (UID 10001) |
+| `horde_monitoring_s3_memory_limit` | `512m`                       | Embedded RustFS container memory limit |
+
+Example external backend profile (Garage):
+
+```yaml
+horde_monitoring_s3_deployment_mode: external
+horde_monitoring_s3_endpoint: "garage:3900"
+horde_monitoring_s3_internal_url: "http://garage:3900"
+horde_monitoring_s3_api_url: "http://garage:3900"
+horde_monitoring_s3_wait_for_ready: false
+horde_monitoring_s3_insecure: true
+horde_monitoring_s3_force_path_style: true
+horde_monitoring_s3_manage_buckets: true
+horde_monitoring_s3_access_key: "<garage-access-key>"
+horde_monitoring_s3_secret_key: "<garage-secret-key>"
+```
+
+This role's external mode is intended to make replacing embedded RustFS a
+variable-only change.
 
 ### Multi-Tenant Retention
 
@@ -132,9 +168,12 @@ stats exporter.
 
 ### Offsite Backup
 
-Backup is **enabled by default**. You must configure a remote S3 target or
-explicitly set `horde_monitoring_mimir_backup_enabled: false`. See [docs/BACKUP.md](../../docs/BACKUP.md)
-for RPO/RTO details and restore procedures.
+Backup behavior is mode-aware:
+
+- **Embedded S3 mode:** backup is enabled by default and requires a configured remote target when services start.
+- **External S3 mode:** backup unit management is opt-in via `horde_monitoring_mimir_backup_external_mode_enabled`.
+
+See [docs/BACKUP.md](../../docs/BACKUP.md) for RPO/RTO details and restore procedures.
 
 | Variable                         | Default          | Description                         |
 | -------------------------------- | ---------------- | ----------------------------------- |
@@ -144,7 +183,19 @@ for RPO/RTO details and restore procedures.
 | `horde_monitoring_mimir_backup_target_bucket`     | `""`             | Remote bucket name                  |
 | `horde_monitoring_mimir_backup_target_access_key` | `""`             | Remote access key                   |
 | `horde_monitoring_mimir_backup_target_secret_key` | `""`             | Remote secret key                   |
+| `horde_monitoring_mimir_backup_external_mode_enabled` | `false`       | Enable local backup unit management in external S3 mode |
+| `horde_monitoring_mimir_backup_state_dir`         | `/var/lib/mimir-backup` | Local state directory for backup success marker |
 | `horde_monitoring_mimir_backup_grafana_db`        | `false`          | Include Grafana SQLite DB in backup |
+
+### Host Disk Alert Prerequisite
+
+When `horde_monitoring_install_host_disk_alerts: true`, you must confirm host filesystem
+metrics are present in Prometheus by setting:
+
+- `horde_monitoring_host_filesystem_metrics_available: true`
+
+If services are started and this flag is false, the role fails fast to avoid silently
+deploying broken disk-capacity alerts.
 
 ### Loki (Opt-in)
 
@@ -192,12 +243,12 @@ Backup retention for safe-edit snapshots is controlled by
 ## Credential Management
 
 The role enforces non-default passwords when `horde_monitoring_start_services: true`.
-Deploying with `changeme` or `changeme-minio-secret` will fail with an
+Deploying with `changeme` or `changeme-s3-secret` will fail with an
 actionable error. Use Ansible Vault:
 
 ```bash
 ansible-vault create group_vars/mimir/vault.yml
-# Add: vault_minio_root_password, vault_grafana_admin_password
+# Add: vault_s3_secret_key, vault_grafana_admin_password
 ```
 
 See [docs/CREDENTIALS.md](../../docs/CREDENTIALS.md) for rotation procedures.
@@ -205,8 +256,8 @@ See [docs/CREDENTIALS.md](../../docs/CREDENTIALS.md) for rotation procedures.
 ## Verification
 
 ```bash
-# MinIO
-curl -sf http://127.0.0.1:9000/minio/health/live && echo OK
+# S3 storage backend (embedded RustFS default)
+curl -sf http://127.0.0.1:9000/health && echo OK
 
 # Mimir
 curl -sf http://127.0.0.1:9009/ready && echo OK

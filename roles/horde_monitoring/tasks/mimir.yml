@@ -29,20 +29,33 @@
       Docker Compose V2 plugin: https://docs.docker.com/compose/install/
   when: horde_monitoring__compose_check.rc != 0
 
+- name: Validate S3 backend endpoint settings
+  ansible.builtin.assert:
+    that:
+      - (horde_monitoring_s3_endpoint | string | length) > 0
+      - (horde_monitoring_s3_internal_url | string) is match('^https?://')
+      - (horde_monitoring_s3_api_url | string) is match('^https?://')
+    fail_msg: >-
+      Invalid S3 endpoint configuration. Set all of:
+      horde_monitoring_s3_endpoint (host:port),
+      horde_monitoring_s3_internal_url (http[s]://... reachable from Docker containers), and
+      horde_monitoring_s3_api_url (http[s]://... reachable from host/systemd context).
+  when: horde_monitoring_mimir_enable_s3 | bool
+
 # Prevents deploying with default placeholder credentials when services
 # would actually start. Skipped when horde_monitoring_start_services is false
 # (CI/test environments) since passwords are irrelevant without running services.
 
-- name: Fail if default MinIO password is unchanged
+- name: Fail if default S3 secret key is unchanged
   ansible.builtin.fail:
     msg: >-
-      horde_monitoring_minio_root_password is still set to the default placeholder
-      'changeme-minio-secret'. Override it in your inventory or vault.
+      horde_monitoring_s3_secret_key is still set to the default placeholder
+      'changeme-s3-secret'. Override it in your inventory or vault.
       See examples/horde_monitoring_stack.yml for a reference.
   when:
     - horde_monitoring_start_services | bool
-    - horde_monitoring_mimir_enable_minio | bool
-    - horde_monitoring_minio_root_password == "changeme-minio-secret"
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_secret_key == "changeme-s3-secret"
 
 - name: Fail if default Grafana password is unchanged
   ansible.builtin.fail:
@@ -54,15 +67,17 @@
     - horde_monitoring_install_grafana | bool
     - horde_monitoring_grafana_admin_password == "changeme"
 
-- name: Create MinIO data directory
+- name: Create S3 data directory
   ansible.builtin.file:
-    path: "{{ horde_monitoring_minio_data_dir }}"
+    path: "{{ horde_monitoring_s3_data_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ horde_monitoring_s3_embedded_uid | string }}"
+    group: "{{ horde_monitoring_s3_embedded_gid | string }}"
     mode: "0755"
   become: true
-  when: horde_monitoring_mimir_enable_minio | bool
+  when:
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded'
 
 - name: Create Mimir directories
   ansible.builtin.file:
@@ -92,7 +107,7 @@
   loop:
     - "{{ horde_monitoring_mimir_data_dir }}/data/tsdb"
     - "{{ horde_monitoring_mimir_data_dir }}/data/rules"
-  when: not (horde_monitoring_mimir_enable_minio | bool)
+  when: not (horde_monitoring_mimir_enable_s3 | bool)
 
 - name: Create Grafana directories
   ansible.builtin.file:
@@ -177,33 +192,62 @@
   notify:
     - Reload systemd
 
-# --- Offsite backup via MinIO mirror (Plan 006) ---
+# --- Offsite backup via S3 mirror (mc mirror) ---
 
 - name: Fail if backup enabled but no target configured
   ansible.builtin.fail:
     msg: >-
       horde_monitoring_mimir_backup_enabled is true but horde_monitoring_mimir_backup_target_endpoint is empty.
-      MinIO runs in single-drive mode with zero redundancy — a disk failure
-      means permanent data loss. Either configure a backup target or
-      explicitly set horde_monitoring_mimir_backup_enabled: false to acknowledge the risk.
+      Configure a backup target endpoint, or disable backup with
+      horde_monitoring_mimir_backup_enabled: false.
+      Embedded mode defaults to strict backup enforcement because local storage is single-drive.
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
     - horde_monitoring_mimir_backup_target_endpoint | length == 0
     - horde_monitoring_start_services | bool
 
-- name: Warn if backup is disabled
+- name: Warn if backup is disabled in embedded mode
   ansible.builtin.debug:
     msg: >-
-      WARNING: MinIO backup is disabled. MinIO is running in single-drive
+      WARNING: S3 backup is disabled. S3 storage is running in single-drive
       mode with no redundancy. A disk failure will result in permanent
       data loss of all historical metrics. Set horde_monitoring_mimir_backup_enabled: true
       and configure a remote S3 target.
   when:
     - not (horde_monitoring_mimir_backup_enabled | bool)
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded'
 
-- name: Template MinIO backup environment file
+- name: Inform that external S3 backup management is opt-in and currently disabled
+  ansible.builtin.debug:
+    msg: >-
+      horde_monitoring_s3_deployment_mode=external and
+      horde_monitoring_mimir_backup_external_mode_enabled=false:
+      skipping local backup unit rendering.
+      Set horde_monitoring_mimir_backup_external_mode_enabled=true to manage
+      backup units for external S3 from this role.
+  when:
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'external'
+    - not (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
+
+- name: Create backup state directory
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_mimir_backup_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when:
+    - horde_monitoring_mimir_backup_enabled | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
+
+- name: Template S3 backup environment file
   ansible.builtin.template:
     src: mimir-backup.env.j2
     dest: "{{ horde_monitoring_mimir_config_dir }}/mimir-backup.env"
@@ -216,9 +260,10 @@
   notify: Reload systemd
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
 
-- name: Template MinIO backup service
+- name: Template S3 backup service
   ansible.builtin.template:
     src: mimir-backup.service.j2
     dest: /etc/systemd/system/mimir-backup.service
@@ -229,9 +274,10 @@
   notify: Reload systemd
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
 
-- name: Template MinIO backup timer
+- name: Template S3 backup timer
   ansible.builtin.template:
     src: mimir-backup.timer.j2
     dest: /etc/systemd/system/mimir-backup.timer
@@ -240,9 +286,10 @@
   notify: Reload systemd
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
 
-- name: Enable and start MinIO backup timer
+- name: Enable and start S3 backup timer
   ansible.builtin.systemd:
     name: mimir-backup.timer
     enabled: true
@@ -251,14 +298,15 @@
   become: true
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
     - horde_monitoring_start_services | bool
 
 - name: Verify backup target is reachable
   ansible.builtin.command: >
     docker run --rm --network host
     -e MC_HOST_remote
-    {{ horde_monitoring_minio_mc_image }}
+    {{ horde_monitoring_s3_mc_image }}
     mc ls remote/{{ horde_monitoring_mimir_backup_target_bucket }}-blocks
   environment:
     MC_HOST_remote: >-
@@ -272,7 +320,8 @@
   failed_when: false
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
     - horde_monitoring_start_services | bool
     - horde_monitoring_mimir_backup_target_endpoint | length > 0
 
@@ -286,7 +335,8 @@
       {{ horde_monitoring__backup_target_check.stderr | default('(no error output)') }}
   when:
     - horde_monitoring_mimir_backup_enabled | bool
-    - horde_monitoring_mimir_enable_minio | bool
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded' or (horde_monitoring_mimir_backup_external_mode_enabled | default(false) | bool)
     - horde_monitoring_start_services | bool
     - horde_monitoring_mimir_backup_target_endpoint | length > 0
     - horde_monitoring__backup_target_check.rc | default(0) != 0

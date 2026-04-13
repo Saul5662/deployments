@@ -90,16 +90,16 @@
           - "'ANONYMOUS_ENABLED=true' in (compose_config.content | b64decode)"
           - "'ANONYMOUS_ORG_NAME' in (compose_config.content | b64decode)"
 
-    - name: Assert S3 object storage config (MinIO)
+    - name: Assert S3 object storage config
       ansible.builtin.assert:
         that:
           - "'backend: s3' in (horde_monitoring_mimir_config.content | b64decode)"
-          - "'endpoint: minio:' in (horde_monitoring_mimir_config.content | b64decode)"
+          - "'endpoint: s3-store:' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'bucket_name: mimir-blocks' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'common:' in (horde_monitoring_mimir_config.content | b64decode)"
-          - "'minio' in (compose_config.content | b64decode)"
-          - "'minio-init' in (compose_config.content | b64decode)"
-          - "'minio/health/live' in (compose_config.content | b64decode)"
+          - "'s3-store' in (compose_config.content | b64decode)"
+          - "'s3-init' in (compose_config.content | b64decode)"
+          - "'/health' in (compose_config.content | b64decode)"
 
     - name: Assert performance and caching config
       ansible.builtin.assert:
@@ -126,23 +126,22 @@
           - "'MimirRequestErrors' in (alerting_rules.content | b64decode)"
           - "'MimirIngestionStalled' in (alerting_rules.content | b64decode)"
           - "'MimirCompactorFailed' in (alerting_rules.content | b64decode)"
-          - "'MinIODown' in (alerting_rules.content | b64decode)"
-          - "'MinIODiskUsageCritical' in (alerting_rules.content | b64decode)"
-          - "'MinIODiskUsageWarning' in (alerting_rules.content | b64decode)"
+          - "'S3StorageDown' in (alerting_rules.content | b64decode)"
           - "'HostDiskUsageCritical' in (alerting_rules.content | b64decode)"
           - "'HostDiskUsageHigh' in (alerting_rules.content | b64decode)"
           - "'mimir-health' in (alerting_rules.content | b64decode)"
-          - "'minio-health' in (alerting_rules.content | b64decode)"
+          - "'s3-storage-health' in (alerting_rules.content | b64decode)"
           - "'host-disk-usage' in (alerting_rules.content | b64decode)"
           - "'monitoring-stack-watchdog' in (alerting_rules.content | b64decode)"
 
     - name: Assert no floating or latest image tags in Compose
       ansible.builtin.assert:
         that:
-          - "'latest' not in (compose_config.content | b64decode)"
+          - "':latest' not in (compose_config.content | b64decode)"
           - "'grafana/grafana:12.4.1' in (compose_config.content | b64decode)"
           - "'memcached:1.6.41-alpine' in (compose_config.content | b64decode)"
           - "'grafana/mimir:2.15.0' in (compose_config.content | b64decode)"
+          - "'rustfs/rustfs:' in (compose_config.content | b64decode)"
         fail_msg: "All container images must use immutable version tags (no 'latest', no minor-only floating)"
 
     - name: Assert log rotation is configured for all services
@@ -204,21 +203,26 @@
         path: /var/lib/mimir
       register: _mimir_data_stat
 
-    - name: Stat MinIO data directory
+    - name: Stat S3 data directory
       ansible.builtin.stat:
-        path: /var/lib/minio-data
-      register: _minio_data_stat
+        path: /var/lib/s3-data
+      register: _s3_data_stat
 
-    - name: Assert directories are owned by root:root
+    - name: Assert Mimir directories are owned by root:root
       ansible.builtin.assert:
         that:
           - _mimir_dir_stat.stat.pw_name == 'root'
           - _mimir_dir_stat.stat.gr_name == 'root'
           - _mimir_data_stat.stat.pw_name == 'root'
           - _mimir_data_stat.stat.gr_name == 'root'
-          - _minio_data_stat.stat.pw_name == 'root'
-          - _minio_data_stat.stat.gr_name == 'root'
-        fail_msg: "Service directories must be owned by root:root, not docker group"
+        fail_msg: "Mimir directories must be owned by root:root"
+
+    - name: Assert S3 data directory is owned by UID 10001
+      ansible.builtin.assert:
+        that:
+          - _s3_data_stat.stat.uid == 10001
+          - _s3_data_stat.stat.gid == 10001
+        fail_msg: "S3 data directory must be owned by UID/GID 10001 (RustFS container user)"
 
     # Run the role a second time with a changed value so Ansible
     # overwrites the config and creates a backup file.
@@ -314,7 +318,8 @@
             horde_monitoring_configure_firewall: false
             horde_monitoring_configure_haproxy: false
             horde_monitoring_start_services: true
-            horde_monitoring_minio_root_password: "changeme-minio-secret"
+            horde_monitoring_host_filesystem_metrics_available: true
+            horde_monitoring_s3_secret_key: "changeme-s3-secret"
             horde_monitoring_grafana_admin_password: "changeme"
 
         - name: Fail if role did not reject default passwords
@@ -328,7 +333,7 @@
               - ansible_failed_result.msg is defined
               - >-
                 'default placeholder' in ansible_failed_result.msg or
-                'changeme-minio-secret' in ansible_failed_result.msg or
+                'changeme-s3-secret' in ansible_failed_result.msg or
                 'changeme' in ansible_failed_result.msg
             fail_msg: >-
               Expected fail-fast password rejection but got an unexpected error:
@@ -337,6 +342,46 @@
         - name: Confirm expected failure occurred
           ansible.builtin.debug:
             msg: "PASS — Fail-fast correctly rejected default credentials"
+
+- name: Test fail-fast requires host filesystem metrics declaration
+  hosts: testhost
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Attempt role with host disk alerts enabled but metrics flag unset
+      block:
+        - name: Run role with host disk alerts enabled and metrics flag false (should fail)
+          ansible.builtin.include_role:
+            name: horde_monitoring
+          vars:
+            horde_monitoring_install_mimir: false
+            horde_monitoring_install_grafana: false
+            horde_monitoring_install_alerting_rules: true
+            horde_monitoring_start_services: true
+            horde_monitoring_install_host_disk_alerts: true
+            horde_monitoring_host_filesystem_metrics_available: false
+
+        - name: Fail if role did not reject missing host filesystem metrics contract
+          ansible.builtin.fail:
+            msg: "Role should have failed when host disk alerts are enabled without host filesystem metrics"
+
+      rescue:
+        - name: Assert failure was specifically about host filesystem metrics prerequisite
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - >-
+                'host_filesystem' in ansible_failed_result.msg or
+                'horde_monitoring_host_filesystem_metrics_available' in ansible_failed_result.msg or
+                'install_host_disk_alerts' in ansible_failed_result.msg
+            fail_msg: >-
+              Expected host filesystem metrics fail-fast but got an unexpected error:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm expected host metrics prerequisite failure occurred
+          ansible.builtin.debug:
+            msg: "PASS — Fail-fast correctly enforced host filesystem metrics prerequisite"
 
 # ---------------------------------------------------------------------------
 # Play 3: Loki + Tempo integration tests

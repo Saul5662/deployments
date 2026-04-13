@@ -1,59 +1,60 @@
-# Docker Compose for monitoring stack (Mimir + MinIO + Grafana)
+# Docker Compose for monitoring stack (Mimir + S3-compatible storage + Grafana)
 # Managed by Ansible - do not edit manually
 
 services:
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
-  minio:
-    image: {{ horde_monitoring_minio_image }}
-    container_name: minio
+{% set horde_monitoring__embedded_s3 = (horde_monitoring_mimir_enable_s3 | bool) and (horde_monitoring_s3_deployment_mode == 'embedded') %}
+
+{% if horde_monitoring__embedded_s3 %}
+  s3-store:
+    image: {{ horde_monitoring_s3_image }}
+    container_name: s3-store
     labels:
       horde.logs: "true"
       horde.app: "monitoring"
-      horde.component: "minio"
-    command:
-      - "server"
-      - "/data"
-      - "--console-address"
-      - ":9001"
+      horde.component: "s3-store"
+    command: ["/data"]
     environment:
-      - "MINIO_ROOT_USER={{ horde_monitoring_minio_root_user }}"
-      - "MINIO_ROOT_PASSWORD={{ horde_monitoring_minio_root_password }}"
+      - "RUSTFS_ACCESS_KEY={{ horde_monitoring_s3_access_key }}"
+      - "RUSTFS_SECRET_KEY={{ horde_monitoring_s3_secret_key }}"
+      - "RUSTFS_CONSOLE_ENABLE=true"
     ports:
-      - "127.0.0.1:{{ horde_monitoring_minio_api_port }}:9000"
-      - "127.0.0.1:{{ horde_monitoring_minio_console_port }}:9001"
+      - "127.0.0.1:{{ horde_monitoring_s3_api_port }}:9000"
+      - "127.0.0.1:{{ horde_monitoring_s3_console_port }}:9001"
     volumes:
-      - {{ horde_monitoring_minio_data_dir }}:/data
+      - {{ horde_monitoring_s3_data_dir }}:/data
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: {{ horde_monitoring_minio_memory_limit }}
+          memory: {{ horde_monitoring_s3_memory_limit }}
     logging:
       driver: local
       options:
         max-size: "25m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
     networks:
       - monitoring
+{% endif %}
 
-  minio-init:
-    image: {{ horde_monitoring_minio_mc_image }}
-    container_name: minio-init
+{% if horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
+  s3-init:
+    image: {{ horde_monitoring_s3_mc_image }}
+    container_name: s3-init
     environment:
-      - "MINIO_INIT_USER={{ horde_monitoring_minio_root_user }}"
-      - "MINIO_INIT_PASSWORD={{ horde_monitoring_minio_root_password }}"
+      - "S3_INIT_ACCESS_KEY={{ horde_monitoring_s3_access_key }}"
+      - "S3_INIT_SECRET_KEY={{ horde_monitoring_s3_secret_key }}"
     entrypoint: >
       /bin/sh -c "
-      until mc alias set local http://minio:9000 $$MINIO_INIT_USER $$MINIO_INIT_PASSWORD; do sleep 2; done;
-      mc mb --ignore-existing local/{{ horde_monitoring_minio_blocks_bucket }};
-      mc mb --ignore-existing local/{{ horde_monitoring_minio_ruler_bucket }};
+      until mc alias set local {{ horde_monitoring_s3_internal_url }} $$S3_INIT_ACCESS_KEY $$S3_INIT_SECRET_KEY{% if horde_monitoring_s3_insecure | bool %} --insecure{% endif %}; do sleep 2; done;
+      mc mb --ignore-existing local/{{ horde_monitoring_s3_blocks_bucket }};
+      mc mb --ignore-existing local/{{ horde_monitoring_s3_ruler_bucket }};
 {% if horde_monitoring_install_loki | bool %}
       mc mb --ignore-existing local/{{ horde_monitoring_loki_chunks_bucket }};
 {% endif %}
@@ -70,9 +71,11 @@ services:
       options:
         max-size: "10m"
         max-file: "2"
+{% if horde_monitoring__embedded_s3 %}
     depends_on:
-      minio:
+      s3-store:
         condition: service_healthy
+{% endif %}
     networks:
       - monitoring
 {% endif %}
@@ -138,15 +141,15 @@ services:
         hard: 65536
 {% if horde_monitoring_mimir_enable_memcached | bool %}
     depends_on:
-{% if horde_monitoring_mimir_enable_minio | bool %}
-      minio-init:
+{% if horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
+      s3-init:
         condition: service_completed_successfully
 {% endif %}
       memcached:
         condition: service_started
-{% elif horde_monitoring_mimir_enable_minio | bool %}
+{% elif horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
     depends_on:
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
 {% endif %}
     networks:
@@ -241,9 +244,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
     depends_on:
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
 {% endif %}
     networks:
@@ -283,9 +286,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
     depends_on:
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
 {% endif %}
     networks:
@@ -325,9 +328,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool and horde_monitoring_s3_manage_buckets | bool %}
     depends_on:
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
 {% endif %}
     networks:

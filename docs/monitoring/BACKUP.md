@@ -2,13 +2,15 @@
 
 ## Overview
 
-The monitoring stack uses MinIO in **single-node single-drive mode** — there
+The monitoring stack uses S3-compatible storage in **single-node single-drive mode** — there
 is no erasure coding and no redundancy. A drive failure or filesystem
 corruption causes permanent data loss without a working backup.
 
 The `horde_monitoring` role includes an offsite backup mechanism via systemd
-timer and `mc mirror`. Backup is **enabled by default** — you must either
-configure a remote S3 target or explicitly disable backup.
+timer and `mc mirror`.
+
+- In `embedded` S3 mode, backup is enabled by default and enforced when services start.
+- In `external` S3 mode, backup unit management is opt-in.
 
 ## RPO / RTO Characteristics
 
@@ -16,7 +18,7 @@ configure a remote S3 target or explicitly disable backup.
 | -------------------------- | -------------------- | ------------------------------------------ | ------------------------------------------ |
 | Disk failure, daily backup | ≤ 24h of metrics     | Hours (depends on data volume + bandwidth) | Restore via `mc mirror` from remote        |
 | Disk failure, no backup    | **Total loss**       | N/A — data is gone                         | Only Prometheus's local WAL (~2h) survives |
-| Mimir WAL corruption       | ~2h of inflight data | Minutes (restart Mimir)                    | Blocks already flushed to MinIO are safe   |
+| Mimir WAL corruption       | ~2h of inflight data | Minutes (restart Mimir)                    | Blocks already flushed to S3 storage are safe |
 | Host failure               | Same as disk failure | Same + host provisioning time              | Full stack redeploy + data restore         |
 
 ## Backup Configuration
@@ -24,28 +26,35 @@ configure a remote S3 target or explicitly disable backup.
 ### Required variables
 
 ```yaml
-mimir_backup_enabled: true # default
-mimir_backup_target_endpoint: "https://s3.example.com"
-mimir_backup_target_bucket: "mimir-backup"
-mimir_backup_target_access_key: "{{ vault_backup_access_key }}"
-mimir_backup_target_secret_key: "{{ vault_backup_secret_key }}"
+horde_monitoring_mimir_backup_enabled: true # default
+horde_monitoring_mimir_backup_target_endpoint: "https://s3.example.com"
+horde_monitoring_mimir_backup_target_bucket: "mimir-backup"
+horde_monitoring_mimir_backup_target_access_key: "{{ vault_backup_access_key }}"
+horde_monitoring_mimir_backup_target_secret_key: "{{ vault_backup_secret_key }}"
+```
+
+When using `horde_monitoring_s3_deployment_mode: external`, also set:
+
+```yaml
+horde_monitoring_mimir_backup_external_mode_enabled: true
 ```
 
 ### Optional variables
 
 ```yaml
-mimir_backup_schedule: "*-*-* 02:00:00" # systemd calendar spec (default: daily 02:00 UTC)
-mimir_backup_target_insecure: false # allow non-TLS endpoint
-mimir_backup_remove_deleted: false # see "Divergence Strategies" below
+horde_monitoring_mimir_backup_schedule: "*-*-* 02:00:00" # systemd calendar spec (default: daily 02:00 UTC)
+horde_monitoring_mimir_backup_target_insecure: false # allow non-TLS endpoint
+horde_monitoring_mimir_backup_remove_deleted: false # see "Divergence Strategies" below
 ```
 
 ### Disabling backup
 
-Set `mimir_backup_enabled: false`. A warning task will fire during playbook
-runs reminding you that MinIO has no redundancy.
+Set `horde_monitoring_mimir_backup_enabled: false`. A warning task will fire during playbook
+runs in embedded mode reminding you that local S3 storage has no redundancy.
 
-If you leave `mimir_backup_enabled: true` (the default) but don't configure
-a target endpoint, the deploy will **fail** with an actionable error message.
+If you leave `horde_monitoring_mimir_backup_enabled: true` (the default) but don't configure
+a target endpoint, the deploy will **fail** with an actionable error message when
+backup management is active for the current mode.
 
 ## What Gets Backed Up
 
@@ -69,11 +78,11 @@ through the Grafana UI is not reproducible without the database.
 To include `grafana.db` in the backup scope:
 
 ```yaml
-mimir_backup_grafana_db: true
+horde_monitoring_mimir_backup_grafana_db: true
 ```
 
 When enabled, the backup service copies `grafana.db` into the
-`mimir-ruler` MinIO bucket (under `grafana-backup/`) before running
+`mimir-ruler` S3 bucket (under `grafana-backup/`) before running
 `mc mirror`. This means it is automatically included in the offsite
 mirror with no additional infrastructure.
 
@@ -84,7 +93,7 @@ mirror with no additional infrastructure.
 
 ## Backup Consistency
 
-Mimir writes blocks to MinIO atomically: data files are written first, and
+Mimir writes blocks to S3 storage atomically: data files are written first, and
 the `meta.json` (which makes a block discoverable) is written last. Because
 `mc mirror` copies complete objects, and a block without its `meta.json` is
 ignored by Mimir, there is **no risk of copying a half-written block**.
@@ -97,13 +106,13 @@ required for backup.**
 
 The backup service is `Type=oneshot` — it runs, succeeds or fails, and
 exits. There is no long-running process to monitor. On success, the
-service writes a timestamp file at `/var/lib/minio-data/.backup-last-success`.
+service writes a timestamp file at `/var/lib/mimir-backup/.backup-last-success`.
 
 ### Quick health check
 
 ```bash
 # Last successful backup time
-stat -c '%y' /var/lib/minio-data/.backup-last-success
+stat -c '%y' /var/lib/mimir-backup/.backup-last-success
 
 # Service status (shows last run result)
 systemctl status mimir-backup
@@ -125,7 +134,7 @@ journalctl -u mimir-backup --since "24 hours ago" --no-pager
    your backup interval plus a margin. Example cron/monitoring check:
 
    ```bash
-   find /var/lib/minio-data/.backup-last-success -mmin +1500 -exec echo "STALE" \;
+   find /var/lib/mimir-backup/.backup-last-success -mmin +1500 -exec echo "STALE" \;
    ```
 
    (1500 minutes ≈ 25 hours, appropriate for a daily schedule)
@@ -142,9 +151,9 @@ This has important implications:
 
 | Strategy                  | Variable                                                              | Remote growth                                                      | Propagates deletions?                     |
 | ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
-| **Append-only** (default) | `mimir_backup_remove_deleted: false`                                  | Unbounded — remote retains blocks deleted locally by the compactor | No — safest option                        |
-| **Parity**                | `mimir_backup_remove_deleted: true`                                   | Matches local — compactor deletions propagate                      | Yes — accidental deletions also propagate |
-| **Versioned** (ideal)     | `mimir_backup_remove_deleted: false` + S3 versioning on remote target | Bounded by version policy                                          | Soft — versions retained                  |
+| **Append-only** (default) | `horde_monitoring_mimir_backup_remove_deleted: false`                                  | Unbounded — remote retains blocks deleted locally by the compactor | No — safest option                        |
+| **Parity**                | `horde_monitoring_mimir_backup_remove_deleted: true`                                   | Matches local — compactor deletions propagate                      | Yes — accidental deletions also propagate |
+| **Versioned** (ideal)     | `horde_monitoring_mimir_backup_remove_deleted: false` + S3 versioning on remote target | Bounded by version policy                                          | Soft — versions retained                  |
 
 **Recommendation:** Use append-only (the default) unless your remote target
 has S3 object versioning enabled. With append-only + bounded local retention
@@ -161,7 +170,7 @@ expiry policy, and accidental deletions can be recovered.
 
 - A working monitoring stack deployment on the new/repaired host (same Ansible
   config as the original)
-- MinIO running and healthy
+- S3 backend configured and reachable
 - Network access to the remote backup target
 
 ### Steps
@@ -172,24 +181,24 @@ expiry policy, and accidental deletions can be recovered.
    ansible-playbook -i inventory.yml horde_monitoring_stack.yml
    ```
 
-2. **Wait for MinIO to be healthy:**
+2. **Wait for S3 storage to be healthy:**
 
    ```bash
-   curl -f http://127.0.0.1:9000/minio/health/live
+   curl -f http://127.0.0.1:9000/health
    ```
 
 3. **Restore blocks and ruler data from backup:**
 
    ```bash
    docker run --rm --network host minio/mc:RELEASE.2025-08-13T08-35-41Z /bin/sh -c "\
-     mc alias set local http://127.0.0.1:9000 <minio-user> <minio-password>; \
+     mc alias set local http://127.0.0.1:9000 <s3-access-key> <s3-secret-key>; \
      mc alias set remote <backup-endpoint> <access-key> <secret-key>; \
      mc mirror remote/<bucket>-blocks local/mimir-blocks; \
      mc mirror remote/<bucket>-ruler local/mimir-ruler; \
    "
    ```
 
-   Replace `<minio-user>`, `<minio-password>`, `<backup-endpoint>`,
+   Replace `<s3-access-key>`, `<s3-secret-key>`, `<backup-endpoint>`,
    `<access-key>`, `<secret-key>`, and `<bucket>` with your actual values.
 
 4. **Restart Mimir** to pick up restored blocks:
@@ -198,25 +207,25 @@ expiry policy, and accidental deletions can be recovered.
    systemctl restart mimir-monitoring
    ```
 
-5. **Restore Grafana DB** (if `mimir_backup_grafana_db` was enabled):
+5. **Restore Grafana DB** (if `horde_monitoring_mimir_backup_grafana_db` was enabled):
 
    ```bash
    # Stop Grafana (part of the compose stack)
    docker compose -f /opt/mimir/docker-compose.yml stop grafana
 
-   # Extract grafana.db from the restored ruler bucket
-   docker run --rm --network host minio/mc:RELEASE.2025-08-13T08-35-41Z /bin/sh -c "\
-     mc alias set local http://127.0.0.1:9000 <minio-user> <minio-password>; \
-     mc cp local/mimir-ruler/grafana-backup/grafana.db /tmp/grafana.db; \
+    # Extract grafana.db from the restored ruler bucket to host /tmp
+    docker run --rm --network host -v /tmp:/host-tmp minio/mc:RELEASE.2025-08-13T08-35-41Z /bin/sh -c "\
+     mc alias set local http://127.0.0.1:9000 <s3-access-key> <s3-secret-key>; \
+       mc cp local/mimir-ruler/grafana-backup/grafana.db /host-tmp/grafana.db; \
    "
-   docker cp $(docker ps -aqf name=minio):/tmp/grafana.db /var/lib/grafana/grafana.db
+    cp /tmp/grafana.db /var/lib/grafana/grafana.db
    chown 472:472 /var/lib/grafana/grafana.db
 
    # Start Grafana back up
    docker compose -f /opt/mimir/docker-compose.yml start grafana
    ```
 
-   If `mimir_backup_grafana_db` was not enabled, skip this step — Grafana
+   If `horde_monitoring_mimir_backup_grafana_db` was not enabled, skip this step — Grafana
    will start with a fresh database and reprovisioned resources.
 
 6. **Verify** via Grafana that historical data is queryable. Check the

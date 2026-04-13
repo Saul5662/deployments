@@ -1,4 +1,4 @@
-# Grafana Loki configuration - monolithic mode with S3 object storage (MinIO)
+# Grafana Loki configuration - monolithic mode with S3-compatible object storage
 # Managed by Ansible - do not edit manually
 
 auth_enabled: {{ horde_monitoring_loki_auth_enabled | lower }}
@@ -22,24 +22,24 @@ schema_config:
   configs:
     - from: "2024-01-01"
       store: tsdb
-      object_store: {{ 's3' if (horde_monitoring_mimir_enable_minio | bool) else 'filesystem' }}
+      object_store: {{ 's3' if (horde_monitoring_mimir_enable_s3 | bool) else 'filesystem' }}
       schema: v13
       index:
         prefix: horde_monitoring_loki_index_
         period: 24h
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
 storage_config:
   tsdb_shipper:
     active_index_directory: /loki/index
     cache_location: /loki/index_cache
   aws:
-    endpoint: minio:{{ horde_monitoring_minio_api_port }}
-    access_key_id: {{ horde_monitoring_minio_root_user }}
-    secret_access_key: {{ horde_monitoring_minio_root_password }}
+    endpoint: {{ horde_monitoring_s3_endpoint }}
+    access_key_id: {{ horde_monitoring_s3_access_key }}
+    secret_access_key: {{ horde_monitoring_s3_secret_key }}
     bucketnames: {{ horde_monitoring_loki_chunks_bucket }}
-    s3forcepathstyle: true
-    insecure: true
+    s3forcepathstyle: {{ horde_monitoring_s3_force_path_style | bool | lower }}
+    insecure: {{ horde_monitoring_s3_insecure | bool | lower }}
 {% else %}
 storage_config:
   tsdb_shipper:
@@ -74,7 +74,7 @@ compactor:
   retention_enabled: {{ horde_monitoring_loki_retention_enabled | lower }}
   retention_delete_delay: 2h
   retention_delete_worker_count: 150
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
   delete_request_store: s3
 {% else %}
   delete_request_store: filesystem
@@ -82,16 +82,16 @@ compactor:
 
 ruler:
   enable_api: true
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
   storage:
     type: s3
     s3:
-      endpoint: minio:{{ horde_monitoring_minio_api_port }}
-      access_key_id: {{ horde_monitoring_minio_root_user }}
-      secret_access_key: {{ horde_monitoring_minio_root_password }}
+      endpoint: {{ horde_monitoring_s3_endpoint }}
+      access_key_id: {{ horde_monitoring_s3_access_key }}
+      secret_access_key: {{ horde_monitoring_s3_secret_key }}
       bucketnames: {{ horde_monitoring_loki_chunks_bucket }}
-      s3forcepathstyle: true
-      insecure: true
+      s3forcepathstyle: {{ horde_monitoring_s3_force_path_style | bool | lower }}
+      insecure: {{ horde_monitoring_s3_insecure | bool | lower }}
 {% else %}
   storage:
     type: local

@@ -3,7 +3,7 @@
 #
 # These rules monitor the health of:
 #   - Mimir (metrics storage)
-#   - MinIO (S3 object storage backend)
+#   - S3-compatible object storage backend
 #   - The alerting pipeline itself (Watchdog dead man's switch)
 #
 # Placed in Prometheus rules directory (default: /etc/prometheus/rules/)
@@ -11,8 +11,8 @@
 #
 # Requires Prometheus scrape configs for:
 #   - job="{{ horde_monitoring_mimir_job_name }}" → localhost:{{ horde_monitoring_mimir_port }}/metrics
-#   - job="{{ horde_monitoring_minio_job_name }}" → localhost:{{ horde_monitoring_minio_api_port }}/minio/v2/metrics/cluster
-#     (MinIO rules are only included when horde_monitoring_mimir_enable_minio is true)
+#   - job="{{ horde_monitoring_s3_job_name }}" → your configured S3 backend metrics endpoint
+#     (S3 storage rules are only included when horde_monitoring_mimir_enable_s3 is true)
 
 groups:
   # --- Dead man's switch ---
@@ -92,7 +92,7 @@ groups:
           description: >-
             The Mimir compactor has had failed runs in the past 2 hours.
             Possible causes include disk space exhaustion, corrupt blocks,
-            or MinIO connectivity issues. Check: docker logs mimir --since 2h | grep -i compact
+            or S3 connectivity issues. Check: docker logs mimir --since 2h | grep -i compact
 
       - alert: MimirCompactorNotRunning
         expr: >-
@@ -111,59 +111,27 @@ groups:
             Compaction interval is {{ horde_monitoring_mimir_compaction_interval }};
             expected ~6 runs in the lookback window.
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
-  # --- MinIO health ---
-  # These rules require the MinIO Prometheus endpoint to be scraped.
+{% if horde_monitoring_mimir_enable_s3 | bool %}
+  # --- S3 storage health ---
+  # Monitors whether the S3-compatible storage backend is reachable.
+  # Disk capacity alerts are covered generically by the host-disk-usage group below.
   # See the example playbook for the scrape config:
-  #   job_name: {{ horde_monitoring_minio_job_name }}
-  #   metrics_path: /minio/v2/metrics/cluster
-  - name: minio-health
+  #   job_name: {{ horde_monitoring_s3_job_name }}
+  #   static_configs: [{targets: ["<s3-metrics-target>"]}]
+  - name: s3-storage-health
     rules:
-      - alert: MinIODown
-        expr: up{job="{{ horde_monitoring_minio_job_name }}"} == 0
+      - alert: S3StorageDown
+        expr: up{job="{{ horde_monitoring_s3_job_name }}"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: "MinIO is unreachable"
+          summary: "S3 storage backend is unreachable"
           description: >-
-            MinIO (job={{ horde_monitoring_minio_job_name }}) has been unreachable
-            for more than 2 minutes. Mimir cannot store or retrieve metric
-            blocks without MinIO. Check: docker logs minio --since 5m
-
-      - alert: MinIODiskUsageCritical
-        expr: >-
-          (
-            horde_monitoring_minio_cluster_capacity_usable_free_bytes{job="{{ horde_monitoring_minio_job_name }}"}
-          /
-            horde_monitoring_minio_cluster_capacity_usable_total_bytes{job="{{ horde_monitoring_minio_job_name }}"}
-          ) < 0.05
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "MinIO disk usage exceeds 95%"
-          description: >-
-            MinIO free disk space is below 5%. Ingestion will fail when
-            disk is full. Immediate action: expand storage, reduce retention
-            (see horde_monitoring_application_retention), or move data off-host.
-
-      - alert: MinIODiskUsageWarning
-        expr: >-
-          (
-            horde_monitoring_minio_cluster_capacity_usable_free_bytes{job="{{ horde_monitoring_minio_job_name }}"}
-          /
-            horde_monitoring_minio_cluster_capacity_usable_total_bytes{job="{{ horde_monitoring_minio_job_name }}"}
-          ) < 0.15
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "MinIO disk usage exceeds 85%"
-          description: >-
-            MinIO free disk space is below 15%. Plan for storage expansion
-            or review retention settings before disk fills up. Current data
-            directory: {{ horde_monitoring_minio_data_dir }}
+            The S3-compatible storage backend (job={{ horde_monitoring_s3_job_name }}) has been
+            unreachable for more than 2 minutes. Mimir cannot store or retrieve metric
+            blocks without S3 storage. Check the scrape target reachability and the
+            storage backend service logs for the configured endpoint.
 {% endif %}
 
 {% if horde_monitoring_install_loki | bool %}
@@ -325,7 +293,7 @@ groups:
   # --- Host filesystem disk usage (Plan 005C) ---
   # These rules use node_exporter metrics to monitor the host partitions
   # where monitoring data lives. They fire regardless of which service
-  # consumes the space (MinIO, Mimir, Docker logs, etc.).
+  # consumes the space (S3 store, Mimir, Docker logs, etc.).
   #
   # DEPENDENCY: Requires node_filesystem_* metrics in Prometheus from a
   # host collector (for example node_exporter or Alloy prometheus.exporter.unix).
@@ -366,6 +334,6 @@ groups:
           summary: "Host filesystem < 15% free on {{ '{{' }} $labels.mountpoint {{ '}}' }}"
           description: >-
             Filesystem mounted at {{ '{{' }} $labels.mountpoint {{ '}}' }} has less than
-            15% free space. If this hosts monitoring data (MinIO, Mimir),
+            15% free space. If this hosts monitoring data (S3 store, Mimir),
             plan for expansion or review retention settings.
 {% endif %}

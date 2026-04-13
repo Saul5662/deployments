@@ -1,4 +1,4 @@
-# Grafana Mimir configuration - monolithic mode with S3 object storage (MinIO)
+# Grafana Mimir configuration - monolithic mode with S3-compatible object storage
 # Managed by Ansible - do not edit manually
 
 multitenancy_enabled: true
@@ -16,21 +16,22 @@ runtime_config:
 activity_tracker:
   filepath: /mimir/data/activity.log
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
 common:
   storage:
     backend: s3
     s3:
-      endpoint: minio:{{ horde_monitoring_minio_api_port }}
-      access_key_id: {{ horde_monitoring_minio_root_user }}
-      secret_access_key: {{ horde_monitoring_minio_root_password }}
-      insecure: true
+      endpoint: {{ horde_monitoring_s3_endpoint }}
+      access_key_id: {{ horde_monitoring_s3_access_key }}
+      secret_access_key: {{ horde_monitoring_s3_secret_key }}
+      insecure: {{ horde_monitoring_s3_insecure | bool | lower }}
+      bucket_lookup_type: {{ 'path' if (horde_monitoring_s3_force_path_style | bool) else 'auto' }}
 {% endif %}
 
 blocks_storage:
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
   s3:
-    bucket_name: {{ horde_monitoring_minio_blocks_bucket }}
+    bucket_name: {{ horde_monitoring_s3_blocks_bucket }}
 {% else %}
   backend: filesystem
   filesystem:
@@ -100,9 +101,9 @@ frontend:
 {% endif %}
 
 ruler_storage:
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
   s3:
-    bucket_name: {{ horde_monitoring_minio_ruler_bucket }}
+    bucket_name: {{ horde_monitoring_s3_ruler_bucket }}
 {% else %}
   backend: filesystem
   filesystem:

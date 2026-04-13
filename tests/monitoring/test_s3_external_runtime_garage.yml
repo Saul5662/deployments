@@ -1,0 +1,411 @@
+---
+# requires: docker-daemon
+# idempotency: skip
+# risk: deploy-safety, fail-fast, operational
+# Runtime integration test: boot a real Garage S3 backend and verify
+# horde_monitoring works in external S3 mode without embedded RustFS.
+# This test intentionally runs on localhost (not the systemd test container)
+# so it can use the host Docker daemon.
+
+- name: Test runtime services - external Garage S3 backend
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    garage_container_name: "garage-external-test"
+    garage_network_name: "mimir_monitoring"
+    garage_config_dir: "/tmp/garage-runtime"
+    garage_config_file: "{{ garage_config_dir }}/garage.toml"
+    garage_meta_dir: "{{ garage_config_dir }}/meta"
+    garage_data_dir: "{{ garage_config_dir }}/data"
+    garage_image: "dxflrs/garage:v2.1.0"
+    garage_cli_bin: "/garage"
+    garage_key_name: "horde-monitoring-test-key"
+    horde_monitoring_test_buckets:
+      - "mimir-blocks"
+      - "mimir-ruler"
+
+  pre_tasks:
+    - name: Stop stale monitoring stack from prior runs
+      ansible.builtin.command: docker compose down
+      args:
+        chdir: /opt/mimir
+      register: _stale_monitoring_down
+      failed_when: false
+      changed_when: _stale_monitoring_down.rc == 0
+
+    - name: Remove stale Garage test container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - rm
+          - -f
+          - "{{ garage_container_name }}"
+      register: _garage_remove_old
+      failed_when: false
+      changed_when: _garage_remove_old.rc == 0
+
+    - name: Remove stale Garage runtime directory
+      ansible.builtin.file:
+        path: "{{ garage_config_dir }}"
+        state: absent
+
+    - name: Ensure Garage runtime directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ garage_config_dir }}"
+        - "{{ garage_meta_dir }}"
+        - "{{ garage_data_dir }}"
+
+    - name: Render Garage single-node configuration
+      ansible.builtin.copy:
+        dest: "{{ garage_config_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+
+          replication_factor = 1
+
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+
+          [admin]
+          api_bind_addr = "[::]:3903"
+          admin_token = "garage-admin-token"
+          metrics_token = "garage-metrics-token"
+
+    - name: Check if monitoring Docker network exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - inspect
+          - "{{ garage_network_name }}"
+      register: _garage_network_inspect
+      changed_when: false
+      failed_when: false
+
+    - name: Create monitoring Docker network for role and Garage
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - create
+          - --label
+          - com.docker.compose.project=mimir
+          - --label
+          - com.docker.compose.network=monitoring
+          - "{{ garage_network_name }}"
+      when: _garage_network_inspect.rc != 0
+      changed_when: true
+
+    - name: Start Garage container for external S3 runtime test
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - -d
+          - --name
+          - "{{ garage_container_name }}"
+          - --network
+          - "{{ garage_network_name }}"
+          - --network-alias
+          - garage
+          - -v
+          - "{{ garage_config_file }}:/etc/garage.toml"
+          - -v
+          - "{{ garage_meta_dir }}:/var/lib/garage/meta"
+          - -v
+          - "{{ garage_data_dir }}:/var/lib/garage/data"
+          - "{{ garage_image }}"
+      register: _garage_run
+      changed_when: true
+
+    - name: Wait for Garage CLI status to succeed
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - status
+      register: _garage_status
+      changed_when: false
+      until: _garage_status.rc == 0
+      retries: 20
+      delay: 3
+
+    - name: Get Garage node id
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - node
+          - id
+      register: _garage_node_id
+      changed_when: false
+
+    - name: Parse Garage node id for layout assignment
+      ansible.builtin.set_fact:
+        garage_node_id_for_layout: >-
+          {{ (_garage_node_id.stdout | regex_findall('([0-9a-f]{16,64})@') | first)
+             | default((_garage_status.stdout | regex_findall('(?m)^([0-9a-f]{16,64})\s+' ) | first), true) }}
+
+    - name: Assert Garage node id was parsed
+      ansible.builtin.assert:
+        that:
+          - garage_node_id_for_layout | length > 0
+        fail_msg: >-
+          Failed to parse Garage node ID for layout assignment.
+          node id output: {{ _garage_node_id.stdout | default('(empty)') }}
+          status output: {{ _garage_status.stdout | default('(empty)') }}
+
+    - name: Assign Garage single-node layout
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - layout
+          - assign
+          - "{{ garage_node_id_for_layout }}"
+          - --zone
+          - dc1
+          - --capacity
+          - 1G
+      changed_when: true
+
+    - name: Apply Garage layout version 1
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - layout
+          - apply
+          - --version
+          - "1"
+      changed_when: true
+
+    - name: Create Garage API key for monitoring runtime test
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - key
+          - create
+          - "{{ garage_key_name }}"
+      register: _garage_key_create
+      changed_when: true
+
+    - name: Parse Garage S3 credentials from key output
+      ansible.builtin.set_fact:
+        garage_s3_access_key: "{{ (_garage_key_create.stdout | regex_findall('(?m)^Key ID:\\s*(\\S+)') | first) | default('') }}"
+        garage_s3_secret_key: "{{ (_garage_key_create.stdout | regex_findall('(?m)^Secret key:\\s*(\\S+)') | first) | default('') }}"
+
+    - name: Assert Garage key output includes S3 credentials
+      ansible.builtin.assert:
+        that:
+          - garage_s3_access_key | length > 0
+          - garage_s3_secret_key | length > 0
+        fail_msg: >-
+          Failed to parse Garage S3 credentials from key creation output:
+          {{ _garage_key_create.stdout | default('(empty output)') }}
+
+    - name: Create required S3 buckets in Garage
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - bucket
+          - create
+          - "{{ item }}"
+      loop: "{{ horde_monitoring_test_buckets }}"
+      changed_when: true
+
+    - name: Grant API key owner read/write access to required Garage buckets
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - bucket
+          - allow
+          - --read
+          - --write
+          - --owner
+          - "{{ item }}"
+          - --key
+          - "{{ garage_key_name }}"
+      loop: "{{ horde_monitoring_test_buckets }}"
+      changed_when: true
+
+  tasks:
+    - name: Run horde_monitoring role against external Garage backend
+      ansible.builtin.include_role:
+        name: horde_monitoring
+      vars:
+        horde_monitoring_install_mimir: true
+        horde_monitoring_install_grafana: true
+        horde_monitoring_install_loki: false
+        horde_monitoring_install_tempo: false
+        horde_monitoring_install_pyroscope: false
+        horde_monitoring_install_alerting_rules: false
+        horde_monitoring_configure_firewall: false
+        horde_monitoring_configure_haproxy: false
+        horde_monitoring_start_services: false
+        horde_monitoring_mimir_backup_enabled: false
+        horde_monitoring_grafana_admin_password: "garage-runtime-grafana-pass"
+        horde_monitoring_grafana_anonymous_enabled: false
+        horde_monitoring_grafana_provision_dashboards: false
+        horde_monitoring_host_filesystem_metrics_available: true
+
+        horde_monitoring_mimir_enable_s3: true
+        horde_monitoring_s3_deployment_mode: "external"
+        horde_monitoring_s3_endpoint: "garage:3900"
+        horde_monitoring_s3_internal_url: "http://garage:3900"
+        horde_monitoring_s3_api_url: "http://garage:3900"
+        horde_monitoring_s3_wait_for_ready: false
+        horde_monitoring_s3_insecure: true
+        horde_monitoring_s3_force_path_style: true
+        horde_monitoring_s3_manage_buckets: false
+        horde_monitoring_s3_access_key: "{{ garage_s3_access_key }}"
+        horde_monitoring_s3_secret_key: "{{ garage_s3_secret_key }}"
+
+  post_tasks:
+    - name: Start rendered monitoring stack with Docker Compose
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: /opt/mimir
+      changed_when: true
+
+    - name: Verify Mimir ready endpoint on external Garage backend
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:9009/ready"
+        method: GET
+        status_code: 200
+      register: _garage_runtime_mimir_health
+      retries: 30
+      delay: 4
+      until: _garage_runtime_mimir_health.status == 200
+
+    - name: Verify Grafana health endpoint on external Garage backend
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000/api/health"
+        method: GET
+        status_code: 200
+      register: _garage_runtime_grafana_health
+      retries: 20
+      delay: 3
+      until: _garage_runtime_grafana_health.status == 200
+
+    - name: Query Mimir application tenant
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:9009/prometheus/api/v1/query?query=up"
+        method: GET
+        headers:
+          X-Scope-OrgID: "ai-horde-app"
+        status_code: 200
+      register: _garage_runtime_mimir_query
+
+    - name: Assert Mimir query works with Garage backend
+      ansible.builtin.assert:
+        that:
+          - _garage_runtime_mimir_query.status == 200
+          - "'resultType' in (_garage_runtime_mimir_query.content | default(_garage_runtime_mimir_query.json | to_json))"
+        fail_msg: "Mimir query failed while using Garage external S3 backend"
+
+    - name: List running Docker containers after external Garage deploy
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - --format
+          - "{{ '{{' }}.Names{{ '}}' }}"
+      register: _garage_runtime_docker_ps
+      changed_when: false
+
+    - name: Assert expected external-backend containers are running
+      ansible.builtin.assert:
+        that:
+          - "'garage-external-test' in _garage_runtime_docker_ps.stdout"
+          - "'mimir' in _garage_runtime_docker_ps.stdout"
+          - "'grafana' in _garage_runtime_docker_ps.stdout"
+          - "'memcached' in _garage_runtime_docker_ps.stdout"
+          - "'s3-store' not in _garage_runtime_docker_ps.stdout"
+        fail_msg: "Unexpected runtime containers for external Garage mode: {{ _garage_runtime_docker_ps.stdout_lines }}"
+
+    - name: Verify Garage bucket list includes required buckets
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ garage_container_name }}"
+          - "{{ garage_cli_bin }}"
+          - -c
+          - /etc/garage.toml
+          - bucket
+          - list
+      register: _garage_bucket_list
+      changed_when: false
+
+    - name: Assert required buckets exist in Garage
+      ansible.builtin.assert:
+        that:
+          - "'mimir-blocks' in _garage_bucket_list.stdout"
+          - "'mimir-ruler' in _garage_bucket_list.stdout"
+        fail_msg: "Garage bucket provisioning incomplete: {{ _garage_bucket_list.stdout_lines }}"
+
+    - name: Stop monitoring stack
+      ansible.builtin.command: docker compose down
+      args:
+        chdir: /opt/mimir
+      changed_when: true
+
+    - name: Stop Garage test container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - rm
+          - -f
+          - "{{ garage_container_name }}"
+      changed_when: true
