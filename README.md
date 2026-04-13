@@ -62,7 +62,7 @@ corresponding example playbook — or build your own `site.yml`.
 
 | Role                                                         | Description                                               |
 | ------------------------------------------------------------ | --------------------------------------------------------- |
-| [horde_monitoring](roles/horde_monitoring/README.md)         | Mimir + Grafana + MinIO monitoring stack (Docker Compose) |
+| [horde_monitoring](roles/horde_monitoring/README.md)         | Mimir + Grafana + S3 storage monitoring stack (Docker Compose) |
 | [horde_stats_exporter](roles/horde_stats_exporter/README.md) | AI Horde API → Prometheus metrics exporter                |
 | [horde_alloy](roles/horde_alloy/README.md)                   | Grafana Alloy telemetry collector for app hosts           |
 

@@ -9,7 +9,7 @@ fit together.
 
 | Role                                                | Purpose                                                                    | README                                         |
 | --------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------- |
-| [horde_monitoring](roles/horde_monitoring/)         | Mimir + Grafana + MinIO + optional Loki/Tempo/Pyroscope via Docker Compose | [README](roles/horde_monitoring/README.md)     |
+| [horde_monitoring](roles/horde_monitoring/)         | Mimir + Grafana + S3 storage + optional Loki/Tempo/Pyroscope via Docker Compose | [README](roles/horde_monitoring/README.md)     |
 | [horde_stats_exporter](roles/horde_stats_exporter/) | AI Horde API → Prometheus metrics exporter (systemd)                       | [README](roles/horde_stats_exporter/README.md) |
 | [horde_alloy](roles/horde_alloy/)                   | Grafana Alloy telemetry collector on application hosts                     | [README](roles/horde_alloy/README.md)          |
 
@@ -27,7 +27,7 @@ AI Horde APIs                 │                                               
      ▼                        │    ├─ scrapes horde-exporter, node, mimir … │
   horde-exporter (systemd)    │    └─ remote_write ──► Mimir (Docker)        │
      │ /metrics               │                           │                   │
-     └────── scraped by ──────┘                       MinIO (S3)              │
+    └────── scraped by ──────┘               S3 backend (embedded/external)  │
                                                           │                   │
                               │                       Grafana (Docker)        │
                               │                           │ queries Mimir     │
@@ -76,6 +76,10 @@ This runs a two-play playbook:
 
 This decision is made per host from inventory variables in Play 1 of
 `examples/horde_monitoring_stack.yml`.
+
+When `horde_monitoring_install_host_disk_alerts: true`, ensure Prometheus
+ingests `node_filesystem_*` metrics and set
+`horde_monitoring_host_filesystem_metrics_available: true`.
 
 ### Node Exporter HAProxy Reverse Proxy
 
@@ -141,9 +145,10 @@ all:
       hosts:
         monitoring.example.com:
           ansible_host: 192.168.1.100
-          grafana_admin_password: "{{ vault_grafana_admin_password }}"
-          minio_root_password: "{{ vault_minio_root_password }}"
-          monitoring_configure_haproxy: true
+          horde_monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+          horde_monitoring_s3_secret_key: "{{ vault_s3_secret_key }}"
+          horde_monitoring_host_filesystem_metrics_available: true
+          horde_monitoring_configure_haproxy: true
           exporter_port: 9150
 ```
 
@@ -191,7 +196,7 @@ To add custom dashboards, place JSON files in `grafana_dashboard_dir`
 ```bash
 curl -sf http://127.0.0.1:9009/ready   && echo "Mimir OK"
 curl -sf http://127.0.0.1:3000/api/health && echo "Grafana OK"
-curl -sf http://127.0.0.1:9000/minio/health/live && echo "MinIO OK"
+curl -sf http://127.0.0.1:9000/health             && echo "S3 backend OK"
 curl -sf http://localhost:9150/metrics | head -5 && echo "Exporter OK"
 systemctl status prometheus --no-pager
 ```

@@ -5,16 +5,16 @@
 # using the prometheus.prometheus.prometheus community role.
 
 # ── Flag-combination validation ────────────────────────────
-- name: Warn when backup is enabled but MinIO is disabled
+- name: Warn when backup is enabled but S3 storage is disabled
   ansible.builtin.debug:
     msg: >-
-      horde_monitoring_mimir_backup_enabled=true has no effect because horde_monitoring_mimir_enable_minio=false.
-      Backups require MinIO as the object-storage backend.
+      horde_monitoring_mimir_backup_enabled=true has no effect because horde_monitoring_mimir_enable_s3=false.
+      Backups require S3-compatible storage as the object-storage backend.
       Set horde_monitoring_mimir_backup_enabled=false to silence this warning,
-      or enable MinIO with horde_monitoring_mimir_enable_minio=true.
+      or enable S3 storage with horde_monitoring_mimir_enable_s3=true.
   when:
     - horde_monitoring_mimir_backup_enabled | default(false) | bool
-    - not (horde_monitoring_mimir_enable_minio | default(true) | bool)
+    - not (horde_monitoring_mimir_enable_s3 | default(true) | bool)
 
 - name: Warn when Grafana anonymous access is enabled but Grafana is disabled
   ansible.builtin.debug:
@@ -35,6 +35,37 @@
   when:
     - horde_monitoring_tempo_metrics_generator_enabled | default(false) | bool
     - not (horde_monitoring_install_tempo | default(true) | bool)
+
+- name: Fail when S3 deployment mode is invalid
+  ansible.builtin.fail:
+    msg: >-
+      horde_monitoring_s3_deployment_mode must be either 'embedded' or 'external'.
+      Got: {{ horde_monitoring_s3_deployment_mode }}
+  when:
+    - horde_monitoring_mimir_enable_s3 | default(true) | bool
+    - horde_monitoring_s3_deployment_mode not in ['embedded', 'external']
+
+- name: Warn when automatic S3 bucket management is disabled in embedded mode
+  ansible.builtin.debug:
+    msg: >-
+      horde_monitoring_s3_manage_buckets=false: the role will not run the s3-init
+      bucket bootstrap job. Ensure required buckets already exist and credentials
+      permit read/write access.
+  when:
+    - horde_monitoring_mimir_enable_s3 | default(true) | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded'
+    - not (horde_monitoring_s3_manage_buckets | default(true) | bool)
+
+- name: Warn when automatic S3 bucket management is enabled in external mode
+  ansible.builtin.debug:
+    msg: >-
+      horde_monitoring_s3_deployment_mode=external and horde_monitoring_s3_manage_buckets=true:
+      the role will run the s3-init bucket bootstrap job against your external backend.
+      Ensure the configured credentials have bucket-admin permissions.
+  when:
+    - horde_monitoring_mimir_enable_s3 | default(true) | bool
+    - horde_monitoring_s3_deployment_mode == 'external'
+    - horde_monitoring_s3_manage_buckets | default(false) | bool
 
 - name: Deploy Mimir + Grafana monitoring stack
   ansible.builtin.include_tasks: mimir.yml

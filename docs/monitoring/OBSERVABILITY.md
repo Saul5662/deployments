@@ -34,7 +34,7 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
              │   Prometheus, Alertmanager, horde-exporter         │
              │                                                    │
              │ Docker Compose services (horde_monitoring role):   │
-             │   Mimir <-> MinIO (+ Memcached) <-> Grafana        │
+             │   Mimir <-> S3 store (+ Memcached) <-> Grafana     │
              │   + optional Loki / Tempo / Pyroscope              │
              │                                                    │
              │ Tenant model:                                      │
@@ -46,7 +46,7 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
 
 | Role | What it owns |
 | --- | --- |
-| `horde_monitoring` | Mimir, MinIO, Memcached, Grafana, optional Loki/Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
+| `horde_monitoring` | Mimir, S3-compatible storage, Memcached, Grafana, optional Loki/Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
 | `horde_stats_exporter` | `horde-exporter` systemd service and optional downsampling timer |
 | `horde_alloy` | App-host telemetry collection and forwarding (metrics/logs/traces) |
 | `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager, and optional node_exporter (not managed by `horde_monitoring`) |
@@ -57,13 +57,13 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
 | --- | --- | --- |
 | Mimir | enabled | `horde_monitoring_install_mimir: true` |
 | Grafana | enabled | `horde_monitoring_install_grafana: true` |
-| MinIO (Mimir object storage) | enabled | `horde_monitoring_mimir_enable_minio: true` |
+| S3-compatible storage (Mimir object storage) | enabled | `horde_monitoring_mimir_enable_s3: true` |
 | Memcached (Mimir cache) | enabled | `horde_monitoring_mimir_enable_memcached: true` |
 | Loki | disabled | `horde_monitoring_install_loki: false` |
 | Tempo | disabled | `horde_monitoring_install_tempo: false` |
 | Pyroscope | disabled | `horde_monitoring_install_pyroscope: false` |
 
-When MinIO is enabled, the compose init step creates buckets for enabled
+When S3 storage is enabled, the compose init step creates buckets for enabled
 components automatically (`mimir-blocks`, `mimir-ruler`, plus optional
 Loki/Tempo/Pyroscope buckets).
 
@@ -150,11 +150,13 @@ When `horde_monitoring_install_alerting_rules: true`, the role renders
 Prometheus rules for stack self-monitoring. Coverage includes:
 
 - Core: `Watchdog`, `MimirDown`, `MimirRequestErrors`, `MimirIngestionStalled`
-- MinIO: `MinIODown`, disk usage alerts
+- S3 storage: `S3StorageDown` (disk capacity covered by host-level alerts)
 - Optional Loki: `LokiDown`, `LokiRequestErrors`, `LokiIngestionStalled`
 - Optional Tempo: `TempoDown`, `TempoRequestErrors`, `TempoIngestionStalled`
 - Optional Pyroscope: `PyroscopeDown`, `PyroscopeRequestErrors`, `PyroscopeIngestionStalled`
-- Host disk alerts (require `node_filesystem_*` metrics): `HostDiskUsageCritical`, `HostDiskUsageHigh`
+- Host disk alerts (require `node_filesystem_*` metrics and
+  `horde_monitoring_host_filesystem_metrics_available: true`):
+  `HostDiskUsageCritical`, `HostDiskUsageHigh`
 
 ## Deploying Alloy On Application Hosts
 
@@ -250,7 +252,7 @@ your HAProxy config if you need proxied profile ingest/query access.
 ```bash
 # Core
 curl -sf http://127.0.0.1:9009/ready             # Mimir
-curl -sf http://127.0.0.1:9000/minio/health/live # MinIO
+curl -sf http://127.0.0.1:9000/health            # S3 backend (embedded RustFS default)
 curl -sf http://127.0.0.1:3000/api/health        # Grafana
 
 # Optional

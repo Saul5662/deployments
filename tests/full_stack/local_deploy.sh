@@ -252,8 +252,8 @@ cleanup_monitoring_container_name_conflicts() {
 
   local auto_clean="${HORDE_FULLSTACK_AUTO_CLEAN_MONITORING_CONFLICTS:-true}"
   local -a known_names=(
-    minio
-    minio-init
+    s3-store
+    s3-init
     memcached
     mimir
     grafana

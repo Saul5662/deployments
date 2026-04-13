@@ -1,4 +1,4 @@
-# Grafana Pyroscope configuration - monolithic mode with S3 object storage (MinIO)
+# Grafana Pyroscope configuration - monolithic mode with S3-compatible object storage
 # Managed by Ansible - do not edit manually
 
 multitenancy_enabled: {{ horde_monitoring_pyroscope_auth_enabled | lower }}
@@ -34,15 +34,15 @@ limits:
   ingestion_burst_size_mb: {{ horde_monitoring_pyroscope_ingestion_burst_size_mb }}
   compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_retention_period }}
 
-{% if horde_monitoring_mimir_enable_minio | bool %}
+{% if horde_monitoring_mimir_enable_s3 | bool %}
 storage:
   backend: s3
   s3:
-    endpoint: minio:{{ horde_monitoring_minio_api_port }}
-    access_key_id: {{ horde_monitoring_minio_root_user }}
-    secret_access_key: {{ horde_monitoring_minio_root_password }}
+    endpoint: {{ horde_monitoring_s3_endpoint }}
+    access_key_id: {{ horde_monitoring_s3_access_key }}
+    secret_access_key: {{ horde_monitoring_s3_secret_key }}
     bucket_name: {{ horde_monitoring_pyroscope_blocks_bucket }}
-    insecure: true
+    insecure: {{ horde_monitoring_s3_insecure | bool | lower }}
 {% else %}
 storage:
   backend: filesystem

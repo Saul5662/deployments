@@ -11,7 +11,7 @@
 # Then define these variables inside it:
 
 vault_grafana_admin_password: "CHANGE_ME"
-vault_minio_root_password: "CHANGE_ME"
+vault_s3_secret_key: "CHANGE_ME"
 
 # Required when deploying node_exporter with TLS:
 vault_node_exporter_password: "CHANGE_ME"

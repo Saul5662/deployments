@@ -4,14 +4,14 @@
 # Runtime integration test: starts Docker Compose services and validates health.
 #
 # Unlike render-only tests (horde_monitoring_start_services: false), this test
-# actually boots the monitoring stack and verifies that Mimir, MinIO,
+# actually boots the monitoring stack and verifies that Mimir, S3 storage,
 # Grafana, and Memcached are healthy and accepting connections.
 #
 # Requirements:
 #   - Docker daemon running in the test container (--privileged)
 #   - Sufficient memory (≥2GB recommended)
 #
-# This test uses a minimal configuration: Mimir + Grafana + MinIO (core stack),
+# This test uses a minimal configuration: Mimir + Grafana + S3 storage (core stack),
 # no Loki/Tempo/Pyroscope, no HAProxy, no dashboards.
 
 - name: Test runtime services - core stack health
@@ -28,18 +28,19 @@
     horde_monitoring_configure_firewall: false
     horde_monitoring_configure_haproxy: false
     horde_monitoring_grafana_admin_password: "test-runtime-pass"
-    horde_monitoring_minio_root_password: "test-minio-secret-12345"
+    horde_monitoring_s3_secret_key: "test-s3-secret-12345"
     horde_monitoring_application_tenant_id: "app-test"
     horde_monitoring_infrastructure_tenant_id: "infra-test"
     horde_monitoring_public_tenant_id: "public-test"
     horde_monitoring_grafana_anonymous_enabled: false
     horde_monitoring_grafana_provision_dashboards: false
+    horde_monitoring_host_filesystem_metrics_available: true
     # Actually start services — the point of this test
     horde_monitoring_start_services: true
     horde_monitoring_mimir_backup_enabled: false
     # Reduce resource footprint for CI containers
     horde_monitoring_mimir_memory_limit: "1g"
-    horde_monitoring_minio_memory_limit: "256m"
+    horde_monitoring_s3_memory_limit: "256m"
     horde_monitoring_grafana_memory_limit: "256m"
     horde_monitoring_mimir_memcached_memory_mb: 64
     horde_monitoring_mimir_memcached_memory_limit: "128m"
@@ -48,21 +49,21 @@
     - role: horde_monitoring
 
   post_tasks:
-    - name: Verify MinIO health endpoint
+    - name: Verify S3 storage health endpoint
       ansible.builtin.uri:
-        url: "http://127.0.0.1:9000/minio/health/live"
+        url: "http://127.0.0.1:9000/health"
         method: GET
         status_code: 200
-      register: horde_monitoring_minio_health
+      register: horde_monitoring_s3_health
       retries: 20
       delay: 3
-      until: horde_monitoring_minio_health.status == 200
+      until: horde_monitoring_s3_health.status == 200
 
-    - name: Assert MinIO is healthy
+    - name: Assert S3 storage is healthy
       ansible.builtin.assert:
         that:
-          - horde_monitoring_minio_health.status == 200
-        fail_msg: "MinIO health check failed"
+          - horde_monitoring_s3_health.status == 200
+        fail_msg: "S3 storage health check failed"
 
     - name: Verify Mimir ready endpoint
       ansible.builtin.uri:
@@ -172,7 +173,7 @@
       ansible.builtin.assert:
         that:
           - "'mimir' in docker_ps.stdout"
-          - "'minio' in docker_ps.stdout"
+          - "'s3-store' in docker_ps.stdout"
           - "'grafana' in docker_ps.stdout"
           - "'memcached' in docker_ps.stdout"
         fail_msg: "Expected containers not running: {{ docker_ps.stdout_lines }}"

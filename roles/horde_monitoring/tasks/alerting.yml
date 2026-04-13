@@ -1,10 +1,23 @@
 ---
 # Deploy alerting rules for the monitoring stack
-# These Prometheus rules monitor Mimir, MinIO, and alerting pipeline health.
+# These Prometheus rules monitor Mimir, S3-compatible storage, and alerting pipeline health.
 #
 # The rendered rules file is placed in the Prometheus rules directory where
 # it is automatically loaded by Prometheus via the rule_files glob.
 # See Plan 011 (docs/plans/011-alertmanager.md) for architecture details.
+
+- name: Fail when host disk alerts are enabled without host filesystem metrics
+  ansible.builtin.fail:
+    msg: >-
+      horde_monitoring_install_host_disk_alerts=true requires
+      node_filesystem_* metrics in Prometheus.
+      Set horde_monitoring_host_filesystem_metrics_available=true only when
+      host filesystem metrics are actually ingested (node_exporter or Alloy),
+      or disable host disk alerts with horde_monitoring_install_host_disk_alerts=false.
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_host_disk_alerts | default(true) | bool
+    - not (horde_monitoring_host_filesystem_metrics_available | default(false) | bool)
 
 - name: Ensure Prometheus rules directory exists
   ansible.builtin.file:

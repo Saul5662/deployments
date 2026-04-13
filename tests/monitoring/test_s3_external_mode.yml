@@ -1,0 +1,217 @@
+---
+# idempotency: skip
+# risk: deploy-safety, fail-fast, operational
+# Non-idempotent by design: this test re-renders the role twice with
+# contrasting external-S3 backup and bucket-management toggles.
+
+- name: Test horde_monitoring - external S3 defaults (opt-out backup management)
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: false
+    horde_monitoring_install_loki: false
+    horde_monitoring_install_tempo: false
+    horde_monitoring_install_pyroscope: false
+    horde_monitoring_install_alerting_rules: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_start_services: false
+
+    horde_monitoring_mimir_enable_s3: true
+    horde_monitoring_s3_deployment_mode: "external"
+    horde_monitoring_s3_endpoint: "s3.external.example.com:443"
+    horde_monitoring_s3_internal_url: "https://s3.external.example.com"
+    horde_monitoring_s3_api_url: "https://s3.external.example.com"
+    horde_monitoring_s3_wait_for_ready: false
+    horde_monitoring_s3_insecure: false
+    horde_monitoring_s3_force_path_style: false
+    horde_monitoring_s3_manage_buckets: false
+
+    horde_monitoring_mimir_backup_enabled: true
+    horde_monitoring_mimir_backup_external_mode_enabled: false
+
+  pre_tasks:
+    - name: Clean stale backup artifacts from prior runs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/mimir-backup.service
+        - /etc/systemd/system/mimir-backup.timer
+        - /etc/mimir/mimir-backup.env
+      become: true
+
+  roles:
+    - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir config
+      ansible.builtin.slurp:
+        path: /etc/mimir/mimir.yaml
+      register: _external_mimir_config
+
+    - name: Read rendered Docker Compose
+      ansible.builtin.slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: _external_compose
+
+    - name: Stat backup service artifact
+      ansible.builtin.stat:
+        path: /etc/systemd/system/mimir-backup.service
+      register: _external_backup_service
+
+    - name: Stat backup timer artifact
+      ansible.builtin.stat:
+        path: /etc/systemd/system/mimir-backup.timer
+      register: _external_backup_timer
+
+    - name: Stat backup env artifact
+      ansible.builtin.stat:
+        path: /etc/mimir/mimir-backup.env
+      register: _external_backup_env
+
+    - name: Assert external mode render contracts with opt-out backup management
+      ansible.builtin.assert:
+        that:
+          - "'endpoint: s3.external.example.com:443' in (_external_mimir_config.content | b64decode)"
+          - "'bucket_lookup_type: auto' in (_external_mimir_config.content | b64decode)"
+          - "'s3-store' not in (_external_compose.content | b64decode)"
+          - "'s3-init' not in (_external_compose.content | b64decode)"
+          - not _external_backup_service.stat.exists
+          - not _external_backup_timer.stat.exists
+          - not _external_backup_env.stat.exists
+
+- name: Test horde_monitoring - external S3 opt-in backup and bucket bootstrap
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: false
+    horde_monitoring_install_loki: false
+    horde_monitoring_install_tempo: false
+    horde_monitoring_install_pyroscope: false
+    horde_monitoring_install_alerting_rules: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_start_services: false
+
+    horde_monitoring_mimir_enable_s3: true
+    horde_monitoring_s3_deployment_mode: "external"
+    horde_monitoring_s3_endpoint: "s3.external.example.com:443"
+    horde_monitoring_s3_internal_url: "https://s3.external.example.com"
+    horde_monitoring_s3_api_url: "https://s3.external.example.com"
+    horde_monitoring_s3_wait_for_ready: false
+    horde_monitoring_s3_insecure: true
+    horde_monitoring_s3_force_path_style: true
+    horde_monitoring_s3_manage_buckets: true
+    horde_monitoring_s3_access_key: "external-s3-user"
+    horde_monitoring_s3_secret_key: "external-s3-secret"
+
+    horde_monitoring_mimir_backup_enabled: true
+    horde_monitoring_mimir_backup_external_mode_enabled: true
+    horde_monitoring_mimir_backup_target_endpoint: "https://backup.example.com"
+    horde_monitoring_mimir_backup_target_bucket: "mimir-backup"
+    horde_monitoring_mimir_backup_target_access_key: "backup-user"
+    horde_monitoring_mimir_backup_target_secret_key: "backup-secret"
+    horde_monitoring_mimir_backup_target_insecure: true
+
+  roles:
+    - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir config in external opt-in mode
+      ansible.builtin.slurp:
+        path: /etc/mimir/mimir.yaml
+      register: _external_optin_mimir_config
+
+    - name: Read rendered Docker Compose in external opt-in mode
+      ansible.builtin.slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: _external_optin_compose
+
+    - name: Read rendered backup service in external opt-in mode
+      ansible.builtin.slurp:
+        path: /etc/systemd/system/mimir-backup.service
+      register: _external_optin_backup_service
+
+    - name: Stat backup timer in external opt-in mode
+      ansible.builtin.stat:
+        path: /etc/systemd/system/mimir-backup.timer
+      register: _external_optin_backup_timer
+
+    - name: Stat backup env in external opt-in mode
+      ansible.builtin.stat:
+        path: /etc/mimir/mimir-backup.env
+      register: _external_optin_backup_env
+
+    - name: Assert external mode opt-in contracts
+      ansible.builtin.assert:
+        that:
+          - "'bucket_lookup_type: path' in (_external_optin_mimir_config.content | b64decode)"
+          - "'s3-store' not in (_external_optin_compose.content | b64decode)"
+          - "'s3-init' in (_external_optin_compose.content | b64decode)"
+          - "'mc alias set local https://s3.external.example.com' in (_external_optin_compose.content | b64decode)"
+          - "'--insecure' in (_external_optin_compose.content | b64decode)"
+          - "'mc alias set local $$S3_LOCAL_ENDPOINT $$S3_LOCAL_ACCESS_KEY $$S3_LOCAL_SECRET_KEY --insecure;' in (_external_optin_backup_service.content | b64decode)"
+          - _external_optin_backup_timer.stat.exists
+          - _external_optin_backup_env.stat.exists
+
+- name: Test horde_monitoring - Garage external S3 compatibility profile
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_monitoring_install_mimir: true
+    horde_monitoring_install_grafana: false
+    horde_monitoring_install_loki: false
+    horde_monitoring_install_tempo: false
+    horde_monitoring_install_pyroscope: false
+    horde_monitoring_install_alerting_rules: false
+    horde_monitoring_configure_firewall: false
+    horde_monitoring_configure_haproxy: false
+    horde_monitoring_start_services: false
+
+    horde_monitoring_mimir_enable_s3: true
+    horde_monitoring_s3_deployment_mode: "external"
+    horde_monitoring_s3_endpoint: "garage:3900"
+    horde_monitoring_s3_internal_url: "http://garage:3900"
+    horde_monitoring_s3_api_url: "http://garage:3900"
+    horde_monitoring_s3_wait_for_ready: false
+    horde_monitoring_s3_insecure: true
+    horde_monitoring_s3_force_path_style: true
+    horde_monitoring_s3_manage_buckets: true
+    horde_monitoring_s3_access_key: "garage-access-key"
+    horde_monitoring_s3_secret_key: "garage-secret-key"
+
+    horde_monitoring_mimir_backup_enabled: false
+    horde_monitoring_mimir_backup_external_mode_enabled: false
+
+  roles:
+    - role: horde_monitoring
+
+  post_tasks:
+    - name: Read rendered Mimir config for Garage profile
+      ansible.builtin.slurp:
+        path: /etc/mimir/mimir.yaml
+      register: _garage_mimir_config
+
+    - name: Read rendered Docker Compose for Garage profile
+      ansible.builtin.slurp:
+        path: /opt/mimir/docker-compose.yml
+      register: _garage_compose
+
+    - name: Assert Garage external profile contracts
+      ansible.builtin.assert:
+        that:
+          - "'endpoint: garage:3900' in (_garage_mimir_config.content | b64decode)"
+          - "'bucket_lookup_type: path' in (_garage_mimir_config.content | b64decode)"
+          - "'insecure: true' in (_garage_mimir_config.content | b64decode)"
+          - "'s3-store' not in (_garage_compose.content | b64decode)"
+          - "'s3-init' in (_garage_compose.content | b64decode)"
+          - "'mc alias set local http://garage:3900 $$S3_INIT_ACCESS_KEY $$S3_INIT_SECRET_KEY --insecure;' in (_garage_compose.content | b64decode)"

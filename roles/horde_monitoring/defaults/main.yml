@@ -18,7 +18,7 @@ horde_monitoring_configure_haproxy: false
 # and health-check waits. All configs are still rendered and can be asserted on.
 horde_monitoring_start_services: true
 
-# Mimir configuration (Docker-based, monolithic mode, S3 object storage via MinIO)
+# Mimir configuration (Docker-based, monolithic mode, S3-compatible object storage)
 horde_monitoring_mimir_port: 9009
 horde_monitoring_mimir_image: "grafana/mimir:2.15.0"
 horde_monitoring_mimir_config_dir: "/etc/mimir"
@@ -29,35 +29,79 @@ horde_monitoring_mimir_log_level: "warn"
 horde_monitoring_mimir_blocks_retention: ""
 horde_monitoring_mimir_runtime_config_period: "10s"
 
-# MinIO object storage (S3-compatible, local self-hosted)
-# MinIO provides the long-term block storage backend for Mimir.
-horde_monitoring_mimir_enable_minio: true
-horde_monitoring_minio_image: "minio/minio:RELEASE.2025-09-07T16-13-09Z"
-horde_monitoring_minio_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
-horde_monitoring_minio_api_port: 9000
-horde_monitoring_minio_console_port: 9001
-# Persistent data directory — all MinIO object data lives here.
-# Place on a dedicated volume/partition in production for isolation.
-horde_monitoring_minio_data_dir: "/var/lib/minio-data"
-horde_monitoring_minio_root_user: "mimir"
-horde_monitoring_minio_root_password: "changeme-minio-secret"
-horde_monitoring_minio_blocks_bucket: "mimir-blocks"
-horde_monitoring_minio_ruler_bucket: "mimir-ruler"
-horde_monitoring_minio_memory_limit: "512m"
+# S3-compatible object storage backend
+# Provides the long-term block storage backend for Mimir, Loki, Tempo, and Pyroscope.
+#
+# Deployment modes:
+# - embedded: role deploys a local RustFS container (default; convenient for local dev)
+# - external: role does not deploy storage; point endpoint vars at an existing S3 backend
+#
+# The role explicitly supports any Mimir-compatible S3 backend by configuring
+# endpoint/auth/path-style/insecure options via these variables.
+horde_monitoring_mimir_enable_s3: true
+horde_monitoring_s3_deployment_mode: "embedded"
 
-# Offsite backup via MinIO client mirror.
-# Only applies when horde_monitoring_mimir_enable_minio is true (MinIO is the storage backend).
-# Enabled by default because MinIO runs in single-drive mode with no
-# redundancy — a disk failure causes permanent data loss without backup.
-# Set horde_monitoring_mimir_backup_enabled: false to disable (a warning task will fire).
-# Has no effect when horde_monitoring_mimir_enable_minio: false.
+# S3 endpoint used by Mimir/Loki/Tempo/Pyroscope configs (host:port, no scheme).
+# Embedded default resolves via Docker network service name.
+horde_monitoring_s3_endpoint: "s3-store:9000"
+
+# Full URLs used by health checks and mc alias operations.
+# - internal_url: endpoint as seen from compose-network containers
+# - api_url: endpoint as seen from the host/systemd context
+horde_monitoring_s3_internal_url: "http://s3-store:9000"
+horde_monitoring_s3_api_url: "http://127.0.0.1:{{ horde_monitoring_s3_api_port }}"
+horde_monitoring_s3_healthcheck_url: "{{ horde_monitoring_s3_api_url }}/health"
+# Wait for S3 health endpoint before checking Mimir readiness.
+# Default is mode-aware:
+# - embedded: true (local RustFS exposes /health)
+# - external: false (many providers do not expose a compatible /health endpoint)
+horde_monitoring_s3_wait_for_ready: "{{ horde_monitoring_s3_deployment_mode == 'embedded' }}"
+
+# S3 client behavior flags for all backends.
+horde_monitoring_s3_insecure: true
+horde_monitoring_s3_force_path_style: true
+
+# Embedded RustFS image defaults
+horde_monitoring_s3_image: "rustfs/rustfs:1.0.0-alpha.93"
+horde_monitoring_s3_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+horde_monitoring_s3_api_port: 9000
+horde_monitoring_s3_console_port: 9001
+# Persistent data directory — all S3 object data lives here.
+# Place on a dedicated volume/partition in production for isolation.
+# RustFS runs as UID 10001; this directory is owned by that UID.
+horde_monitoring_s3_data_dir: "/var/lib/s3-data"
+horde_monitoring_s3_embedded_uid: 10001
+horde_monitoring_s3_embedded_gid: 10001
+horde_monitoring_s3_access_key: "mimir"
+horde_monitoring_s3_secret_key: "changeme-s3-secret"
+# Automatically create required buckets via mc init job.
+# Default is mode-aware:
+# - embedded: true (bootstrap local buckets)
+# - external: false (opt-in; avoids requiring admin permissions on shared backends)
+horde_monitoring_s3_manage_buckets: "{{ horde_monitoring_s3_deployment_mode == 'embedded' }}"
+horde_monitoring_s3_blocks_bucket: "mimir-blocks"
+horde_monitoring_s3_ruler_bucket: "mimir-ruler"
+horde_monitoring_s3_memory_limit: "512m"
+
+# Offsite backup via S3 client (mc) mirror.
+# Only applies when horde_monitoring_mimir_enable_s3 is true.
+# Embedded mode defaults to strict backup behavior because local storage is
+# single-drive with no redundancy.
+# External mode backup management is opt-in via
+# horde_monitoring_mimir_backup_external_mode_enabled.
 horde_monitoring_mimir_backup_enabled: true
+# In external S3 mode, backup management is opt-in by default.
+# When false, backup units/env are not rendered in external mode even if
+# horde_monitoring_mimir_backup_enabled is true.
+horde_monitoring_mimir_backup_external_mode_enabled: false
 horde_monitoring_mimir_backup_schedule: "*-*-* 02:00:00"
 horde_monitoring_mimir_backup_target_endpoint: ""
 horde_monitoring_mimir_backup_target_bucket: ""
 horde_monitoring_mimir_backup_target_access_key: ""
 horde_monitoring_mimir_backup_target_secret_key: ""
 horde_monitoring_mimir_backup_target_insecure: false
+# Local path for backup state tracking (timestamp marker).
+horde_monitoring_mimir_backup_state_dir: "/var/lib/mimir-backup"
 # Controls whether `mc mirror --remove` is passed, which deletes objects
 # from the remote that were deleted locally (e.g. by the compactor after
 # retention expires). Default: false (append-only — safer, remote retains
@@ -65,7 +109,7 @@ horde_monitoring_mimir_backup_target_insecure: false
 # but propagates accidental deletions).
 horde_monitoring_mimir_backup_remove_deleted: false
 # Include Grafana's SQLite database (grafana.db) in the backup scope.
-# When true, grafana.db is copied into the MinIO ruler bucket before the
+# When true, grafana.db is copied into the S3 ruler bucket before the
 # mirror runs, so it is included in the offsite backup. Provisioned
 # resources (orgs, datasources, dashboards) are re-created by the playbook,
 # but user preferences, annotations, API keys, and manual edits are not.
@@ -77,8 +121,8 @@ horde_monitoring_mimir_backup_grafana_db: false
 horde_monitoring_application_tenant_id: "ai-horde-app"
 # ⚠ Infinite retention: blocks accumulate indefinitely (~2 GB/month at 50k series).
 # This is an intentional trade-off — full history is valuable, and disk usage is
-# bounded in practice by monitoring alerts (MinIODiskUsageCritical/Warning +
-# HostDiskUsageHigh). If growth becomes a problem, change to a bounded value
+# bounded in practice by monitoring alerts (HostDiskUsageHigh).
+# If growth becomes a problem, change to a bounded value
 # (e.g. "365d") — the compactor will garbage-collect blocks beyond the window.
 horde_monitoring_application_retention: "0"
 horde_monitoring_application_datasource_name: "AI Horde App"
@@ -158,7 +202,7 @@ horde_monitoring_grafana_provision_dashboards: true
 horde_monitoring_alertmanager_url: ""
 
 # Alerting rules for monitoring stack self-monitoring
-# Renders a Prometheus alerting rules file for Mimir, MinIO, and pipeline health.
+# Renders a Prometheus alerting rules file for Mimir, S3 storage, and pipeline health.
 # The rules file is placed in the Prometheus rules directory and auto-loaded.
 # Set to false if you provide your own rules or don't use Prometheus alerting.
 horde_monitoring_install_alerting_rules: true
@@ -166,20 +210,24 @@ horde_monitoring_install_alerting_rules: true
 # node_filesystem_* metrics being present in Prometheus. If your Prometheus
 # setup does not ingest host filesystem metrics, set this to false.
 horde_monitoring_install_host_disk_alerts: true
+# Explicit contract flag: set true only when Prometheus ingests node_filesystem_*
+# for the monitored host(s). The role fails fast when host disk alerts are enabled
+# but this flag is false and services are started.
+horde_monitoring_host_filesystem_metrics_available: false
 horde_monitoring_alerting_rules_dir: "/etc/prometheus/rules"
 horde_monitoring_alerting_rules_file: "monitoring-stack.rules"
 # Job names must match the job_name in your Prometheus scrape_configs
 horde_monitoring_mimir_job_name: "mimir"
-horde_monitoring_minio_job_name: "minio"
+horde_monitoring_s3_job_name: "s3"
 horde_monitoring_loki_job_name: "loki"
 horde_monitoring_tempo_job_name: "tempo"
 horde_monitoring_pyroscope_job_name: "pyroscope"
 
 # ---------------------------------------------------------------------------
-# Loki (log aggregation — Docker-based, monolithic mode, S3 via MinIO)
+# Loki (log aggregation — Docker-based, monolithic mode, S3-compatible storage)
 # ---------------------------------------------------------------------------
 # Deploy Loki alongside Mimir in the Docker Compose stack.
-# When enabled, Loki stores logs in MinIO and is accessible at localhost:3100.
+# When enabled, Loki stores logs in S3-compatible storage and is accessible at localhost:3100.
 # Set to false to skip Loki deployment (e.g. metrics-only monitoring).
 horde_monitoring_install_loki: true
 
@@ -194,7 +242,7 @@ horde_monitoring_loki_log_level: "warn"
 # Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
 horde_monitoring_loki_auth_enabled: true
 
-# MinIO bucket for Loki log chunks and index data
+# S3 bucket for Loki log chunks and index data
 horde_monitoring_loki_chunks_bucket: "loki-chunks"
 
 # Retention via the compactor. Set to "0" to disable (infinite retention).
@@ -220,10 +268,10 @@ horde_monitoring_loki_max_query_lookback: "2160h"
 horde_monitoring_loki_allow_structured_metadata: true
 
 # ---------------------------------------------------------------------------
-# Tempo (distributed tracing — Docker-based, monolithic mode, S3 via MinIO)
+# Tempo (distributed tracing — Docker-based, monolithic mode, S3-compatible storage)
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Tempo alongside Mimir in the Docker Compose stack.
-# When enabled, Tempo receives OTLP traces and stores them in MinIO.
+# When enabled, Tempo receives OTLP traces and stores them in S3-compatible storage.
 horde_monitoring_install_tempo: false
 
 horde_monitoring_tempo_image: "grafana/tempo:2.7.1"
@@ -235,7 +283,7 @@ horde_monitoring_tempo_data_dir: "/var/lib/tempo"
 horde_monitoring_tempo_memory_limit: "2g"
 horde_monitoring_tempo_log_level: "warn"
 
-# MinIO bucket for Tempo trace blocks
+# S3 bucket for Tempo trace blocks
 horde_monitoring_tempo_traces_bucket: "tempo-traces"
 
 # Trace retention — the compactor removes blocks older than this.
@@ -264,10 +312,10 @@ horde_monitoring_tempo_ingester_max_block_bytes: 1000000
 horde_monitoring_tempo_ingester_max_block_duration: "5m"
 
 # ---------------------------------------------------------------------------
-# Pyroscope (continuous profiling — Docker-based, monolithic mode, S3 via MinIO)
+# Pyroscope (continuous profiling — Docker-based, monolithic mode, S3-compatible storage)
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Pyroscope alongside Mimir in the Docker Compose stack.
-# When enabled, Pyroscope receives profiling data and stores it in MinIO.
+# When enabled, Pyroscope receives profiling data and stores it in S3-compatible storage.
 horde_monitoring_install_pyroscope: false
 
 horde_monitoring_pyroscope_image: "grafana/pyroscope:1.19.0"
@@ -281,7 +329,7 @@ horde_monitoring_pyroscope_log_level: "warn"
 # Multi-tenancy (aligns with Mimir's model — requires X-Scope-OrgID on all requests)
 horde_monitoring_pyroscope_auth_enabled: true
 
-# MinIO bucket for Pyroscope profile data
+# S3 bucket for Pyroscope profile data
 horde_monitoring_pyroscope_blocks_bucket: "pyroscope-data"
 
 # Global retention default (applies to tenants without overrides).

@@ -279,7 +279,7 @@ If you disabled auto-clean with
 or clean conflicts manually with:
 
 ```bash
-docker rm -f minio minio-init memcached mimir grafana loki tempo pyroscope \
+docker rm -f s3-store s3-init memcached mimir grafana loki tempo pyroscope \
   alertmanager prometheus horde-exporter alloy 2>/dev/null || true
 ```
 

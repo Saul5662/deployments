@@ -27,7 +27,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 
 ## Mimir
 
-**Variable:** `mimir_image` (default: `grafana/mimir:2.15.0`)
+**Variable:** `horde_monitoring_mimir_image` (default: `grafana/mimir:2.15.0`)
 
 **Upgrade guide:**
 [Grafana Mimir upgrade guide](https://grafana.com/docs/mimir/latest/set-up/migrate/)
@@ -49,31 +49,31 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 
 ---
 
-## MinIO
+## S3-Compatible Storage (RustFS)
 
-**Variables:** `minio_image`, `minio_mc_image`
+**Variables:** `horde_monitoring_s3_image`, `horde_monitoring_s3_mc_image`
 
 **Release notes:**
-[MinIO releases](https://github.com/minio/minio/releases)
+[RustFS releases](https://github.com/rustfs/rustfs/releases)
 
 **Key considerations:**
 
-- MinIO uses date-based release tags (e.g., `RELEASE.2025-09-07T16-13-09Z`).
-- MinIO is generally backward-compatible, but major feature releases
-  occasionally change on-disk format or default behaviors.
-- Keep the `mc` (MinIO Client) image roughly contemporary with the server
-  image — large version gaps can cause API incompatibilities.
+- RustFS is currently alpha software (`rustfs/rustfs:1.0.0-alpha.93`). For
+  production use, operators may override `horde_monitoring_s3_image` with any
+  S3-compatible backend (e.g., SeaweedFS, Garage, or a hosted S3 service).
+- Keep the `mc` (MinIO Client) image roughly contemporary — large version
+  gaps can cause S3 API incompatibilities.
 - After upgrading, verify the health endpoint:
   ```bash
-  curl -s http://127.0.0.1:9000/minio/health/live
+  curl -s http://127.0.0.1:9000/health
   ```
-- MinIO data at `/var/lib/minio-data` is persistent and survives upgrades.
+- S3 data at `/var/lib/s3-data` is persistent and survives upgrades.
 
 ---
 
 ## Grafana
 
-**Variable:** `grafana_image` (default: `grafana/grafana:12.4.1`)
+**Variable:** `horde_monitoring_grafana_image` (default: `grafana/grafana:12.4.1`)
 
 **Upgrade guide:**
 [Grafana upgrade guide](https://grafana.com/docs/grafana/latest/upgrade-guide/)
@@ -96,7 +96,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 
 ## Memcached
 
-**Variable:** `mimir_memcached_image` (default: `memcached:1.6.41-alpine`)
+**Variable:** `horde_monitoring_mimir_memcached_image` (default: `memcached:1.6.41-alpine`)
 
 **Release notes:**
 [Memcached releases](https://github.com/memcached/memcached/wiki/ReleaseNotes)
@@ -152,7 +152,7 @@ The role depends on:
 
 ## Loki
 
-**Variable:** `loki_image` (default: `grafana/loki:3.4.2`)
+**Variable:** `horde_monitoring_loki_image` (default: `grafana/loki:3.4.2`)
 
 **Upgrade guide:**
 [Grafana Loki upgrade guide](https://grafana.com/docs/loki/latest/setup/upgrade/)
@@ -176,7 +176,7 @@ The role depends on:
 
 ## Tempo
 
-**Variable:** `tempo_image` (default: `grafana/tempo:2.7.1`)
+**Variable:** `horde_monitoring_tempo_image` (default: `grafana/tempo:2.7.1`)
 
 **Upgrade guide:**
 [Grafana Tempo upgrade guide](https://grafana.com/docs/tempo/latest/setup/upgrade/)
@@ -196,15 +196,15 @@ The role depends on:
 
 ## Pyroscope
 
-**Variable:** `pyroscope_image` (default: `grafana/pyroscope:1.19.0`)
+**Variable:** `horde_monitoring_pyroscope_image` (default: `grafana/pyroscope:1.19.0`)
 
 **Upgrade guide:**
 [Grafana Pyroscope releases](https://github.com/grafana/pyroscope/releases)
 
 **Key considerations:**
 
-- Pyroscope stores profile data in MinIO. Block format changes between major
-  versions are handled by the compactor, but read release notes carefully.
+- Pyroscope stores profile data in S3 storage. Block format changes between
+  major versions are handled by the compactor, but read release notes carefully.
 - The monolithic deployment (`-target=all`) means all components upgrade
   atomically.
 - After upgrading, verify `/ready` returns HTTP 200:
