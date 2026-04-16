@@ -10,6 +10,10 @@
 #   ./tests/run_tests.sh --list                       # list discoverable tests
 #   ./tests/run_tests.sh --jobs 4                     # run tests in parallel (max 4 concurrent)
 #   ./tests/run_tests.sh --jobs 3 monitoring          # parallel within a suite
+#   ./tests/run_tests.sh --docker-daemon-tests monitoring/test_runtime_services
+#                                                   # opt-in mode: build daemon-enabled
+#                                                   # container image for tests marked
+#                                                   # "# requires: docker-daemon"
 #
 # Logs are written to tests/test-results/<timestamp>/ with one file per
 # playbook, plus a summary.txt for scripted analysis.
@@ -24,10 +28,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-IMAGE_NAME="horde-test-systemd"
+IMAGE_NAME_BASE="horde-test-systemd"
+IMAGE_NAME="$IMAGE_NAME_BASE"
 TEMP_DOCKER_CONFIG=""
 LOG_DIR=""
 MAX_JOBS=1
+ENABLE_DOCKER_DAEMON_TESTS=0
 
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
@@ -224,8 +230,17 @@ configure_docker_cli() {
 
 
 build_image() {
-  log "Building test image ${IMAGE_NAME}..."
-  docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile.systemd" "$SCRIPT_DIR"
+  local docker_daemon_arg="0"
+  if [ "$ENABLE_DOCKER_DAEMON_TESTS" -eq 1 ]; then
+    docker_daemon_arg="1"
+  fi
+
+  log "Building test image ${IMAGE_NAME} (docker-daemon=${docker_daemon_arg})..."
+  docker build \
+    --build-arg HORDE_TEST_ENABLE_DOCKER_DAEMON="$docker_daemon_arg" \
+    -t "$IMAGE_NAME" \
+    -f "$SCRIPT_DIR/Dockerfile.systemd" \
+    "$SCRIPT_DIR"
 }
 
 
@@ -259,6 +274,29 @@ start_container() {
 
   if [ $retries -eq 0 ]; then
     warn "systemd did not reach 'running' — continuing anyway (may be 'degraded' in container)"
+  fi
+
+  if [ "$ENABLE_DOCKER_DAEMON_TESTS" -eq 1 ]; then
+    log "Configuring Docker daemon storage driver for nested runtime tests..."
+    docker exec "$container_name" sh -lc "mkdir -p /etc/docker && printf '%s\n' '{\"storage-driver\":\"vfs\"}' > /etc/docker/daemon.json"
+
+    log "Starting Docker daemon inside ${container_name} (opt-in runtime mode)..."
+    docker exec "$container_name" systemctl start docker >/dev/null 2>&1 || true
+
+    local docker_retries=30
+    while [ $docker_retries -gt 0 ]; do
+      if docker exec "$container_name" docker info >/dev/null 2>&1; then
+        break
+      fi
+      docker_retries=$((docker_retries - 1))
+      sleep 2
+    done
+
+    if [ $docker_retries -eq 0 ]; then
+      warn "Docker daemon did not become ready inside ${container_name}; daemon-required tests may skip"
+    else
+      log "Docker daemon ready inside ${container_name}"
+    fi
   fi
 
   log "Container ready: ${container_name}"
@@ -297,8 +335,12 @@ run_playbook() {
   # — the container only ships the Docker CLI, not the daemon).
   if [ "$is_local" != "true" ] && head -5 "$playbook_path" | grep -qi '# requires: docker-daemon'; then
     if ! docker exec "$container_name" docker info >/dev/null 2>&1; then
+      local skip_reason="Docker daemon unavailable in container"
+      if [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
+        skip_reason="${skip_reason} (re-run with --docker-daemon-tests)"
+      fi
       log "SKIP ${playbook_name}: requires a Docker daemon inside ${container_name}"
-      record_result "$pb_label" "SKIP" "Docker daemon unavailable in container" ""
+      record_result "$pb_label" "SKIP" "$skip_reason" ""
       return 0
     fi
   fi
@@ -474,12 +516,21 @@ main() {
         MAX_JOBS="${2:?--jobs requires a number}"
         shift 2
         ;;
+      --docker-daemon-tests)
+        ENABLE_DOCKER_DAEMON_TESTS=1
+        shift
+        ;;
       *)
         suite_args+=("$1")
         shift
         ;;
     esac
   done
+
+  if [ "$ENABLE_DOCKER_DAEMON_TESTS" -eq 1 ]; then
+    IMAGE_NAME="${IMAGE_NAME_BASE}-dind"
+    log "Runtime daemon mode enabled: using daemon-capable image tag ${IMAGE_NAME}"
+  fi
 
   trap cleanup EXIT
 

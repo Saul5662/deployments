@@ -161,11 +161,24 @@
         that:
           - _frontpage_defaults.aihorde_frontpage_repo_version is regex('^[0-9a-f]{40}$')
           - _regen_defaults.horde_regen_worker_repo_version is regex('^[0-9a-f]{40}$')
-          - _monitoring_defaults.horde_monitoring_grafana_dashboards_repo_ref is regex('^[0-9a-f]{40}$')
-          - _exporter_defaults.horde_stats_exporter_repo_ref is regex('^[0-9a-f]{40}$')
+          # Dashboard and exporter git refs only required when source mode is 'git' (default)
+          - >-
+            _monitoring_defaults.horde_monitoring_grafana_dashboards_source | default('git') != 'git'
+            or _monitoring_defaults.horde_monitoring_grafana_dashboards_repo_ref is regex('^[0-9a-f]{40}$')
+          - >-
+            _exporter_defaults.horde_stats_exporter_install_source | default('git') != 'git'
+            or _exporter_defaults.horde_stats_exporter_repo_ref is regex('^[0-9a-f]{40}$')
         fail_msg: >-
           All role defaults must pin source repos to full 40-char SHA commits
-          (no branch names, no short hashes).
+          (no branch names, no short hashes) when using git source mode.
+
+    - name: Assert dashboard and exporter source modes are valid
+      ansible.builtin.assert:
+        that:
+          - _monitoring_defaults.horde_monitoring_grafana_dashboards_source | default('git') in ['git', 'release', 'local']
+          - _exporter_defaults.horde_stats_exporter_install_source | default('git') in ['git', 'wheel', 'local']
+        fail_msg: >-
+          Dashboard source must be git|release|local; exporter install source must be git|wheel|local.
 
     - name: Assert exporter uv installer has checksum and version pinned
       ansible.builtin.assert:

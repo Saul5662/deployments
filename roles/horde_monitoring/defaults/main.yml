@@ -41,6 +41,18 @@ horde_monitoring_mimir_runtime_config_period: "10s"
 horde_monitoring_mimir_enable_s3: true
 horde_monitoring_s3_deployment_mode: "embedded"
 
+# Operator-managed S3 flag.
+# When true, the monitoring role assumes the operator manages S3 lifecycle
+# externally (e.g. via the standalone rustfs role on another host). The role:
+# - Skips S3 reachability pre-flight checks at deploy time
+# - Still configures Mimir/Loki/Tempo/Pyroscope to point at the endpoint
+# - Does not deploy any S3 containers (same as external mode)
+#
+# Use this when S3 is deployed to a different host (e.g. via the rustfs role)
+# and you want to avoid false failures if S3 is deployed in a separate play
+# or is temporarily unreachable during the monitoring deploy.
+horde_monitoring_s3_operator_managed: false
+
 # S3 endpoint used by Mimir/Loki/Tempo/Pyroscope configs (host:port, no scheme).
 # Embedded default resolves via Docker network service name.
 horde_monitoring_s3_endpoint: "s3-store:9000"
@@ -186,13 +198,42 @@ horde_monitoring_grafana_anonymous_org_role: "Viewer"
 horde_monitoring_grafana_min_refresh_interval: "5s"
 horde_monitoring_grafana_dataproxy_timeout: 30
 
-# Dashboard provisioning from horde-exporters repository
-horde_monitoring_grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
-# Pin to a release tag for reproducible deployments (e.g., "v1.2.0").
-# Using "main" always fetches the latest dashboards but may break if the
-# repo layout changes.
-horde_monitoring_grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
+# Dashboard provisioning
+#
+# Source mode determines how dashboards are obtained:
+#   release - download a pre-built tarball from a GitHub Release (recommended)
+#   git     - shallow-clone from a git repo at a pinned ref (legacy)
+#   local   - copy from a local filesystem path (useful for development)
+horde_monitoring_grafana_dashboards_source: "release"
 horde_monitoring_grafana_provision_dashboards: true
+
+# Pinned release tag for the horde-exporters project.
+# In release mode the role downloads the release manifest from this tag and
+# resolves the actual dashboard tarball filename and checksum automatically.
+horde_monitoring_grafana_dashboards_release_version: "v0.1.2"
+
+# --- release mode settings ---
+# GitHub repository that hosts the releases.
+horde_monitoring_grafana_dashboards_release_repo: "Haidra-Org/horde-exporters"
+# Override: set a full URL to skip manifest resolution for the tarball.
+# When empty, the role derives the URL from the manifest.
+horde_monitoring_grafana_dashboards_release_url: ""
+# Override: set a sha256 checksum to skip manifest resolution for checksum.
+# When empty, the role takes the checksum from the manifest.
+horde_monitoring_grafana_dashboards_release_checksum: ""
+
+# --- git mode settings (legacy) ---
+horde_monitoring_grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
+# Pin to a full SHA for reproducible deployments.
+horde_monitoring_grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
+# Paths inside the cloned repo where dashboard JSON files live.
+# Override if the upstream repo restructures.
+horde_monitoring_grafana_dashboards_git_app_path: "packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards"
+horde_monitoring_grafana_dashboards_git_infra_path: "dashboards"
+
+# --- local mode settings ---
+# Filesystem path on the target host containing app/ and infra/ subdirectories.
+horde_monitoring_grafana_dashboards_local_path: ""
 
 # Alertmanager datasource in Grafana
 # When set to a non-empty URL, provisions an Alertmanager datasource in Grafana
@@ -360,6 +401,18 @@ horde_monitoring_stats_exporter_port: 9150
 # is deployed alongside the monitoring stack.
 horde_monitoring_configure_alertmanager_backend: false
 horde_monitoring_configure_stats_exporter_backend: false
+
+# Loki ingestion frontend — exposes Loki's push API to remote Alloy agents
+# behind HAProxy basic auth.  Requires horde_monitoring_install_loki: true.
+# The frontend forwards to the horde_monitoring_loki_backend defined above.
+horde_monitoring_configure_loki_ingestion_frontend: false
+# Port HAProxy listens on for remote Alloy log pushes (distinct from Loki's
+# internal port to avoid conflicts with the localhost-only Docker mapping).
+horde_monitoring_loki_ingestion_port: 3101
+# Basic auth credentials — override in vault.  These must match the
+# horde_alloy_basic_auth_username / password on remote Alloy agents.
+horde_monitoring_loki_ingestion_auth_user: "alloy"
+horde_monitoring_loki_ingestion_auth_password: "changeme-loki-ingestion"
 
 # HAProxy configuration (safe edit with permanent rolling backups)
 horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"

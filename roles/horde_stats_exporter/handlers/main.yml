@@ -16,7 +16,11 @@
   become: true
 
 - name: Ensure shared python install is world-readable
-  ansible.builtin.command: chmod -R o+rX {{ horde_stats_exporter_uv_python_install_dir }}
+  ansible.builtin.file:
+    path: "{{ horde_stats_exporter_uv_python_install_dir }}"
+    state: directory
+    mode: "o+rX"
+    recurse: true
   become: true
 
 - name: Restart horde-exporter

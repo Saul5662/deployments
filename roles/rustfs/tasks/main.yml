@@ -1,0 +1,123 @@
+---
+# Standalone RustFS S3-compatible object storage deployment.
+# Deploys a Docker Compose stack with a RustFS container and optional
+# bucket bootstrap sidecar, managed by a systemd unit.
+
+- name: Verify Docker is available
+  ansible.builtin.command: docker --version
+  changed_when: false
+  failed_when: false
+  register: rustfs__docker_check
+  become: true
+
+- name: Fail if Docker is not installed
+  ansible.builtin.fail:
+    msg: "Docker is required for RustFS. Please install Docker first."
+  when: rustfs__docker_check.rc != 0
+
+- name: Verify Docker Compose V2 is available
+  ansible.builtin.command: docker compose version
+  changed_when: false
+  failed_when: false
+  register: rustfs__compose_check
+  become: true
+
+- name: Fail if Docker Compose V2 is not available
+  ansible.builtin.fail:
+    msg: >-
+      Docker Compose V2 plugin is required but 'docker compose version' failed.
+      Please install the Docker Compose V2 plugin:
+      https://docs.docker.com/compose/install/
+  when: rustfs__compose_check.rc != 0
+
+- name: Fail if default RustFS secret key is unchanged
+  ansible.builtin.fail:
+    msg: >-
+      rustfs_secret_key is still set to the default placeholder
+      'changeme-rustfs-secret'. Override it in your inventory or vault.
+  when:
+    - rustfs_start_services | bool
+    - rustfs_secret_key == "changeme-rustfs-secret"
+
+- name: Create RustFS data directory
+  ansible.builtin.file:
+    path: "{{ rustfs_data_dir }}"
+    state: directory
+    owner: "{{ rustfs_uid | string }}"
+    group: "{{ rustfs_gid | string }}"
+    mode: "0755"
+  become: true
+
+- name: Create RustFS compose directory
+  ansible.builtin.file:
+    path: "{{ rustfs_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Template Docker Compose for RustFS
+  ansible.builtin.template:
+    src: docker-compose.rustfs.yml.j2
+    dest: "{{ rustfs_compose_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  no_log: true
+  notify: Restart rustfs
+
+- name: Template systemd service for RustFS
+  ansible.builtin.template:
+    src: rustfs.service.j2
+    dest: /etc/systemd/system/rustfs.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd (rustfs)
+
+- name: Flush pending handlers before starting services
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start RustFS
+  ansible.builtin.systemd:
+    name: rustfs
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: rustfs_start_services | bool
+
+# Detect stale systemd state (containers gone but unit reports active).
+- name: Check if RustFS container is actually running
+  ansible.builtin.command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' rustfs
+  register: rustfs__container_state
+  changed_when: false
+  failed_when: false
+  become: true
+  when: rustfs_start_services | bool
+
+- name: Restart RustFS if container is not running
+  ansible.builtin.systemd:
+    name: rustfs
+    state: restarted
+  become: true
+  when:
+    - rustfs_start_services | bool
+    - rustfs__container_state.stdout | default('false') != 'true'
+
+- name: Wait for RustFS health endpoint
+  ansible.builtin.uri:
+    url: "{{ rustfs_healthcheck_url }}"
+    method: GET
+    status_code: 200
+  register: rustfs__health
+  until: rustfs__health.status == 200
+  retries: 15
+  delay: 3
+  become: true
+  when:
+    - rustfs_start_services | bool
+    - rustfs_healthcheck_url | default('') | length > 0

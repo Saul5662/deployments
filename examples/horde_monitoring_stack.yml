@@ -318,12 +318,12 @@
         group: root
         mode: "0755"
 
-    - name: Initialize node_exporter file_sd entries
+    - name: Initialize node_exporter file_sd entries  # noqa: run-once[task]
       ansible.builtin.set_fact:
         horde_node_exporter_file_sd_entries: []
       run_once: true
 
-    - name: Build node_exporter file_sd entries from inventory
+    - name: Build node_exporter file_sd entries from inventory  # noqa: run-once[task]
       ansible.builtin.set_fact:
         horde_node_exporter_file_sd_entries: >-
           {{

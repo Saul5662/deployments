@@ -1,0 +1,17 @@
+---
+# Handlers for the rustfs role
+
+- name: Reload systemd (rustfs)
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  when: rustfs_start_services | bool
+
+- name: Restart rustfs
+  ansible.builtin.shell: >
+    docker compose up -d --force-recreate
+  args:
+    chdir: "{{ rustfs_compose_dir }}"
+  become: true
+  changed_when: true
+  when: rustfs_start_services | bool

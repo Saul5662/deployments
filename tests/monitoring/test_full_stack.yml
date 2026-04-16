@@ -407,6 +407,8 @@
     horde_monitoring_public_tenant_id: "public-metrics"
     horde_monitoring_start_services: false
     horde_monitoring_mimir_backup_enabled: false
+    # Use git source for dashboards — release artifacts do not exist in CI
+    horde_monitoring_grafana_dashboards_source: "git"
 
   pre_tasks:
     - name: Install HAProxy for config validation
@@ -730,6 +732,8 @@
     horde_monitoring_grafana_admin_password: "testpass123"
     horde_monitoring_start_services: false
     horde_monitoring_mimir_backup_enabled: false
+    # Use git source for dashboards — release artifacts do not exist in CI
+    horde_monitoring_grafana_dashboards_source: "git"
 
   roles:
     - role: horde_monitoring
