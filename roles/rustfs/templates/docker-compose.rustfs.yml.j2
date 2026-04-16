@@ -1,0 +1,62 @@
+# Docker Compose for standalone RustFS S3-compatible object storage
+# Managed by Ansible - do not edit manually
+
+services:
+  rustfs:
+    image: {{ rustfs_image }}
+    container_name: rustfs
+    labels:
+      horde.logs: "true"
+      horde.app: "rustfs"
+      horde.component: "s3-store"
+    command: ["/data"]
+    environment:
+      - "RUSTFS_ACCESS_KEY={{ rustfs_access_key }}"
+      - "RUSTFS_SECRET_KEY={{ rustfs_secret_key }}"
+      - "RUSTFS_CONSOLE_ENABLE=true"
+    ports:
+      - "{{ rustfs_bind_address }}:{{ rustfs_api_port }}:9000"
+      - "127.0.0.1:{{ rustfs_console_port }}:9001"
+    volumes:
+      - {{ rustfs_data_dir }}:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {{ rustfs_memory_limit }}
+    logging:
+      driver: local
+      options:
+        max-size: "25m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+{% if rustfs_buckets | default([]) | length > 0 %}
+  s3-init:
+    image: {{ rustfs_mc_image }}
+    container_name: rustfs-init
+    environment:
+      - "S3_INIT_ACCESS_KEY={{ rustfs_access_key }}"
+      - "S3_INIT_SECRET_KEY={{ rustfs_secret_key }}"
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://rustfs:9000 $$S3_INIT_ACCESS_KEY $$S3_INIT_SECRET_KEY{% if rustfs_insecure | bool %} --insecure{% endif %}; do sleep 2; done;
+{% for bucket in rustfs_buckets %}
+      mc mb --ignore-existing local/{{ bucket }};
+{% endfor %}
+      exit 0;
+      "
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "2"
+    depends_on:
+      rustfs:
+        condition: service_healthy
+{% endif %}

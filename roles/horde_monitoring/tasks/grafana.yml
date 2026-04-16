@@ -80,6 +80,23 @@
   become: true
   notify: Restart monitoring stack
 
+# If dashboard directories from a previous run lost their execute bit
+# (e.g. mode 0644 instead of 0755), Grafana cannot traverse them and
+# fatally errors on startup with "permission denied".  Ensure all
+# directories under the dashboard root are traversable before the
+# restart handler fires.
+- name: Ensure existing dashboard directories are traversable by Grafana
+  ansible.builtin.command:
+    cmd: find {{ horde_monitoring_grafana_dashboard_dir }} -type d -exec chmod 0755 {} +
+  become: true
+  changed_when: false
+
+- name: Ensure existing dashboard files are owned by Grafana
+  ansible.builtin.command:
+    cmd: find {{ horde_monitoring_grafana_dashboard_dir }} -not -user 472 -exec chown 472:472 {} +
+  become: true
+  changed_when: false
+
 - name: Flush handlers to restart Grafana with safe config
   ansible.builtin.meta: flush_handlers
 
@@ -98,6 +115,9 @@
     - horde_monitoring_start_services | bool
 
 - name: Create public Grafana organization
+  when:
+    - horde_monitoring_grafana_anonymous_enabled | bool
+    - horde_monitoring_start_services | bool
   block:
     - name: Create public Grafana organization via API
       ansible.builtin.uri:
@@ -123,9 +143,6 @@
           Common causes: wrong admin password (stale Grafana DB), Grafana not
           reachable, or authentication misconfiguration. If migrating from a
           manual install, remove the old Grafana data directory and re-run.
-  when:
-    - horde_monitoring_grafana_anonymous_enabled | bool
-    - horde_monitoring_start_services | bool
 
 # ── Phase 2: re-template with public org now guaranteed to exist ──
 

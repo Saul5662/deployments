@@ -66,6 +66,14 @@
     - Set venv ownership
     - Ensure shared python install is world-readable
 
+- name: Validate exporter install source mode
+  ansible.builtin.assert:
+    that:
+      - horde_stats_exporter_install_source in ['git', 'wheel', 'local']
+    fail_msg: >-
+      horde_stats_exporter_install_source must be one of: git, wheel, local.
+      Got '{{ horde_stats_exporter_install_source }}'.
+
 - name: Read installed exporter ref marker
   ansible.builtin.slurp:
     src: "{{ horde_stats_exporter_install_dir }}/.exporter_ref"
@@ -81,11 +89,130 @@
       if (horde_stats_exporter__ref_marker is defined and horde_stats_exporter__ref_marker.content is defined)
       else '' }}
 
-- name: Install ai-horde-stats-exporter from GitHub
+- name: Validate wheel mode settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        (horde_stats_exporter_wheel_url | length > 0) or
+        (horde_stats_exporter_release_version | length > 0)
+    fail_msg: >-
+      In wheel mode, either horde_stats_exporter_wheel_url or
+      horde_stats_exporter_release_version must be set.
+  when: horde_stats_exporter_install_source == 'wheel'
+
+# ── manifest resolution (wheel mode, no explicit URL) ────────
+- name: Download release manifest for wheel resolution
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/{{ horde_stats_exporter_release_repo
+      }}/releases/download/{{ horde_stats_exporter_release_version
+      }}/release-manifest.json
+    dest: /tmp/horde-exporter-manifest.json
+    mode: "0644"
+  become: true
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - horde_stats_exporter_wheel_url | length == 0
+
+- name: Read release manifest
+  ansible.builtin.slurp:
+    src: /tmp/horde-exporter-manifest.json
+  register: horde_stats_exporter__manifest_raw
+  become: true
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - horde_stats_exporter_wheel_url | length == 0
+
+- name: Parse release manifest
+  ansible.builtin.set_fact:
+    horde_stats_exporter__manifest: "{{ horde_stats_exporter__manifest_raw.content | b64decode | from_json }}"
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - horde_stats_exporter_wheel_url | length == 0
+
+- name: Resolve wheel URL and checksum from manifest
+  ansible.builtin.set_fact:
+    horde_stats_exporter__resolved_wheel_url: >-
+      {{
+        'https://github.com/'
+        ~ horde_stats_exporter_release_repo
+        ~ '/releases/download/'
+        ~ horde_stats_exporter_release_version
+        ~ '/'
+        ~ horde_stats_exporter__manifest.artifacts.wheel.filename
+      }}
+    horde_stats_exporter__resolved_wheel_checksum: >-
+      sha256:{{ horde_stats_exporter__manifest.artifacts.wheel.sha256 }}
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - horde_stats_exporter_wheel_url | length == 0
+
+- name: Use explicit wheel URL and checksum when provided
+  ansible.builtin.set_fact:
+    horde_stats_exporter__resolved_wheel_url: "{{ horde_stats_exporter_wheel_url }}"
+    horde_stats_exporter__resolved_wheel_checksum: "{{ horde_stats_exporter_wheel_checksum }}"
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - horde_stats_exporter_wheel_url | length > 0
+
+- name: Compute desired exporter install spec
+  ansible.builtin.set_fact:
+    horde_stats_exporter__install_spec: >-
+      {{
+        (
+          'ai-horde-stats-exporter @ git+'
+          ~ horde_stats_exporter_repo_url
+          ~ '@'
+          ~ horde_stats_exporter_repo_ref
+          ~ '#subdirectory=packages/ai-horde-stats-exporter'
+        )
+        if horde_stats_exporter_install_source == 'git'
+        else (
+          'ai-horde-stats-exporter @ ' ~ horde_stats_exporter__resolved_wheel_url
+          if horde_stats_exporter_install_source == 'wheel'
+          else horde_stats_exporter_local_path
+        )
+      }}
+    horde_stats_exporter__ref_target: >-
+      {{
+        horde_stats_exporter_repo_ref
+        if horde_stats_exporter_install_source == 'git'
+        else (
+          horde_stats_exporter__resolved_wheel_url
+          if horde_stats_exporter_install_source == 'wheel'
+          else 'local: ' ~ horde_stats_exporter_local_path
+        )
+      }}
+
+- name: Validate local mode settings
+  ansible.builtin.assert:
+    that:
+      - horde_stats_exporter_local_path | length > 0
+    fail_msg: >-
+      horde_stats_exporter_local_path must be set when install_source is 'local'.
+  when: horde_stats_exporter_install_source == 'local'
+
+- name: Download wheel artifact
+  ansible.builtin.get_url:
+    url: "{{ horde_stats_exporter__resolved_wheel_url }}"
+    dest: "/tmp/{{ horde_stats_exporter__resolved_wheel_url | basename }}"
+    checksum: "{{ horde_stats_exporter__resolved_wheel_checksum | default(omit, true) }}"
+    mode: "0644"
+  become: true
+  when:
+    - horde_stats_exporter_install_source == 'wheel'
+    - not ansible_check_mode
+    - horde_stats_exporter__ref_current != horde_stats_exporter__ref_target
+
+- name: Install ai-horde-stats-exporter
   ansible.builtin.command: >
     /usr/local/bin/uv pip install
     --python {{ horde_stats_exporter_install_dir }}/venv/bin/python
-    "ai-horde-stats-exporter @ git+{{ horde_stats_exporter_repo_url }}@{{ horde_stats_exporter_repo_ref }}#subdirectory=packages/ai-horde-stats-exporter"
+    {% if horde_stats_exporter_install_source == 'wheel' %}
+    /tmp/{{ horde_stats_exporter__resolved_wheel_url | basename }}
+    {% else %}
+    "{{ horde_stats_exporter__install_spec }}"
+    {% endif %}
   environment:
     UV_PYTHON_INSTALL_DIR: "{{ horde_stats_exporter_uv_python_install_dir }}"
   become: true
@@ -93,7 +220,7 @@
   changed_when: true
   when:
     - not ansible_check_mode
-    - horde_stats_exporter__ref_current != horde_stats_exporter_repo_ref
+    - horde_stats_exporter__ref_current != horde_stats_exporter__ref_target
   notify:
     - Set venv ownership
     - Ensure shared python install is world-readable
@@ -102,14 +229,21 @@
 - name: Record installed exporter ref
   ansible.builtin.copy:
     dest: "{{ horde_stats_exporter_install_dir }}/.exporter_ref"
-    content: "{{ horde_stats_exporter_repo_ref }}\n"
+    content: "{{ horde_stats_exporter__ref_target }}\n"
     owner: "{{ horde_stats_exporter_user }}"
     group: "{{ horde_stats_exporter_user }}"
     mode: "0644"
   become: true
   when:
     - not ansible_check_mode
-    - horde_stats_exporter__ref_current != horde_stats_exporter_repo_ref
+    - horde_stats_exporter__ref_current != horde_stats_exporter__ref_target
+
+- name: Clean up downloaded wheel
+  ansible.builtin.file:
+    path: "/tmp/{{ horde_stats_exporter__resolved_wheel_url | basename }}"
+    state: absent
+  become: true
+  when: horde_stats_exporter_install_source == 'wheel'
 
 - name: Template exporter configuration
   ansible.builtin.template:
@@ -129,8 +263,8 @@
   become: true
   loop:
     - horde-exporter.service
-    - horde-downsample.service
-    - horde-downsample.timer
+    # - horde-downsample.service
+    # - horde-downsample.timer
   notify: Reload systemd
 
 - name: Configure logrotate
@@ -149,7 +283,7 @@
   become: true
   loop:
     - horde-exporter
-    - ai-horde-downsample
+    # - ai-horde-downsample
   when: not ansible_check_mode
 
 - name: Enable and start horde-exporter service
@@ -160,11 +294,11 @@
     daemon_reload: true
   become: true
 
-- name: Enable and start horde-downsample timer
-  ansible.builtin.systemd:
-    name: horde-downsample.timer
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
-  when: horde_stats_exporter_enable_downsampling
+# - name: Enable and start horde-downsample timer
+#   ansible.builtin.systemd:
+#     name: horde-downsample.timer
+#     enabled: true
+#     state: started
+#     daemon_reload: true
+#   become: true
+#   when: horde_stats_exporter_enable_downsampling

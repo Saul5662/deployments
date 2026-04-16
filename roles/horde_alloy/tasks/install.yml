@@ -13,6 +13,14 @@
   become: true
   when: ansible_os_family == "Debian"
 
+- name: Ensure APT keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  become: true
+  when: ansible_os_family == "Debian"
+
 - name: Add Grafana GPG signing key
   ansible.builtin.get_url:
     url: https://apt.grafana.com/gpg.key
@@ -39,6 +47,15 @@
   become: true
   notify: Restart alloy
   when: ansible_os_family == "Debian"
+
+- name: Add alloy user to docker group for container log collection
+  ansible.builtin.user:
+    name: alloy
+    groups: docker
+    append: true
+  become: true
+  notify: Restart alloy
+  when: horde_alloy_collect_docker_logs | bool
 
 - name: Add Grafana RPM repository
   ansible.builtin.yum_repository:

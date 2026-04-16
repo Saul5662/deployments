@@ -67,6 +67,47 @@
     - horde_monitoring_s3_deployment_mode == 'external'
     - horde_monitoring_s3_manage_buckets | default(false) | bool
 
+# ── External S3 reachability pre-flight ────────────────────
+# When S3 is external (not embedded in the monitoring compose) and the operator
+# has NOT set horde_monitoring_s3_operator_managed=true, verify the endpoint is
+# reachable before proceeding. This catches misconfigurations and ordering
+# problems early (e.g. deploying monitoring before the remote rustfs host).
+- name: Pre-flight check — external S3 endpoint is reachable
+  ansible.builtin.uri:
+    url: "{{ horde_monitoring_s3_api_url }}/health"
+    method: GET
+    status_code: [200, 403]
+  register: horde_monitoring__s3_preflight
+  when:
+    - horde_monitoring_mimir_enable_s3 | default(true) | bool
+    - horde_monitoring_s3_deployment_mode == 'external'
+    - not (horde_monitoring_s3_operator_managed | default(false) | bool)
+    - horde_monitoring_start_services | bool
+  failed_when: false
+
+- name: Fail if external S3 endpoint is unreachable
+  ansible.builtin.fail:
+    msg: >-
+      External S3 endpoint {{ horde_monitoring_s3_api_url }} is not reachable
+      (status={{ horde_monitoring__s3_preflight.status | default('connection failed') }}).
+      Ensure the S3 backend is running and accessible from this host before
+      deploying the monitoring stack. If you manage S3 independently and want
+      to skip this check, set horde_monitoring_s3_operator_managed: true.
+  when:
+    - horde_monitoring__s3_preflight is not skipped
+    - horde_monitoring__s3_preflight.status is not defined or horde_monitoring__s3_preflight.status not in [200, 403]
+
+- name: Inform that S3 lifecycle is operator-managed — skipping pre-flight checks
+  ansible.builtin.debug:
+    msg: >-
+      horde_monitoring_s3_operator_managed=true: the operator manages S3 externally.
+      Skipping S3 reachability pre-flight. Ensure the endpoint at
+      {{ horde_monitoring_s3_endpoint }} is available before Mimir starts.
+  when:
+    - horde_monitoring_mimir_enable_s3 | default(true) | bool
+    - horde_monitoring_s3_deployment_mode == 'external'
+    - horde_monitoring_s3_operator_managed | default(false) | bool
+
 - name: Deploy Mimir + Grafana monitoring stack
   ansible.builtin.include_tasks: mimir.yml
   when: horde_monitoring_install_mimir | bool

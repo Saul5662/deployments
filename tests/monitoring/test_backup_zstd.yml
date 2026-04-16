@@ -20,6 +20,8 @@
     horde_monitoring_infrastructure_tenant_id: "infra-metrics"
     horde_monitoring_infrastructure_retention: "7d"
     horde_monitoring_start_services: false
+    # Use git source for dashboards — release artifacts do not exist in CI
+    horde_monitoring_grafana_dashboards_source: "git"
     # Alerting rules disabled — tests the skip path
     horde_monitoring_install_alerting_rules: false
     # Backup enabled — tests backup service/timer template rendering

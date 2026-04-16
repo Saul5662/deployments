@@ -157,7 +157,10 @@
           - "'s3-init' in (_external_optin_compose.content | b64decode)"
           - "'mc alias set local https://s3.external.example.com' in (_external_optin_compose.content | b64decode)"
           - "'--insecure' in (_external_optin_compose.content | b64decode)"
-          - "'mc alias set local $$S3_LOCAL_ENDPOINT $$S3_LOCAL_ACCESS_KEY $$S3_LOCAL_SECRET_KEY --insecure;' in (_external_optin_backup_service.content | b64decode)"
+          - >-
+            'mc alias set local $$S3_LOCAL_ENDPOINT $$S3_LOCAL_ACCESS_KEY
+            $$S3_LOCAL_SECRET_KEY --insecure;' in
+            (_external_optin_backup_service.content | b64decode)
           - _external_optin_backup_timer.stat.exists
           - _external_optin_backup_env.stat.exists
 

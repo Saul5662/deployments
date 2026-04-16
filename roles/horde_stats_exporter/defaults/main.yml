@@ -15,12 +15,43 @@ horde_stats_exporter_user: horde-exporter
 horde_stats_exporter_install_dir: /opt/horde-exporter
 
 # ---------------------------------------------------------------------------
-# Git repository
+# Installation source
 # ---------------------------------------------------------------------------
+# Source mode determines how the exporter package is installed:
+#   wheel - install a pre-built wheel from a GitHub Release (recommended)
+#   git   - install from a git repo via uv pip (legacy)
+#   local - install from a local filesystem path (sdist, wheel, or editable)
+horde_stats_exporter_install_source: "wheel"
+
+# Pinned release tag for the horde-exporters project.
+# In wheel mode the role downloads the release manifest from this tag and
+# resolves the actual wheel filename and checksum automatically.
+# The sub-package version inside the wheel may differ from this tag.
+horde_stats_exporter_release_version: "v0.1.2"
+
+# --- wheel mode settings ---
+# GitHub repository that hosts the releases.
+horde_stats_exporter_release_repo: "Haidra-Org/horde-exporters"
+# Name of the Python distribution to resolve from the release manifest.
+# Must match the wheel's distribution name (underscores, not hyphens).
+horde_stats_exporter_wheel_package_name: "ai_horde_stats_exporter"
+# Override: set a full URL to skip manifest resolution entirely.
+# When empty, the role derives the URL from the manifest.
+horde_stats_exporter_wheel_url: ""
+# Override: set a sha256 checksum to skip manifest resolution for checksum.
+# When empty, the role takes the checksum from the manifest.
+horde_stats_exporter_wheel_checksum: ""
+
+# --- git mode settings (legacy) ---
 # The exporter is installed directly from GitHub via uv.
 # Pin horde_stats_exporter_repo_ref to a release tag or commit SHA for reproducibility.
 horde_stats_exporter_repo_url: "https://github.com/Haidra-Org/horde-exporters"
 horde_stats_exporter_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
+
+# --- local mode settings ---
+# Filesystem path on the target host (directory, sdist, or wheel file).
+# Installed via `uv pip install <path>`.
+horde_stats_exporter_local_path: ""
 
 # ---------------------------------------------------------------------------
 # Exporter configuration

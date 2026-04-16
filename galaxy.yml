@@ -1,7 +1,7 @@
 ---
 namespace: "haidra"
 name: "deployments"
-version: "0.3.1"
+version: "0.4.0"
 readme: "README.md"
 authors:
   - Divided by Zer0 <mail@dbzer0.com>
@@ -23,4 +23,6 @@ build_ignore:
   - local-deploy
   - .venv
   - .git
+  - .ansible
+  - .tmp-collections
   - tests

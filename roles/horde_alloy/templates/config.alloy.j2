@@ -75,12 +75,12 @@ prometheus.scrape {{ target.job | to_json }} {
 
 {% endfor %}
 prometheus.remote_write "mimir" {
-  external_labels = merge(
-    { "instance" = {{ ansible_hostname | to_json }} },
+  external_labels = {
+    "instance" = {{ ansible_hostname | to_json }},
 {% for k, v in horde_alloy_external_labels.items() %}
-    { {{ k | to_json }} = {{ v | to_json }} },
+    {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
-  )
+  }
 
   endpoint {
     url = {{ horde_alloy_mimir_endpoint | to_json }}
@@ -111,15 +111,29 @@ prometheus.remote_write "mimir" {
 {% if horde_alloy_collect_logs | bool %}
 
 {% if horde_alloy_collect_journal | bool %}
-// Relabel journal fields into useful labels.
+// ---------------------------------------------------------------------------
+// Journal relabeling — extract useful metadata from systemd journal fields.
+//
+// Labels (indexed, low-cardinality — used for stream selection):
+//   hostname      - the originating host
+//   service_name  - normalised service name: user_unit (stripped) > unit (stripped)
+//   level         - syslog severity (overridden later by message-body parsing)
+//
+// Structured metadata (queryable, not indexed — high-cardinality detail):
+//   unit             - system-level systemd unit  (e.g. haproxy.service)
+//   user_unit        - user-session systemd unit  (e.g. horde_systemd_7001.service)
+//   syslog_identifier - syslog tag                (e.g. python, haproxy)
+//   transport        - how the message entered the journal (stdout, syslog, kernel)
+//   exe              - process executable name    (e.g. python3, haproxy)
+//   pid              - process ID
+//
+// The "app" label is derived via configurable pattern-matching rules applied
+// in the processing pipeline below (horde_alloy_journal_app_rules).
+// ---------------------------------------------------------------------------
 loki.relabel "journal" {
   forward_to = []
 
-  rule {
-    source_labels = ["__journal__systemd_unit"]
-    target_label  = "unit"
-  }
-
+  // ── Labels (indexed) ────────────────────────────────────────
   rule {
     source_labels = ["__journal__hostname"]
     target_label  = "hostname"
@@ -129,18 +143,165 @@ loki.relabel "journal" {
     source_labels = ["__journal_priority_keyword"]
     target_label  = "level"
   }
+
+  // ── Derived service_name (indexed) ──────────────────────────
+  // Start from the system unit (e.g. "haproxy.service" → "haproxy").
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    regex         = "(.+)\\.service"
+    target_label  = "service_name"
+  }
+
+  // If a user-session unit exists, prefer it (e.g. "horde_systemd_7001.service" → "horde_systemd_7001").
+  // This overwrites the value from the previous rule.
+  rule {
+    source_labels = ["__journal__systemd_user_unit"]
+    regex         = "(.+)\\.service"
+    target_label  = "service_name"
+  }
+
+  // ── Structured metadata fields (not indexed) ────────────────
+  // These are promoted to structured metadata in loki.process below.
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__systemd_user_unit"]
+    target_label  = "user_unit"
+  }
+
+  rule {
+    source_labels = ["__journal_syslog_identifier"]
+    target_label  = "syslog_identifier"
+  }
+
+  rule {
+    source_labels = ["__journal__transport"]
+    target_label  = "transport"
+  }
+
+  rule {
+    source_labels = ["__journal__comm"]
+    target_label  = "exe"
+  }
+
+  rule {
+    source_labels = ["__journal__pid"]
+    target_label  = "pid"
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Journal log processing — extract structured fields from message body.
+// ---------------------------------------------------------------------------
+loki.process "journal" {
+  // ── Promote high-cardinality fields to structured metadata ──
+  // These are queryable with label filter expressions (| unit="foo") but
+  // don't create additional streams (no index bloat).
+  stage.structured_metadata {
+    values = {
+      "unit"              = "",
+      "user_unit"         = "",
+      "syslog_identifier" = "",
+      "transport"         = "",
+      "exe"               = "",
+      "pid"               = "",
+    }
+  }
+
+  // Drop the above from the indexed label set — they live in structured metadata now.
+  stage.label_drop {
+    values = ["unit", "user_unit", "syslog_identifier", "transport", "exe", "pid"]
+  }
+
+{% if horde_alloy_journal_app_rules | length > 0 %}
+  // ── Derive an "app" label from service_name patterns ────────
+  // Each rule maps a regex on service_name to a human-readable app name.
+  // Patterns should be mutually exclusive; all matching rules apply.
+{% for rule in horde_alloy_journal_app_rules %}
+  stage.match {
+    selector = `{service_name=~"{{ rule.pattern }}"}`
+    stage.static_labels {
+      values = {
+        "app" = {{ rule.app | to_json }},
+      }
+    }
+  }
+
+{% endfor %}
+{% endif %}
+{% if horde_alloy_journal_parse_level | bool %}
+  // Override the journal-level "level" label when the application embeds its
+  // own log level in the message text.  Two passes:
+  //
+  // Pass 1 — line-start patterns:
+  //   "INFO       | 2026-..."   (AI-Horde / Python loguru)
+  //   "[INFO] ..."              (bracket style)
+  //
+  // Pass 2 — key=value anywhere in line:
+  //   "ts=... level=error msg=..."  (Go slog / Alloy / structured logs)
+
+  // Pass 1: level token at start of line.
+  stage.regex {
+    expression = "(?i)^(?P<parsed_level>DEBUG|INFO|NOTICE|WARN(?:ING)?|ERROR|CRIT(?:ICAL)?|FATAL|EMERG(?:ENCY)?|ALERT|PANIC)\\s*[|\\]]"
+  }
+
+  stage.labels {
+    values = {
+      "level" = "parsed_level",
+    }
+  }
+
+  stage.label_drop {
+    values = ["parsed_level"]
+  }
+
+  // Pass 2: key=value anywhere in line (won't overwrite if pass 1 matched,
+  // but covers structured log formats like "ts=... level=error msg=...").
+  stage.regex {
+    expression = "(?i)(?:^|\\s)level=(?P<kv_level>debug|info|notice|warn(?:ing)?|error|crit(?:ical)?|fatal|emerg(?:ency)?|alert|panic)"
+  }
+
+  stage.labels {
+    values = {
+      "level" = "kv_level",
+    }
+  }
+
+  // Clean up temporary labels.
+  stage.label_drop {
+    values = ["kv_level"]
+  }
+
+  stage.replace {
+    expression = "(?i)(WARNING)"
+    source     = "level"
+    replace    = "warn"
+  }
+
+  stage.replace {
+    expression = "(?i)(CRITICAL)"
+    source     = "level"
+    replace    = "crit"
+  }
+{% endif %}
+
+  forward_to = [loki.write.loki.receiver]
 }
 
 loki.source.journal "systemd" {
   max_age       = {{ horde_alloy_journal_max_age | to_json }}
-  forward_to    = [loki.write.loki.receiver]
+  forward_to    = [loki.process.journal.receiver]
   relabel_rules = loki.relabel.journal.rules
-  labels        = merge(
-    { "source" = "journal", "instance" = {{ ansible_hostname | to_json }} },
+  labels        = {
+    "source" = "journal",
+    "instance" = {{ ansible_hostname | to_json }},
 {% for k, v in horde_alloy_log_labels.items() %}
-    { {{ k | to_json }} = {{ v | to_json }} },
+    {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
-  )
+  }
 }
 
 {% endif %}
@@ -201,12 +362,13 @@ loki.source.docker "containers" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.docker_containers.output
   forward_to = [loki.process.docker.receiver]
-  labels     = merge(
-    { "source" = "docker", "instance" = {{ ansible_hostname | to_json }} },
+  labels     = {
+    "source" = "docker",
+    "instance" = {{ ansible_hostname | to_json }},
 {% for k, v in horde_alloy_log_labels.items() %}
-    { {{ k | to_json }} = {{ v | to_json }} },
+    {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
-  )
+  }
 }
 
 loki.process "docker" {
@@ -283,12 +445,12 @@ otelcol.exporter.prometheus "mimir" {
 }
 
 prometheus.remote_write "otlp_metrics" {
-  external_labels = merge(
-    { "instance" = {{ ansible_hostname | to_json }} },
+  external_labels = {
+    "instance" = {{ ansible_hostname | to_json }},
 {% for k, v in horde_alloy_external_labels.items() %}
-    { {{ k | to_json }} = {{ v | to_json }} },
+    {{ k | to_json }} = {{ v | to_json }},
 {% endfor %}
-  )
+  }
 
   endpoint {
     url = {{ horde_alloy_mimir_endpoint | to_json }}

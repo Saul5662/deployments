@@ -46,6 +46,8 @@
     horde_monitoring_grafana_admin_password: "localdev"
     horde_monitoring_grafana_anonymous_enabled: true
     horde_monitoring_grafana_provision_dashboards: true
+    # Use git mode for local dev (release tarball may not exist)
+    horde_monitoring_grafana_dashboards_source: "git"
 
     # Tenants
     horde_monitoring_application_tenant_id: "ai-horde-app"

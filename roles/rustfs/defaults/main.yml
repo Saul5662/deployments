@@ -1,0 +1,55 @@
+---
+# Default variables for the rustfs role.
+#
+# Deploys a standalone RustFS S3-compatible object storage container
+# via Docker Compose, managed by a systemd unit.
+
+# RustFS container image (pinned version)
+rustfs_image: "rustfs/rustfs:1.0.0-alpha.93"
+# mc (MinIO client) image used by the bucket-init sidecar
+rustfs_mc_image: "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+
+# Network port bindings (host-side, loopback only by default)
+rustfs_api_port: 9000
+rustfs_console_port: 9001
+# Bind address for published ports. Default: loopback only.
+# Set to 0.0.0.0 to expose to remote consumers (e.g. monitoring stack on another host).
+rustfs_bind_address: "0.0.0.0"
+
+# Persistent data directory — all S3 object data lives here.
+# Place on a dedicated volume/partition in production for isolation.
+rustfs_data_dir: "/var/lib/s3-data"
+
+# Container resource limits
+rustfs_memory_limit: "512m"
+
+# S3 credentials
+rustfs_access_key: "horde"
+rustfs_secret_key: "changeme-rustfs-secret"
+
+# UID/GID that the RustFS process runs as inside the container.
+# The data directory is chowned to this UID.
+rustfs_uid: 10001
+rustfs_gid: 10001
+
+# Docker Compose project directory
+rustfs_compose_dir: "/opt/rustfs"
+
+# Health endpoint used for readiness checks after start
+rustfs_healthcheck_url: "http://127.0.0.1:{{ rustfs_api_port }}/health"
+
+# Set to false in CI/test environments to skip Docker Compose startup
+# and health-check waits. Configs are still rendered and can be asserted on.
+rustfs_start_services: true
+
+# S3 client behavior
+rustfs_insecure: true
+
+# Bucket bootstrap — list of bucket names to create on first start.
+# The s3-init sidecar runs `mc mb --ignore-existing` for each entry.
+rustfs_buckets: []
+# Example:
+#   rustfs_buckets:
+#     - mimir-blocks
+#     - mimir-ruler
+#     - loki-chunks

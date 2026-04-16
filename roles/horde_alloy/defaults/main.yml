@@ -93,6 +93,19 @@ horde_alloy_collect_logs: true
 horde_alloy_collect_journal: true
 # Maximum age of journal entries to ship on first start
 horde_alloy_journal_max_age: "24h"
+# Parse application-embedded log levels from message body (e.g. "INFO | ...",
+# "level=info", "[WARNING] ...") and override the journal syslog level.
+# Widely useful for Python (loguru/logging), Go (slog), and similar frameworks.
+horde_alloy_journal_parse_level: true
+
+# Derive a static "app" label from the service_name using regex patterns.
+# Each entry maps a service_name regex to a human-readable application name.
+# First match wins.  This lets you collapse per-instance service names like
+# "horde_systemd_7001", "horde_systemd_7002" into app="ai-horde".
+# Example:
+#   - { pattern: "horde_systemd_.*|ai-horde@.*", app: "ai-horde" }
+#   - { pattern: "haproxy",                      app: "haproxy"  }
+horde_alloy_journal_app_rules: []
 
 # Collect from specific log files (glob patterns).
 # Example: ["/var/log/app/*.log", "/var/log/syslog"]

@@ -1,17 +1,24 @@
 ---
-# Fetch Grafana dashboards from horde-exporters and deploy them
-# into per-org directories with patched datasource UIDs.
+# Fetch Grafana dashboards and deploy them into per-org directories
+# with patched datasource UIDs.
+#
+# Source mode: git | release | local
+#   git     – shallow-clone horde-exporters at a pinned ref
+#   release – download a pre-built tarball from a GitHub Release
+#   local   – copy from a local filesystem path on the target host
 #
 # Layout on disk:
 #   {{ horde_monitoring_grafana_dashboard_dir }}/app/        -> app dashboards for Org 1 (uid: mimir-app)
 #   {{ horde_monitoring_grafana_dashboard_dir }}/app-public/  -> app dashboards for Org 2 (uid: mimir-public)
 #   {{ horde_monitoring_grafana_dashboard_dir }}/infra/       -> infra dashboards for Org 1 (uid: mimir-infra)
 
-- name: Install git (needed for dashboard checkout)
-  ansible.builtin.apt:
-    name: git
-    state: present
-  become: true
+- name: Validate dashboard source mode
+  ansible.builtin.assert:
+    that:
+      - horde_monitoring_grafana_dashboards_source in ['git', 'release', 'local']
+    fail_msg: >-
+      horde_monitoring_grafana_dashboards_source must be one of: git, release, local.
+      Got '{{ horde_monitoring_grafana_dashboards_source }}'.
 
 - name: Create dashboard subdirectories
   ansible.builtin.file:
@@ -26,6 +33,15 @@
     - app-public
     - infra
 
+# ── git mode ─────────────────────────────────────────────────
+
+- name: Install git (needed for dashboard checkout)
+  ansible.builtin.apt:
+    name: git
+    state: present
+  become: true
+  when: horde_monitoring_grafana_dashboards_source == 'git'
+
 - name: Clone horde-exporters repository (shallow)
   ansible.builtin.git:
     repo: "{{ horde_monitoring_grafana_dashboards_repo_url }}"
@@ -35,38 +51,164 @@
     force: true
   become: true
   register: horde_monitoring__dashboards_clone
+  when: horde_monitoring_grafana_dashboards_source == 'git'
 
-- name: Verify expected dashboard directories exist after clone
+- name: Set git-mode source paths
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_app_src: "/tmp/horde-exporters-dashboards/{{ horde_monitoring_grafana_dashboards_git_app_path }}"
+    horde_monitoring__dashboard_infra_src: "/tmp/horde-exporters-dashboards/{{ horde_monitoring_grafana_dashboards_git_infra_path }}"
+  when: horde_monitoring_grafana_dashboards_source == 'git'
+
+# ── release mode ─────────────────────────────────────────────
+
+- name: Validate release mode settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        (horde_monitoring_grafana_dashboards_release_url | length > 0) or
+        (horde_monitoring_grafana_dashboards_release_version | length > 0)
+    fail_msg: >-
+      In release mode, either horde_monitoring_grafana_dashboards_release_url or
+      horde_monitoring_grafana_dashboards_release_version must be set.
+  when: horde_monitoring_grafana_dashboards_source == 'release'
+
+# ── manifest resolution (release mode, no explicit URL) ──────
+- name: Download release manifest for dashboard resolution
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/{{ horde_monitoring_grafana_dashboards_release_repo
+      }}/releases/download/{{ horde_monitoring_grafana_dashboards_release_version
+      }}/release-manifest.json
+    dest: /tmp/horde-dashboard-manifest.json
+    mode: "0644"
+  become: true
+  when:
+    - horde_monitoring_grafana_dashboards_source == 'release'
+    - horde_monitoring_grafana_dashboards_release_url | length == 0
+
+- name: Read release manifest
+  ansible.builtin.slurp:
+    src: /tmp/horde-dashboard-manifest.json
+  register: horde_monitoring__manifest_raw
+  become: true
+  when:
+    - horde_monitoring_grafana_dashboards_source == 'release'
+    - horde_monitoring_grafana_dashboards_release_url | length == 0
+
+- name: Parse release manifest
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_manifest: "{{ horde_monitoring__manifest_raw.content | b64decode | from_json }}"
+  when:
+    - horde_monitoring_grafana_dashboards_source == 'release'
+    - horde_monitoring_grafana_dashboards_release_url | length == 0
+
+- name: Resolve dashboard URL and checksum from manifest
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_resolved_url: >-
+      {{
+        'https://github.com/'
+        ~ horde_monitoring_grafana_dashboards_release_repo
+        ~ '/releases/download/'
+        ~ horde_monitoring_grafana_dashboards_release_version
+        ~ '/'
+        ~ horde_monitoring__dashboard_manifest.artifacts.dashboards.filename
+      }}
+    horde_monitoring__dashboard_resolved_checksum: >-
+      sha256:{{ horde_monitoring__dashboard_manifest.artifacts.dashboards.sha256 }}
+  when:
+    - horde_monitoring_grafana_dashboards_source == 'release'
+    - horde_monitoring_grafana_dashboards_release_url | length == 0
+
+- name: Use explicit dashboard URL and checksum when provided
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_resolved_url: "{{ horde_monitoring_grafana_dashboards_release_url }}"
+    horde_monitoring__dashboard_resolved_checksum: "{{ horde_monitoring_grafana_dashboards_release_checksum }}"
+  when:
+    - horde_monitoring_grafana_dashboards_source == 'release'
+    - horde_monitoring_grafana_dashboards_release_url | length > 0
+
+- name: Download dashboard release tarball
+  ansible.builtin.get_url:
+    url: "{{ horde_monitoring__dashboard_resolved_url }}"
+    dest: /tmp/horde-dashboards.tar.gz
+    checksum: "{{ horde_monitoring__dashboard_resolved_checksum | default(omit, true) }}"
+    mode: "0644"
+  become: true
+  when: horde_monitoring_grafana_dashboards_source == 'release'
+
+- name: Create release unpack directory
+  ansible.builtin.file:
+    path: /tmp/horde-dashboards-release
+    state: directory
+    mode: "0755"
+  become: true
+  when: horde_monitoring_grafana_dashboards_source == 'release'
+
+- name: Unpack dashboard tarball
+  ansible.builtin.unarchive:
+    src: /tmp/horde-dashboards.tar.gz
+    dest: /tmp/horde-dashboards-release
+    remote_src: true
+  become: true
+  when: horde_monitoring_grafana_dashboards_source == 'release'
+
+- name: Set release-mode source paths
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_app_src: /tmp/horde-dashboards-release/app
+    horde_monitoring__dashboard_infra_src: /tmp/horde-dashboards-release/infra
+  when: horde_monitoring_grafana_dashboards_source == 'release'
+
+# ── local mode ───────────────────────────────────────────────
+
+- name: Validate local mode settings
+  ansible.builtin.assert:
+    that:
+      - horde_monitoring_grafana_dashboards_local_path | length > 0
+    fail_msg: >-
+      horde_monitoring_grafana_dashboards_local_path must be set when
+      dashboards_source is 'local'.
+  when: horde_monitoring_grafana_dashboards_source == 'local'
+
+- name: Set local-mode source paths
+  ansible.builtin.set_fact:
+    horde_monitoring__dashboard_app_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/app"
+    horde_monitoring__dashboard_infra_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/infra"
+  when: horde_monitoring_grafana_dashboards_source == 'local'
+
+# ── common: verify source directories ────────────────────────
+
+- name: Verify expected dashboard source directories exist
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
-    - /tmp/horde-exporters-dashboards/dashboards
+    - "{{ horde_monitoring__dashboard_app_src }}"
+    - "{{ horde_monitoring__dashboard_infra_src }}"
   register: horde_monitoring__dashboard_dirs
   become: true
 
-- name: Fail if dashboard directories are missing (repo structure changed?)
+- name: Fail if dashboard source directories are missing
   ansible.builtin.fail:
     msg: >-
-      Expected dashboard directory {{ item.item }} not found after cloning
-      {{ horde_monitoring_grafana_dashboards_repo_url }} at ref {{ horde_monitoring_grafana_dashboards_repo_ref }}.
-      The repository layout may have changed — update the dashboard paths or
-      pin horde_monitoring_grafana_dashboards_repo_ref to a known-good tag.
+      Expected dashboard directory {{ item.item }} not found.
+      Source mode: {{ horde_monitoring_grafana_dashboards_source }}.
+      Check your source configuration variables.
   when: not item.stat.exists
   loop: "{{ horde_monitoring__dashboard_dirs.results }}"
   loop_control:
     label: "{{ item.item }}"
 
+# ── common: discover and copy dashboards ─────────────────────
+
 - name: Find app dashboard JSON files
   ansible.builtin.find:
-    paths: /tmp/horde-exporters-dashboards/packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
+    paths: "{{ horde_monitoring__dashboard_app_src }}"
     patterns: "*.json"
   register: horde_monitoring__app_dashboard_files
   become: true
 
 - name: Find infra dashboard JSON files
   ansible.builtin.find:
-    paths: /tmp/horde-exporters-dashboards/dashboards
+    paths: "{{ horde_monitoring__dashboard_infra_src }}"
     patterns: "*.json"
     recurse: true
   register: horde_monitoring__infra_dashboard_files
@@ -82,6 +224,7 @@
     owner: "472"
     group: "472"
     mode: "0644"
+    directory_mode: "0755"
   become: true
   loop: "{{ horde_monitoring__app_dashboard_files.files }}"
   loop_control:
@@ -95,6 +238,7 @@
     owner: "472"
     group: "472"
     mode: "0644"
+    directory_mode: "0755"
   become: true
   loop: "{{ horde_monitoring__app_dashboard_files.files }}"
   loop_control:
@@ -108,16 +252,13 @@
     owner: "472"
     group: "472"
     mode: "0644"
+    directory_mode: "0755"
   become: true
   loop: "{{ horde_monitoring__infra_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
 
 # --- Patch datasource UIDs in each set of dashboards --------------------
-# The upstream JSON files may reference arbitrary datasource UIDs (either
-# variable-style ${DS_*} or hardcoded literal UIDs).  We normalise them
-# all to match the UIDs provisioned by this role using a single Python
-# script that handles both patterns.
 
 - name: Deploy dashboard UID patching script
   ansible.builtin.copy:
@@ -155,8 +296,21 @@
     state: absent
   become: true
 
-- name: Clean up cloned repository
+# ── cleanup: remove source-mode-specific temp files ─────────
+
+- name: Clean up cloned repository (git mode)
   ansible.builtin.file:
     path: /tmp/horde-exporters-dashboards
     state: absent
   become: true
+  when: horde_monitoring_grafana_dashboards_source == 'git'
+
+- name: Clean up release tarball and unpack directory (release mode)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /tmp/horde-dashboards.tar.gz
+    - /tmp/horde-dashboards-release
+  when: horde_monitoring_grafana_dashboards_source == 'release'
