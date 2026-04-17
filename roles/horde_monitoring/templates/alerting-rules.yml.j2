@@ -331,7 +331,7 @@ groups:
             localhost:{{ horde_monitoring_pyroscope_port }}.
 {% endif %}
 
-  # --- Host filesystem disk usage (Plan 005C) ---
+  # --- Host filesystem disk usage ---
   # These rules use node_exporter metrics to monitor the host partitions
   # where monitoring data lives. They fire regardless of which service
   # consumes the space (S3 store, Mimir, Docker logs, etc.).

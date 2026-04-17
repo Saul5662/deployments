@@ -111,6 +111,35 @@ ruler_storage:
     dir: /mimir/data/rules
 {% endif %}
 
+ruler:
+  rule_path: /mimir/data/ruler
+  alertmanager_url: http://127.0.0.1:9009/alertmanager
+  tenant_federation:
+    enabled: true
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+
+alertmanager_storage:
+{% if horde_monitoring_mimir_enable_s3 | bool %}
+  s3:
+    bucket_name: {{ horde_monitoring_s3_alertmanager_bucket }}
+{% else %}
+  backend: filesystem
+  filesystem:
+    dir: /mimir/data/alertmanager-config
+{% endif %}
+
+alertmanager:
+  data_dir: /mimir/data/alertmanager
+  fallback_config_file: /etc/mimir/alertmanager-fallback.yaml
+  external_url: http://127.0.0.1:9009/alertmanager
+  sharding_ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+
 store_gateway:
   sharding_ring:
     replication_factor: 1

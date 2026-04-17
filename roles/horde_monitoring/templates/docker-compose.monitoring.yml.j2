@@ -45,6 +45,7 @@ services:
       until mc alias set local {{ horde_monitoring_s3_internal_url }} $$S3_INIT_ACCESS_KEY $$S3_INIT_SECRET_KEY{% if horde_monitoring_s3_insecure | bool %} --insecure{% endif %}; do sleep 2; done;
       mc mb --ignore-existing local/{{ horde_monitoring_s3_blocks_bucket }};
       mc mb --ignore-existing local/{{ horde_monitoring_s3_ruler_bucket }};
+      mc mb --ignore-existing local/{{ horde_monitoring_s3_alertmanager_bucket }};
 {% if horde_monitoring_install_loki | bool %}
       mc mb --ignore-existing local/{{ horde_monitoring_loki_chunks_bucket }};
 {% endif %}
