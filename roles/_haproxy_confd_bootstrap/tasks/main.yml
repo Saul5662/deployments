@@ -1,0 +1,49 @@
+---
+# Installs haproxy if missing, sets up conf.d, and patches systemd.
+- name: Ensure HAProxy is installed (conf.d bootstrap)
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  when: haproxy_confd_install | default(true) | bool
+
+- name: Ensure HAProxy conf.d and override directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  become: true
+  loop:
+    - /etc/haproxy/conf.d
+    - /etc/systemd/system/haproxy.service.d
+
+- name: Configure HAProxy to load from conf.d (override.conf)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/haproxy.service.d/override.conf
+    content: |
+      [Service]
+      ExecStartPre=
+      ExecStart=
+      ExecReload=
+      ExecStartPre=/usr/sbin/haproxy -Ws -f $CONFIG -f /etc/haproxy/conf.d/ -c -q $EXTRAOPTS
+      ExecStart=/usr/sbin/haproxy -Ws -f $CONFIG -f /etc/haproxy/conf.d/ -p $PIDFILE $EXTRAOPTS
+      ExecReload=/usr/sbin/haproxy -Ws -f $CONFIG -f /etc/haproxy/conf.d/ -c -q $EXTRAOPTS
+    mode: "0644"
+  become: true
+  register: _haproxy_confd_systemd
+
+- name: Reload systemd daemon for HAProxy override
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+  when: _haproxy_confd_systemd.changed
+
+- name: Start HAProxy to lock in override
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: true
+    state: started
+  become: true
+  when: _haproxy_confd_systemd.changed

@@ -1,48 +1,15 @@
 ---
 # Replacement HAProxy setup for AI-Horde native instances.
-- name: Install HAProxy
-  ansible.builtin.apt:
-    name: haproxy
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
-  when: ai_horde_start_services | bool
 
 - name: Determine whether HAProxy should apply live changes
   ansible.builtin.set_fact:
     _ai_horde_haproxy_apply_mode: "{{ ai_horde_start_services | bool }}"
 
-- name: Ensure HAProxy conf.d directory exists
-  ansible.builtin.file:
-    path: /etc/haproxy/conf.d
-    state: directory
-    mode: "0755"
-  become: true
-  when: _ai_horde_haproxy_apply_mode | bool
-
-- name: Ensure HAProxy systemd override directory exists
-  ansible.builtin.file:
-    path: /etc/systemd/system/haproxy.service.d
-    state: directory
-    mode: "0755"
-  become: true
-  when: _ai_horde_haproxy_apply_mode | bool
-
-- name: Configure HAProxy to load from conf.d
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/haproxy.service.d/override.conf
-    content: |
-      [Service]
-      Environment="CONFIG=/etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d/"
-    mode: "0644"
-  become: true
-  when: _ai_horde_haproxy_apply_mode | bool
-
-- name: Reload systemd daemon for HAProxy
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
+- name: Bootstrap HAProxy conf.d systemd override
+  ansible.builtin.include_role:
+    name: _haproxy_confd_bootstrap
+  vars:
+    haproxy_confd_install: "{{ _ai_horde_haproxy_apply_mode | bool }}"
   when: _ai_horde_haproxy_apply_mode | bool
 
 - name: Write AI-Horde HAProxy configuration fragment
@@ -51,12 +18,13 @@
     dest: /etc/haproxy/conf.d/ai_horde.cfg
     mode: "0644"
   become: true
+  register: _ai_horde_haproxy_cfg
   when: _ai_horde_haproxy_apply_mode | bool
 
-- name: Enable and start HAProxy
+- name: Enable and restart HAProxy
   ansible.builtin.systemd:
     name: haproxy
     enabled: true
-    state: started
+    state: "{{ 'restarted' if _ai_horde_haproxy_cfg.changed else 'started' }}"
   become: true
   when: ai_horde_start_services | bool

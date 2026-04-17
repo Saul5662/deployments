@@ -1,34 +1,9 @@
 ---
 # HAProxy safe configuration management for monitoring backends via conf.d drop-ins.
 
-- name: Ensure HAProxy conf.d directory exists
-  ansible.builtin.file:
-    path: /etc/haproxy/conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-
-- name: Create systemd override directory for HAProxy
-  ansible.builtin.file:
-    path: /etc/systemd/system/haproxy.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-
-- name: Ensure HAProxy systemd drops-in $CONFIG via override.conf
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/haproxy.service.d/override.conf
-    owner: root
-    group: root
-    mode: '0644'
-    content: |
-      [Service]
-      Environment="CONFIG=/etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d"
-  notify:
-    - Reload systemd
-    - Restart HAProxy
+- name: Bootstrap HAProxy conf.d systemd override
+  ansible.builtin.include_role:
+    name: _haproxy_confd_bootstrap
 
 - name: Configure monitoring HAProxy backends in conf.d
   ansible.builtin.template:

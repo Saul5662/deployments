@@ -55,13 +55,12 @@ The harness uses `gathering = explicit` in `tests/ansible.cfg`. Facts are NOT co
 
 - Test playbooks that exercise fact-dependent code paths MUST set `gather_facts: true` in the relevant play.
 - Render-only tests that do not exercise fact-dependent logic should omit `gather_facts` (inheriting the explicit/off default) for speed.
-- Roles that depend on gathered facts should include a guard assertion that fails clearly when required facts are missing. See `roles/_haproxy_safe_edit/tasks/main.yml` for the pattern.
+- Roles that depend on gathered facts should include a guard assertion that fails clearly when required facts are missing.
 - Known fact dependencies in roles:
   - `ansible_os_family`: `horde_alloy` (install.yml) — platform-conditional package installation.
   - `ansible_hostname`: `horde_alloy` (config.alloy.j2) — instance label in telemetry config.
   - `ansible_kernel`: `amd_gpu_drivers` (main.yml) — kernel header package names.
   - `ansible_facts.processor_*`: `ai_horde` (native.yml) — capacity advisory (defaults to 1 when absent).
-  - `ansible_date_time`: `_haproxy_safe_edit` (main.yml) — timestamped backup filenames.
 - `tests/*/local_deploy.yml` and `tests/*/local_deploy.sh`: Local render and orchestration workflows for manual stack validation.
 - `tests/integration/_render_bridge.yml`: Integration helper playbook used by shell harness scripts.
 - `tests/Dockerfile.systemd` and `tests/inventory_docker.ini`: Containerized systemd test environment and inventory used by `tests/run_tests.sh`.

@@ -12,7 +12,7 @@
         that:
           - "'meta: flush_handlers' not in _haproxy_tasks_file_content"
           - "'conf.d' in _haproxy_tasks_file_content"
-          - "'override.conf' in _haproxy_tasks_file_content"
+          - "'_haproxy_confd_bootstrap' in _haproxy_tasks_file_content"
         fail_msg: >-
           Conf logic must deploy to conf.d natively and must not use global flush_handlers.
 

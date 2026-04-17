@@ -114,7 +114,7 @@
 
     - name: Read rendered alerting rules
       ansible.builtin.slurp:
-        path: /etc/prometheus/rules/monitoring-stack.rules
+        path: /etc/mimir/rules/monitoring-stack.rules
       register: alerting_rules
 
     - name: Assert alerting rules content
@@ -177,7 +177,7 @@
 
     - name: Read rendered recording rules
       ansible.builtin.slurp:
-        path: /etc/prometheus/rules/monitoring-stack.recording.rules
+        path: /etc/mimir/rules/monitoring-stack.recording.rules
       register: recording_rules
 
     - name: Assert recording rules content
@@ -284,6 +284,56 @@
           - _s3_data_stat.stat.gr_name == 'root'
         fail_msg: "S3 data directory must be owned by root:root"
 
+    # --- HAProxy conf.d assertions ---
+
+    - name: Stat HAProxy conf.d directory
+      ansible.builtin.stat:
+        path: /etc/haproxy/conf.d
+      register: _haproxy_confd_stat
+
+    - name: Stat HAProxy systemd override
+      ansible.builtin.stat:
+        path: /etc/systemd/system/haproxy.service.d/override.conf
+      register: _haproxy_override_stat
+
+    - name: Read HAProxy systemd override
+      ansible.builtin.slurp:
+        path: /etc/systemd/system/haproxy.service.d/override.conf
+      register: _haproxy_override_content
+
+    - name: Stat monitoring HAProxy conf.d fragment
+      ansible.builtin.stat:
+        path: /etc/haproxy/conf.d/horde-monitoring.cfg
+      register: _haproxy_monitoring_cfg_stat
+
+    - name: Read monitoring HAProxy conf.d fragment
+      ansible.builtin.slurp:
+        path: /etc/haproxy/conf.d/horde-monitoring.cfg
+      register: _haproxy_monitoring_cfg_content
+
+    - name: Assert HAProxy conf.d bootstrap was applied correctly
+      ansible.builtin.assert:
+        that:
+          - _haproxy_confd_stat.stat.exists
+          - _haproxy_confd_stat.stat.isdir
+          - _haproxy_override_stat.stat.exists
+          - "'ExecStart=' in (_haproxy_override_content.content | b64decode)"
+          - "'/etc/haproxy/conf.d/' in (_haproxy_override_content.content | b64decode)"
+          - "'Environment=' not in (_haproxy_override_content.content | b64decode)"
+        fail_msg: >-
+          HAProxy conf.d bootstrap must create the conf.d directory, write a
+          systemd override using ExecStart (not Environment), and reference conf.d.
+
+    - name: Assert monitoring HAProxy backends are configured via conf.d
+      ansible.builtin.assert:
+        that:
+          - _haproxy_monitoring_cfg_stat.stat.exists
+          - _haproxy_monitoring_cfg_stat.stat.mode == '0644'
+          - "'horde_monitoring_grafana_backend' in (_haproxy_monitoring_cfg_content.content | b64decode)"
+          - "'horde_monitoring_mimir_backend' in (_haproxy_monitoring_cfg_content.content | b64decode)"
+        fail_msg: >-
+          Monitoring HAProxy config must be a conf.d fragment containing backend definitions.
+
     # Run the role a second time with a changed value so Ansible
     # overwrites the config and creates a backup file.
 
@@ -326,7 +376,7 @@
         - /etc/mimir/runtime-overrides.yaml
         - /opt/mimir/docker-compose.yml
         - /etc/grafana/provisioning/datasources/mimir.yml
-        - /etc/prometheus/rules/monitoring-stack.rules
+        - /etc/mimir/rules/monitoring-stack.rules
       register: _critical_files
 
     - name: Assert all critical output files exist
@@ -599,7 +649,7 @@
 
     - name: Read alerting rules
       ansible.builtin.slurp:
-        path: /etc/prometheus/rules/monitoring-stack.rules
+        path: /etc/mimir/rules/monitoring-stack.rules
       register: alerting_rules_lt
 
     - name: Assert Loki alerting rules are present
@@ -785,7 +835,7 @@
 
     - name: Read alerting rules (disabled)
       ansible.builtin.slurp:
-        path: /etc/prometheus/rules/monitoring-stack.rules
+        path: /etc/mimir/rules/monitoring-stack.rules
       register: alerting_disabled
 
     - name: Assert Loki and Tempo alerts are NOT present when disabled
@@ -829,7 +879,7 @@
   post_tasks:
     - name: Read alerting rules (postgres enabled)
       ansible.builtin.slurp:
-        path: /etc/prometheus/rules/monitoring-stack.rules
+        path: /etc/mimir/rules/monitoring-stack.rules
       register: alerting_postgres
 
     - name: Assert PostgreSQL alerting rules are present
