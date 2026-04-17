@@ -212,4 +212,4 @@
           - _compose_config_stat.stat.mode == '0600'
           - _compose_config_stat.stat.pw_name == 'root'
           - _compose_config_stat.stat.gr_name == 'root'
-        fail_msg: "Secret-containing files must be mode 0600, owned root:root (Plan 003A)"
+        fail_msg: "Secret-containing files must be mode 0600, owned root:root"

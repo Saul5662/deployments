@@ -127,7 +127,6 @@
           - "'MimirCompactorFailed' in (alerting_rules.content | b64decode)"
           # S3 health alerts — split into metrics-scrape (warning) and
           # backend-failing (critical driven by thanos_objstore_* metrics).
-          # Plan 013 refactor: removes the legacy S3StorageDown false-positive.
           - "'S3MetricsScrapeDown' in (alerting_rules.content | b64decode)"
           - "'S3StorageBackendFailing' in (alerting_rules.content | b64decode)"
           - "'S3StorageDown' not in (alerting_rules.content | b64decode)"
@@ -181,7 +180,7 @@
         path: /etc/prometheus/rules/monitoring-stack.recording.rules
       register: recording_rules
 
-    - name: Assert recording rules content (Plan 013 Phase E)
+    - name: Assert recording rules content
       ansible.builtin.assert:
         that:
           - "'horde-app:recording' in (recording_rules.content | b64decode)"

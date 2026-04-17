@@ -409,9 +409,6 @@ passes these values from `ai_horde_waitress_threads` and
 Database pool tuning (SQLAlchemy `pool_size`) remains hardcoded upstream.
 `ai_horde_db_pool_size_per_instance` is advisory-only for sizing warnings;
 it does not modify upstream runtime DB pool configuration.
-Tracking for further upstream runtime follow-ups is maintained in:
-
-- `docs/plans/ai-native-gaps-followup/upstream-runtime-tunability-tracking.md`
 
 ### HAProxy Safe-Edit Mode
 

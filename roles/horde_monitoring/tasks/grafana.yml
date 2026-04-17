@@ -27,7 +27,7 @@
     group: "472"
     # 0600: secureJsonData contains Mimir tenant IDs which control write
     # access to tenant data. Grafana (UID 472) is the owner so can still
-    # read the file. Consistent with Plan 003's posture for secret files.
+    # read the file.
     mode: "0600"
   become: true
   notify: Restart monitoring stack

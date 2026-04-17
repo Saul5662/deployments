@@ -2,7 +2,6 @@
 # Fast policy/contract checks for AI-Horde role defaults and examples.
 # This playbook is designed to run on CI without privileged containers.
 # Risk categories: reproducibility, security, data-integrity, operational
-# Coverage map: docs/plans/maintainability-gaps/test-coverage-map.md
 
 - name: Validate AI-Horde reproducibility and topology contracts
   hosts: localhost

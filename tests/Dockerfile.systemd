@@ -50,8 +50,7 @@ RUN rm -f /lib/systemd/system/multi-user.target.wants/* \
     /lib/systemd/system/sysinit.target.wants/systemd-tmpfiles-setup* \
     /lib/systemd/system/systemd-update-utmp*
 
-# Create docker group (not required by the role since Wave 2 / Plan 010C,
-# but kept for compatibility with other tools that may expect it)
+# Create docker group (kept for compatibility with other tools that may expect it)
 RUN groupadd -f docker
 
 VOLUME ["/sys/fs/cgroup"]

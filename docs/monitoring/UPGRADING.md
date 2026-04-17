@@ -16,8 +16,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 
 > **Tip:** Back up persistent state before any upgrade. Grafana's SQLite
 > database in particular is migrated on first startup and is not easily
-> rolled back. See [Plan 006](plans/006-backup-strategy.md) for the
-> backup strategy.
+> rolled back.
 
 > **Galaxy collections:** When bumping Ansible Galaxy collection versions,
 > update both `galaxy.yml` (dependencies) and `examples/requirements.yml`

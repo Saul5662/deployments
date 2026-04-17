@@ -2,7 +2,6 @@
 # Test playbook: AI-Horde role native mode (config rendering only, no service start)
 # idempotency: skip  (multiple plays intentionally overwrite .env with different variable sets)
 # Risk categories: deploy-safety, security, fail-fast
-# Coverage map: docs/plans/maintainability-gaps/test-coverage-map.md
 #
 # Play 1: Positive test — render native mode with 3 instances, assert on output files
 # Play 2: Positive test — render native mode with optional local services
