@@ -4,7 +4,6 @@
 #
 # The rendered rules file is placed in the Prometheus rules directory where
 # it is automatically loaded by Prometheus via the rule_files glob.
-# See Plan 011 (docs/plans/011-alertmanager.md) for architecture details.
 
 - name: Fail when host disk alerts are enabled without host filesystem metrics
   ansible.builtin.fail:
@@ -19,7 +18,7 @@
     - horde_monitoring_install_host_disk_alerts | default(true) | bool
     - not (horde_monitoring_host_filesystem_metrics_available | default(false) | bool)
 
-- name: Ensure Prometheus rules directory exists
+- name: Ensure Mimir rules templating directory exists
   ansible.builtin.file:
     path: "{{ horde_monitoring_alerting_rules_dir }}"
     state: directory
@@ -36,7 +35,7 @@
     group: root
     mode: "0644"
   become: true
-  notify: Reload prometheus
+  notify: Restart monitoring stack
 
 - name: Template monitoring stack recording rules
   ansible.builtin.template:
@@ -46,7 +45,7 @@
     group: root
     mode: "0644"
   become: true
-  notify: Reload prometheus
+  notify: Restart monitoring stack
   when: horde_monitoring_install_recording_rules | default(true) | bool
 
 - name: Remove recording rules file when disabled
@@ -54,5 +53,29 @@
     path: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_recording_rules_file }}"
     state: absent
   become: true
-  notify: Reload prometheus
+  notify: Restart monitoring stack
   when: not (horde_monitoring_install_recording_rules | default(true) | bool)
+
+- name: Publish alerting rules to Mimir Ruler API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
+    method: POST
+    headers:
+      X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
+    src: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_alerting_rules_file }}"
+    status_code: [202, 200]
+  become: true
+  when: horde_monitoring_start_services | bool
+
+- name: Publish recording rules to Mimir Ruler API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
+    method: POST
+    headers:
+      X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
+    src: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_recording_rules_file }}"
+    status_code: [202, 200]
+  become: true
+  when: 
+    - horde_monitoring_install_recording_rules | default(true) | bool
+    - horde_monitoring_start_services | bool

@@ -107,6 +107,7 @@ horde_monitoring_s3_secret_key: "changeme-s3-secret"
 horde_monitoring_s3_manage_buckets: "{{ horde_monitoring_s3_deployment_mode == 'embedded' }}"
 horde_monitoring_s3_blocks_bucket: "mimir-blocks"
 horde_monitoring_s3_ruler_bucket: "mimir-ruler"
+horde_monitoring_s3_alertmanager_bucket: "mimir-alertmanager"
 horde_monitoring_s3_memory_limit: "512m"
 
 # Offsite backup via S3 client (mc) mirror.
@@ -269,10 +270,10 @@ horde_monitoring_install_host_disk_alerts: true
 # for the monitored host(s). The role fails fast when host disk alerts are enabled
 # but this flag is false and services are started.
 horde_monitoring_host_filesystem_metrics_available: false
-horde_monitoring_alerting_rules_dir: "/etc/prometheus/rules"
+horde_monitoring_alerting_rules_dir: "{{ horde_monitoring_mimir_config_dir }}/rules"
 horde_monitoring_alerting_rules_file: "monitoring-stack.rules"
 
-# Recording rules (Plan 013, Phase E) — pre-compute aggregations used by
+# Recording rules — pre-compute aggregations used by
 # dashboards and alerts. Disabling them does not break anything; dashboards
 # will fall back to on-the-fly queries.
 horde_monitoring_install_recording_rules: true
