@@ -109,6 +109,7 @@
       - --capacity
       - "{{ horde_monitoring_s3_capacity | human_to_bytes }}"
   become: true
+  changed_when: true
   when:
     - horde_monitoring_start_services | bool
     - horde_monitoring_mimir_enable_s3 | bool
@@ -129,6 +130,7 @@
       - --version
       - "1"
   become: true
+  changed_when: true
   when:
     - horde_monitoring_start_services | bool
     - horde_monitoring_mimir_enable_s3 | bool

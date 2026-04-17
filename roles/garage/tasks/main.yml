@@ -240,6 +240,7 @@
       - --capacity
       - "{{ garage_capacity | human_to_bytes }}"
   become: true
+  changed_when: true
   when:
     - garage_start_services | bool
     - garage_buckets | default([]) | length > 0
@@ -259,6 +260,7 @@
       - --version
       - "1"
   become: true
+  changed_when: true
   when:
     - garage_start_services | bool
     - garage_buckets | default([]) | length > 0
