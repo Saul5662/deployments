@@ -27,3 +27,10 @@
   register: horde_monitoring__reload_prometheus
   failed_when: false
   changed_when: horde_monitoring__reload_prometheus.status is defined and horde_monitoring__reload_prometheus.status.ActiveState == 'active'
+
+- name: Restart HAProxy
+  ansible.builtin.systemd:
+    name: haproxy
+    state: restarted
+  become: true
+  failed_when: false

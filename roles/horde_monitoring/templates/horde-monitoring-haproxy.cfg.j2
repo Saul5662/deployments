@@ -1,0 +1,72 @@
+backend horde_monitoring_grafana_backend
+    balance leastconn
+    option forwardfor if-none
+    server horde_monitoring_grafana_local 127.0.0.1:{{ horde_monitoring_grafana_port }} check
+
+backend horde_monitoring_mimir_backend
+    balance leastconn
+    timeout queue 30s
+    retries 3
+    option httpchk
+    option forwardfor if-none
+    server horde_monitoring_mimir_local 127.0.0.1:{{ horde_monitoring_mimir_port }} check observe layer7
+    http-check expect ! rstatus ^5
+
+{% if horde_monitoring_install_loki | bool %}
+backend horde_monitoring_loki_backend
+    balance leastconn
+    timeout queue 30s
+    retries 3
+    option httpchk
+    option forwardfor if-none
+    server horde_monitoring_loki_local 127.0.0.1:{{ horde_monitoring_loki_port }} check observe layer7
+    http-check expect ! rstatus ^5
+{% endif %}
+
+{% if horde_monitoring_install_tempo | bool %}
+backend horde_monitoring_tempo_otlp_backend
+    balance leastconn
+    timeout queue 30s
+    retries 3
+    option forwardfor if-none
+    server horde_monitoring_tempo_local 127.0.0.1:{{ horde_monitoring_tempo_otlp_http_port }} check
+{% endif %}
+
+{% if horde_monitoring_install_pyroscope | bool %}
+backend horde_monitoring_pyroscope_backend
+    balance leastconn
+    timeout queue 30s
+    retries 3
+    option httpchk
+    option forwardfor if-none
+    server horde_monitoring_pyroscope_local 127.0.0.1:{{ horde_monitoring_pyroscope_port }} check observe layer7
+    http-check expect ! rstatus ^5
+{% endif %}
+
+{% if horde_monitoring_configure_alertmanager_backend | bool %}
+backend horde_monitoring_alertmanager_backend
+    balance leastconn
+    option httpchk
+    option forwardfor if-none
+    server horde_monitoring_alertmanager_local 127.0.0.1:{{ horde_monitoring_alertmanager_port }} check observe layer7
+    http-check expect ! rstatus ^5
+{% endif %}
+
+{% if horde_monitoring_configure_stats_exporter_backend | bool %}
+backend horde_monitoring_stats_exporter_backend
+    balance leastconn
+    option forwardfor if-none
+    server horde_monitoring_stats_exporter_local 127.0.0.1:{{ horde_monitoring_stats_exporter_port }} check
+{% endif %}
+
+{% if horde_monitoring_configure_loki_ingestion_frontend | bool and horde_monitoring_install_loki | bool %}
+userlist loki_ingestion_auth
+    user {{ horde_monitoring_loki_ingestion_auth_user }} insecure-password {{ horde_monitoring_loki_ingestion_auth_password }}
+
+frontend loki_ingestion_front
+    bind 0.0.0.0:{{ horde_monitoring_loki_ingestion_port }}
+    mode http
+    acl authenticated http_auth(loki_ingestion_auth)
+    http-request auth realm loki unless authenticated
+    default_backend horde_monitoring_loki_backend
+{% endif %}

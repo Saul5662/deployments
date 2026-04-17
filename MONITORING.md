@@ -82,13 +82,6 @@ When `horde_monitoring_install_host_disk_alerts: true`, ensure Prometheus
 ingests `node_filesystem_*` metrics and set
 `horde_monitoring_host_filesystem_metrics_available: true`.
 
-### Node Exporter HAProxy Reverse Proxy
-
-- `node_exporter` listens on `127.0.0.1:9101` on each host.
-- HAProxy fronts `node_exporter` on `horde_node_exporter_haproxy_port`
-  (default `9100`) and enforces `basic auth`.
-- The HAProxy block uses a `node_exporter_auth` userlist and is applied via
-  the `_haproxy_safe_edit` safety pipeline.
 
 ### Node Exporter TLS Automation
 

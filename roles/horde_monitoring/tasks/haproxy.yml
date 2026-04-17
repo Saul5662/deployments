@@ -1,135 +1,41 @@
 ---
-# HAProxy safe configuration management for monitoring backends.
-# Delegates the copy → blockinfile → validate → promote pipeline to
-# the shared _haproxy_safe_edit micro-role.
+# HAProxy safe configuration management for monitoring backends via conf.d drop-ins.
 
-# ── Build monitoring backends block ────────────────────────
-- name: Build monitoring backends block content
-  ansible.builtin.set_fact:
-    horde_monitoring__haproxy_backends_lines: >-
-      {{
-        (
-        [
-          'backend horde_monitoring_grafana_backend',
-          '    balance leastconn',
-          '    option forwardfor if-none',
-          '    server horde_monitoring_grafana_local 127.0.0.1:' ~ horde_monitoring_grafana_port ~ ' check',
-          '',
-          'backend horde_monitoring_mimir_backend',
-          '    balance leastconn',
-          '    timeout queue 30s',
-          '    retries 3',
-          '    option httpchk',
-          '    option forwardfor if-none',
-          '    server horde_monitoring_mimir_local 127.0.0.1:' ~ horde_monitoring_mimir_port ~ ' check observe layer7',
-          '    http-check expect ! rstatus ^5',
-        ]
-        + (
-          [
-            '',
-            'backend horde_monitoring_loki_backend',
-            '    balance leastconn',
-            '    timeout queue 30s',
-            '    retries 3',
-            '    option httpchk',
-            '    option forwardfor if-none',
-            '    server horde_monitoring_loki_local 127.0.0.1:' ~ horde_monitoring_loki_port ~ ' check observe layer7',
-            '    http-check expect ! rstatus ^5',
-          ] if (horde_monitoring_install_loki | bool) else []
-        )
-        + (
-          [
-            '',
-            'backend horde_monitoring_tempo_otlp_backend',
-            '    balance leastconn',
-            '    timeout queue 30s',
-            '    retries 3',
-            '    option forwardfor if-none',
-            '    server horde_monitoring_tempo_local 127.0.0.1:' ~ horde_monitoring_tempo_otlp_http_port ~ ' check',
-          ] if (horde_monitoring_install_tempo | bool) else []
-        )
-        + (
-          [
-            '',
-            'backend horde_monitoring_pyroscope_backend',
-            '    balance leastconn',
-            '    timeout queue 30s',
-            '    retries 3',
-            '    option httpchk',
-            '    option forwardfor if-none',
-            '    server horde_monitoring_pyroscope_local 127.0.0.1:' ~ horde_monitoring_pyroscope_port ~ ' check observe layer7',
-            '    http-check expect ! rstatus ^5',
-          ] if (horde_monitoring_install_pyroscope | bool) else []
-        )
-        + (
-          [
-            '',
-            'backend horde_monitoring_alertmanager_backend',
-            '    balance leastconn',
-            '    option httpchk',
-            '    option forwardfor if-none',
-            '    server horde_monitoring_alertmanager_local 127.0.0.1:' ~ horde_monitoring_alertmanager_port ~ ' check observe layer7',
-            '    http-check expect ! rstatus ^5',
-          ] if (horde_monitoring_configure_alertmanager_backend | bool) else []
-        )
-        + (
-          [
-            '',
-            'backend horde_monitoring_stats_exporter_backend',
-            '    balance leastconn',
-            '    option forwardfor if-none',
-            '    server horde_monitoring_stats_exporter_local 127.0.0.1:' ~ horde_monitoring_stats_exporter_port ~ ' check',
-          ] if (horde_monitoring_configure_stats_exporter_backend | bool) else []
-        )
-        ) }}
+- name: Ensure HAProxy conf.d directory exists
+  ansible.builtin.file:
+    path: /etc/haproxy/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
 
-- name: Join backends into multi-line block
-  ansible.builtin.set_fact:
-    horde_monitoring__haproxy_backends_block: "{{ horde_monitoring__haproxy_backends_lines | join('\n') }}"
+- name: Create systemd override directory for HAProxy
+  ansible.builtin.file:
+    path: /etc/systemd/system/haproxy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
 
-# ── Delegate to shared safe-edit pipeline ──────────────────
-- name: Apply monitoring backends via shared safe-edit pipeline  # noqa: var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: _haproxy_safe_edit
-  vars:
-    _haproxy_safe_edit_config_path: "{{ horde_monitoring_haproxy_config_path }}"
-    _haproxy_safe_edit_backup_dir: "{{ horde_monitoring_haproxy_backup_dir }}"
-    _haproxy_safe_edit_marker: "MONITORING BACKENDS"
-    _haproxy_safe_edit_block: "{{ horde_monitoring__haproxy_backends_block }}"
-    _haproxy_safe_edit_backup_retention: "{{ horde_monitoring_haproxy_backup_retention_count | int }}"
-    _haproxy_safe_edit_apply: "{{ horde_monitoring_start_services | default(true) | bool }}"
+- name: Ensure HAProxy systemd drops-in $CONFIG via override.conf
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/haproxy.service.d/override.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Service]
+      Environment="CONFIG=/etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d"
+  notify:
+    - Reload systemd
+    - Restart HAProxy
 
-# ── Loki ingestion frontend with basic auth ────────────────
-# Exposes Loki's push API to remote Alloy agents behind basic auth.
-# The backend is already defined above (horde_monitoring_loki_backend).
-# Follows the same userlist+frontend pattern as node_exporter HAProxy.
-
-- name: Build Loki ingestion frontend block
-  ansible.builtin.set_fact:
-    horde_monitoring__haproxy_loki_frontend_block: |-
-      userlist loki_ingestion_auth
-          user {{ horde_monitoring_loki_ingestion_auth_user }} insecure-password {{ horde_monitoring_loki_ingestion_auth_password }}
-
-      frontend loki_ingestion_front
-          bind 0.0.0.0:{{ horde_monitoring_loki_ingestion_port }}
-          mode http
-          acl authenticated http_auth(loki_ingestion_auth)
-          http-request auth realm loki unless authenticated
-          default_backend horde_monitoring_loki_backend
-  when:
-    - horde_monitoring_configure_loki_ingestion_frontend | bool
-    - horde_monitoring_install_loki | bool
-
-- name: Apply Loki ingestion frontend via shared safe-edit pipeline  # noqa: var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: _haproxy_safe_edit
-  vars:
-    _haproxy_safe_edit_config_path: "{{ horde_monitoring_haproxy_config_path }}"
-    _haproxy_safe_edit_backup_dir: "{{ horde_monitoring_haproxy_backup_dir }}"
-    _haproxy_safe_edit_marker: "LOKI INGESTION PROXY"
-    _haproxy_safe_edit_block: "{{ horde_monitoring__haproxy_loki_frontend_block }}"
-    _haproxy_safe_edit_backup_retention: "{{ horde_monitoring_haproxy_backup_retention_count | int }}"
-    _haproxy_safe_edit_apply: "{{ horde_monitoring_start_services | default(true) | bool }}"
-  when:
-    - horde_monitoring_configure_loki_ingestion_frontend | bool
-    - horde_monitoring_install_loki | bool
+- name: Configure monitoring HAProxy backends in conf.d
+  ansible.builtin.template:
+    src: horde-monitoring-haproxy.cfg.j2
+    dest: /etc/haproxy/conf.d/horde-monitoring.cfg
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Restart HAProxy

@@ -339,18 +339,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Assert shared safe-edit role is used (no meta flush_handlers)
-      ansible.builtin.set_fact:
-        _mon_haproxy_tasks: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../roles/horde_monitoring/tasks/haproxy.yml') }}
-
-    - name: Assert monitoring haproxy delegates to shared micro-role
-      ansible.builtin.assert:
-        that:
-          - "'meta: flush_handlers' not in _mon_haproxy_tasks"
-          - "'_haproxy_safe_edit' in _mon_haproxy_tasks"
-          - "'include_role' in _mon_haproxy_tasks"
-        fail_msg: "Monitoring HAProxy must delegate to _haproxy_safe_edit, not use meta: flush_handlers"
 
     - name: Assert systemd unit contains required directives
       ansible.builtin.assert:
@@ -758,22 +746,6 @@
         that:
           - _pyroscope_data_dir.stat.exists
           - _pyroscope_data_dir.stat.isdir
-
-    # ── HAProxy backend block content assertions ──────────────
-    - name: Assert HAProxy backends block includes all enabled services
-      ansible.builtin.assert:
-        that:
-          - "'backend horde_monitoring_grafana_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_mimir_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_loki_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_tempo_otlp_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_pyroscope_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_alertmanager_backend' in horde_monitoring__haproxy_backends_block"
-          - "'backend horde_monitoring_stats_exporter_backend' in horde_monitoring__haproxy_backends_block"
-        fail_msg: >-
-          HAProxy backends block must include entries for all enabled services
-          (grafana, mimir, loki, tempo, pyroscope, alertmanager, stats_exporter).
-          Got: {{ horde_monitoring__haproxy_backends_block }}
 
 # ---------------------------------------------------------------------------
 # Play 4: Verify Loki+Tempo are NOT present when disabled

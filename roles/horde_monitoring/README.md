@@ -250,17 +250,13 @@ Job-name variables must match `job_name` values in your Prometheus
 
 When `horde_monitoring_configure_haproxy: true`, the role:
 
-1. Creates a timestamped backup of the current HAProxy config
-2. Inserts `grafana_backend` and `mimir_backend` into a working copy
-3. Validates with `haproxy -c`
-4. Promotes to live only if validation passes
-5. Deploys `/usr/local/bin/haproxy_safe_edit.sh` for manual use
+1. Creates the `/etc/haproxy/conf.d` directory to hold modular configurations
+2. Adds `/etc/systemd/system/haproxy.service.d/override.conf` telling systemd to load the `conf.d` directory natively alongside the main config
+3. Deploys the monitoring backends modularly via `/etc/haproxy/conf.d/horde-monitoring.cfg`
+4. Automatically reloads HAProxy if any modular configurations change
 
 You still need frontend ACL rules in your HAProxy config to route to these
 backends.
-
-Backup retention for safe-edit snapshots is controlled by
-`horde_monitoring_haproxy_backup_retention_count` (default: `20`).
 
 ## Credential Management
 

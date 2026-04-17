@@ -1,142 +1,58 @@
 ---
-# Optional HAProxy load balancer for AI-Horde native instances.
-#
-# Support tiers:
-#   Tier 1 (safe_edit)  — Marker-bounded insertion into existing config.
-#                         Default, recommended for shared hosts.
-#                         Delegates to the _haproxy_safe_edit micro-role.
-#   Tier 2 (standalone) — Full-file ownership of haproxy.cfg.
-#                         Only for dedicated hosts where no other service
-#                         manages HAProxy configuration.
-
-# ── Validation ──────────────────────────────────────────────
-- name: Validate HAProxy management mode
-  ansible.builtin.assert:
-    that:
-      - ai_horde_haproxy_mode in ['safe_edit', 'standalone']
-    fail_msg: >-
-      Invalid ai_horde_haproxy_mode '{{ ai_horde_haproxy_mode }}'.
-      Must be 'safe_edit' or 'standalone'.
-
-# ── Install HAProxy ─────────────────────────────────────────
+# Replacement HAProxy setup for AI-Horde native instances.
 - name: Install HAProxy
   ansible.builtin.apt:
-    name:
-      - haproxy
+    name: haproxy
     state: present
     update_cache: true
     cache_valid_time: 3600
   become: true
   when: ai_horde_start_services | bool
 
-- name: Determine whether HAProxy safe-edit should apply live changes
+- name: Determine whether HAProxy should apply live changes
   ansible.builtin.set_fact:
     _ai_horde_haproxy_apply_mode: "{{ ai_horde_start_services | bool }}"
 
-- name: Ensure HAProxy config directory exists
+- name: Ensure HAProxy conf.d directory exists
   ansible.builtin.file:
-    path: "{{ ai_horde_haproxy_config_path | dirname }}"
+    path: /etc/haproxy/conf.d
     state: directory
     mode: "0755"
   become: true
   when: _ai_horde_haproxy_apply_mode | bool
 
-- name: Ensure standalone HAProxy preview directory exists (render-only)
+- name: Ensure HAProxy systemd override directory exists
   ansible.builtin.file:
-    path: "{{ ai_horde_haproxy_render_preview_path | dirname }}"
+    path: /etc/systemd/system/haproxy.service.d
     state: directory
     mode: "0755"
   become: true
-  when:
-    - ai_horde_haproxy_mode == 'standalone'
-    - not (_ai_horde_haproxy_apply_mode | bool)
+  when: _ai_horde_haproxy_apply_mode | bool
 
-# ── Standalone mode — full-file template ─────────────────────
-- name: Template HAProxy configuration live file (standalone apply mode)
-  ansible.builtin.template:
-    src: ai-horde-haproxy.cfg.j2
-    dest: "{{ ai_horde_haproxy_config_path }}"
-    mode: "0644"
-    validate: "haproxy -f %s -c -q"
-  become: true
-  when:
-    - ai_horde_haproxy_mode == 'standalone'
-    - _ai_horde_haproxy_apply_mode | bool
-  notify: Restart HAProxy
-
-- name: Template HAProxy preview configuration (standalone render-only mode)
-  ansible.builtin.template:
-    src: ai-horde-haproxy.cfg.j2
-    dest: "{{ ai_horde_haproxy_render_preview_path }}"
+- name: Configure HAProxy to load from conf.d
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/haproxy.service.d/override.conf
+    content: |
+      [Service]
+      Environment="CONFIG=/etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d/"
     mode: "0644"
   become: true
-  when:
-    - ai_horde_haproxy_mode == 'standalone'
-    - not (_ai_horde_haproxy_apply_mode | bool)
+  when: _ai_horde_haproxy_apply_mode | bool
 
-# ── Safe-edit mode — collision preflight ─────────────────────
-- name: Read existing HAProxy config for safe-edit preflight checks
-  ansible.builtin.slurp:
-    path: "{{ ai_horde_haproxy_config_path }}"
-  register: _ai_horde_haproxy_existing_config
+- name: Reload systemd daemon for HAProxy
+  ansible.builtin.systemd:
+    daemon_reload: true
   become: true
-  when:
-    - ai_horde_haproxy_mode == 'safe_edit'
-    - _ai_horde_haproxy_apply_mode | bool
+  when: _ai_horde_haproxy_apply_mode | bool
 
-- name: Build unmanaged HAProxy config view for collision checks
-  ansible.builtin.set_fact:
-    _ai_horde_haproxy_unmanaged_config: >-
-      {{
-        (_ai_horde_haproxy_existing_config.content | b64decode)
-        | regex_replace('(?ms)# BEGIN ANSIBLE MANAGED - AI-HORDE BACKENDS\n.*?# END ANSIBLE MANAGED - AI-HORDE BACKENDS\n?', '')
-      }}
-  when:
-    - ai_horde_haproxy_mode == 'safe_edit'
-    - _ai_horde_haproxy_apply_mode | bool
+- name: Write AI-Horde HAProxy configuration fragment
+  ansible.builtin.template:
+    src: ai-horde-backend.cfg.j2
+    dest: /etc/haproxy/conf.d/ai_horde.cfg
+    mode: "0644"
+  become: true
+  when: _ai_horde_haproxy_apply_mode | bool
 
-- name: Fail if safe-edit ingress port conflicts with unmanaged listeners
-  ansible.builtin.fail:
-    msg: >-
-      Port conflict: an unmanaged HAProxy bind directive already references
-      port {{ ai_horde_haproxy_port }} in {{ ai_horde_haproxy_config_path }}.
-      Choose a different ai_horde_haproxy_port or switch to
-      ai_horde_haproxy_mode=standalone on a dedicated host
-  when:
-    - ai_horde_haproxy_mode == 'safe_edit'
-    - _ai_horde_haproxy_apply_mode | bool
-    - _ai_horde_haproxy_unmanaged_config is regex('(?m)^\s*bind\s+[^\n#]*:' ~ (ai_horde_haproxy_port | string) ~ '(\s|$)')
-
-# ── Safe-edit mode — build block + delegate to shared role ───
-- name: Build AI-Horde HAProxy block content
-  ansible.builtin.set_fact:
-    _ai_horde_haproxy_block: |-
-      frontend ai_horde_front
-          bind {{ ai_horde_haproxy_listen }}:{{ ai_horde_haproxy_port }}
-          default_backend ai_horde_back
-
-      backend ai_horde_back
-          balance roundrobin
-          option httpchk GET /api/v2/status/heartbeat
-          http-check expect status 200
-      {% for port in range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) %}
-          server aihorde-{{ port }} {{ ai_horde_backend_host }}:{{ port }} check inter 10s fall 3 rise 2
-      {% endfor %}
-  when: ai_horde_haproxy_mode == 'safe_edit'
-
-- name: Apply AI-Horde block via shared safe-edit pipeline  # noqa: var-naming[no-role-prefix]
-  ansible.builtin.include_role:
-    name: _haproxy_safe_edit
-  vars:
-    _haproxy_safe_edit_config_path: "{{ ai_horde_haproxy_config_path }}"
-    _haproxy_safe_edit_backup_dir: "{{ ai_horde_haproxy_backup_dir }}"
-    _haproxy_safe_edit_marker: "AI-HORDE BACKENDS"
-    _haproxy_safe_edit_block: "{{ _ai_horde_haproxy_block }}"
-    _haproxy_safe_edit_backup_retention: "{{ ai_horde_haproxy_backup_retention_count }}"
-    _haproxy_safe_edit_apply: "{{ _ai_horde_haproxy_apply_mode }}"
-  when: ai_horde_haproxy_mode == 'safe_edit'
-
-# ── Enable and start HAProxy ─────────────────────────────────
 - name: Enable and start HAProxy
   ansible.builtin.systemd:
     name: haproxy

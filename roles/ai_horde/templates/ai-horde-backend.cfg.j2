@@ -1,0 +1,11 @@
+frontend ai_horde_front
+    bind {{ ai_horde_haproxy_listen }}:{{ ai_horde_haproxy_port }}
+    default_backend ai_horde_back
+
+backend ai_horde_back
+    balance roundrobin
+    option httpchk GET /api/v2/status/heartbeat
+    http-check expect status 200
+    {% for port in range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) %}
+    server aihorde-{{ port }} {{ ai_horde_backend_host }}:{{ port }} check inter 10s fall 3 rise 2
+    {% endfor %}

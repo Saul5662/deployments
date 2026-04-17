@@ -15,6 +15,10 @@
     horde_alloy_http_listen_address: "127.0.0.1"
     horde_alloy_http_port: 12345
     horde_alloy_scrape_interval: "15s"
+    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs|overlay|nsfs|cgroup.*|tracefs|^bpf|ramfs|squashfs|sysfs|proc|mqueue|devpts)$"
+    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
+    horde_alloy_journal_app_rules: []
+    horde_alloy_journal_parse_level: true
     horde_alloy_tls_ca_cert: ""
     horde_alloy_journal_max_age: "24h"
     horde_alloy_forward_otlp_metrics: true
@@ -51,9 +55,7 @@
       - cpu
     horde_alloy_unix_exporter_include_exporter_metrics: true
     horde_alloy_unix_exporter_textfile_directory: "/var/lib/node_exporter/textfile_collector"
-    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs)$"
     horde_alloy_unix_exporter_filesystem_mount_points_exclude: "^/(proc|sys)($|/)"
-    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
     horde_alloy_extra_scrape_targets:
       - job: "myapp"
         address: "127.0.0.1:8080"
@@ -251,6 +253,10 @@
     horde_alloy_http_listen_address: "127.0.0.1"
     horde_alloy_http_port: 12345
     horde_alloy_scrape_interval: "15s"
+    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs|overlay|nsfs|cgroup.*|tracefs|^bpf|ramfs|squashfs|sysfs|proc|mqueue|devpts)$"
+    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
+    horde_alloy_journal_app_rules: []
+    horde_alloy_journal_parse_level: true
     horde_alloy_tls_ca_cert: ""
     horde_alloy_journal_max_age: "24h"
     horde_alloy_forward_otlp_metrics: false
@@ -366,6 +372,10 @@
     horde_alloy_log_labels: {}
     horde_alloy_extra_scrape_targets: []
     horde_alloy_scrape_interval: "15s"
+    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs|overlay|nsfs|cgroup.*|tracefs|^bpf|ramfs|squashfs|sysfs|proc|mqueue|devpts)$"
+    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
+    horde_alloy_journal_app_rules: []
+    horde_alloy_journal_parse_level: true
     horde_alloy_otlp_listen_address: "127.0.0.1"
     horde_alloy_otlp_grpc_port: 4317
     horde_alloy_otlp_http_port: 4318
