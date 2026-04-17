@@ -3,16 +3,17 @@
 # Usage: ansible-playbook -i inventory.yml horde_monitoring_stack.yml
 #
 # Architecture:
-#   Play 1: Deploy node_exporter only on hosts that resolve to node_exporter source
-#   Play 2: Deploy Mimir + Grafana + Prometheus + stats exporter on the monitoring host
+#   Deploys Mimir + Grafana + Prometheus + stats exporter on the monitoring host.
+#   Host metrics are collected by Grafana Alloy (preferred) or legacy
+#   node_exporter. See examples/alloy_app_host.yml for Alloy deployment.
 #
 #   Prometheus (native) --remote_write--> Mimir (Docker) <-- Grafana (Docker)
 #   All services bind to 127.0.0.1. HAProxy fronts Mimir externally with basic_auth.
 #
 # Prerequisites:
 #   ansible-galaxy collection install -r requirements.yml
-#   HAProxy is installed on each monitored host to front node_exporter
-#   with basic auth. node_exporter listens on localhost only.
+#   For legacy node_exporter hosts: HAProxy is installed on each monitored host
+#   to front node_exporter with basic auth. node_exporter listens on localhost only.
 
 # ---------------------------------------------------------------------------
 # Play 1: node_exporter on hosts using node_exporter as host metrics source

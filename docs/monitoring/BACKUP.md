@@ -139,8 +139,9 @@ journalctl -u mimir-backup --since "24 hours ago" --no-pager
 
    (1500 minutes ≈ 25 hours, appropriate for a daily schedule)
 
-3. **node_exporter systemd collector:** If node_exporter is configured
-   with `--collector.systemd`, it exposes
+3. **Host metrics systemd collector:** If host metrics collection is configured
+   with a systemd collector (Alloy `prometheus.exporter.unix` or legacy
+   node_exporter with `--collector.systemd`), it exposes
    `node_systemd_unit_state{name="mimir-backup.service",state="failed"}`.
    An alert on this metric provides Prometheus-native backup monitoring.
 

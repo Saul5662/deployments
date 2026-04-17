@@ -51,11 +51,11 @@ all:
           ansible_user: admin
           ansible_become: true
           # Optional: override the address Prometheus should use for
-          # node_exporter scraping if ansible_host is not routable from
-          # the monitoring host.
+          # node_exporter scraping (legacy) if ansible_host is not routable
+          # from the monitoring host.
           # horde_node_exporter_scrape_address: "10.0.0.101"
-          # If this host is managed by examples/alloy_app_host.yml for host metrics,
-          # set horde_alloy_enabled: true so monitoring stack auto mode skips
+          # If this host uses Alloy for host metrics (preferred), set
+          # horde_alloy_enabled: true so monitoring stack auto mode skips
           # node_exporter on this host.
           # horde_alloy_enabled: true
 

@@ -13,7 +13,7 @@
 vault_grafana_admin_password: "CHANGE_ME"
 vault_s3_secret_key: "CHANGE_ME"
 
-# Required when deploying node_exporter with TLS:
+# Required when scraping node_exporter over basic auth (legacy — prefer Alloy):
 vault_node_exporter_password: "CHANGE_ME"
 
 # Phase 2 — uncomment when configuring offsite backup:

@@ -31,12 +31,13 @@
     horde_alloy_tenant_id: "infrastructure"
 
     # --- Host metrics source ---
-    # "node_exporter" keeps host metrics in Prometheus scrape path.
-    # "alloy" enables host metrics from Alloy prometheus.exporter.unix.
+    # "alloy" enables host metrics from Alloy prometheus.exporter.unix
+    # (preferred — no separate node_exporter binary needed).
+    # "node_exporter" keeps host metrics in Prometheus scrape path (legacy).
     # When using examples/horde_monitoring_stack.yml with
     # horde_host_metrics_source: auto, set horde_alloy_enabled: true
     # in inventory for these hosts so node_exporter is skipped implicitly.
-    horde_host_metrics_source: "node_exporter"
+    horde_host_metrics_source: "alloy"
 
     # --- Authentication ---
     horde_alloy_basic_auth_username: "alloy"

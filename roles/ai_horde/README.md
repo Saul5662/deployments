@@ -114,15 +114,11 @@ change events, not ambient upgrades.
 10. Fails fast on unsupported DB/Redis combinations (for example,
    non-6379 Redis port expectations in native mode).
 11. Optionally configures HAProxy for load-balancing instances.
-    HAProxy supports two management modes:
-    - `safe_edit` (default): marker-bounded insertion that preserves
-      unrelated HAProxy config on shared hosts. Creates timestamped
-      backups, validates before promoting, and reloads safely.
-    - `standalone`: full-file ownership — templates the entire
-      `haproxy.cfg` in apply mode. Only safe on dedicated hosts.
-      In render-only mode, standalone writes a preview config to
-      `ai_horde_haproxy_render_preview_path` and does not touch live
-      HAProxy config.
+    HAProxy is managed via **conf.d drop-in fragments**: the shared
+    `_haproxy_confd_bootstrap` micro-role creates `/etc/haproxy/conf.d/`
+    and a systemd override, then the role templates its backend config to
+    `/etc/haproxy/conf.d/ai_horde.cfg`. This is safe on shared hosts —
+    each service drops its own fragment without touching others.
 12. Waits for each instance's heartbeat endpoint.
 
 When `ai_horde_start_services: false`, the role runs in render-only mode:
@@ -212,30 +208,20 @@ Native `POSTGRES_URL` rendering contract:
 | `ai_horde_allow_postgres_superuser_management` | `false`      | Explicit bootstrap-only opt-in for managing `postgres` superuser |
 | `ai_horde_install_haproxy`  | `false`                          | Optionally install HAProxy for load balancing     |
 | `ai_horde_haproxy_port`     | `8080`                           | HAProxy frontend listen port (`8080` shared-host baseline; use `80/443` only on dedicated ingress hosts) |
-| `ai_horde_haproxy_mode`     | `safe_edit`                      | `safe_edit` (marker-bounded, shared hosts) or `standalone` (full-file ownership) |
-| `ai_horde_haproxy_backup_dir` | `/var/backups/haproxy`          | Backup directory for HAProxy config snapshots (safe_edit mode) |
-| `ai_horde_haproxy_backup_retention_count` | `20`           | Number of safe-edit backups to retain (newest first, `0` disables pruning) |
-| `ai_horde_haproxy_config_path` | `/etc/haproxy/haproxy.cfg`    | Path to the live HAProxy configuration file       |
 | `ai_horde_haproxy_timeout_server` | `300000`                  | HAProxy server timeout in milliseconds (default 300s for long AI requests) |
-| `ai_horde_haproxy_render_preview_path` | `{{ ai_horde_base_dir }}/rendered/haproxy.cfg` | Standalone render-only preview target when `ai_horde_start_services=false` |
 
-### HAProxy Mode Selection (native mode)
+### HAProxy conf.d Architecture (native mode)
 
-Two management modes are supported with explicit support tiers:
+When `ai_horde_install_haproxy: true`, the role includes the shared
+`_haproxy_confd_bootstrap` micro-role to install HAProxy, create
+`/etc/haproxy/conf.d/`, and write a systemd override that loads all
+conf.d fragments alongside the main config. The AI-Horde backend
+configuration is templated to `/etc/haproxy/conf.d/ai_horde.cfg`.
 
-| Tier | Mode | Use Case | Behavior |
-|------|------|----------|----------|
-| **Tier 1** | `safe_edit` (default) | Shared hosts, multi-service HAProxy | Marker-bounded insertion; only manages its own config block |
-| **Tier 2** | `standalone` | Dedicated AI-Horde hosts, labs | Full-file templating; takes ownership of entire `haproxy.cfg` |
+This is safe on shared hosts — each service drops its own fragment
+into `conf.d/` without touching unrelated configuration.
 
-Decision guide:
-
-- **Multiple services behind HAProxy?** → Use `safe_edit` (won't overwrite
-  other service configs).
-- **Dedicated host, single-purpose HAProxy?** → Either mode works;
-  `standalone` is simpler, `safe_edit` is safer.
-- **CI / render-only testing?** → Either mode supports
-  `ai_horde_start_services=false` for offline validation.
+For topology guidance, see [docs/ai-horde-haproxy-topology.md](../../docs/ai-horde-haproxy-topology.md).
 
 ### Database Schema Migrations
 
@@ -318,7 +304,6 @@ depend on schema changes.
         ai_horde_listen: "127.0.0.1"
         ai_horde_admins: ["admin_user#1"]
         ai_horde_install_haproxy: true
-        ai_horde_haproxy_mode: safe_edit
         ai_horde_haproxy_port: 8080
 ```
 
@@ -339,7 +324,6 @@ depend on schema changes.
         ai_horde_postgres_host: "db.internal"
         ai_horde_redis_host: "redis.internal"
         ai_horde_install_haproxy: true
-        ai_horde_haproxy_mode: standalone
         ai_horde_haproxy_port: 80
 ```
 
@@ -382,7 +366,6 @@ Before using privileged ingress (`80/443`), ensure all are true:
         ai_horde_postgres_user: "aihorde"
         ai_horde_postgres_db: "aihorde"
         ai_horde_install_haproxy: true
-        ai_horde_haproxy_mode: safe_edit
         ai_horde_haproxy_port: 8080
         ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
@@ -410,57 +393,35 @@ Database pool tuning (SQLAlchemy `pool_size`) remains hardcoded upstream.
 `ai_horde_db_pool_size_per_instance` is advisory-only for sizing warnings;
 it does not modify upstream runtime DB pool configuration.
 
-### HAProxy Safe-Edit Mode
+### HAProxy conf.d Details
 
-When `ai_horde_haproxy_mode=safe_edit` (default), the role:
+When `ai_horde_install_haproxy: true`, the role delegates HAProxy
+installation and conf.d bootstrap to the shared `_haproxy_confd_bootstrap`
+micro-role, then templates the AI-Horde frontend/backend block to
+`/etc/haproxy/conf.d/ai_horde.cfg`.
 
-1. In apply mode (`ai_horde_start_services=true`), checks that `haproxy.cfg`
-  already exists and `haproxy` validation binary is present (fails fast with
-  remediation guidance if not).
-2. Performs a port-collision preflight on unmanaged config content and fails
-  fast when the selected `ai_horde_haproxy_port` is already bound by an
-  unmanaged listener.
-3. Creates a temporary working copy.
-4. Inserts AI-Horde frontend/backend blocks inside `# BEGIN/END ANSIBLE
-   MANAGED - AI-HORDE BACKENDS` markers.
-5. Compares working-copy checksum to live config checksum.
-6. If and only if content differs, validates the working copy with
-  `haproxy -c`, creates a timestamped backup, promotes the candidate, and
-  reloads HAProxy.
-7. Prunes old backups beyond `ai_horde_haproxy_backup_retention_count`
-  (newest backups are kept).
+In apply mode (`ai_horde_start_services=true`):
 
-In render-only mode (`ai_horde_start_services=false`), safe-edit does not
-touch live HAProxy state or require existing host HAProxy files/binaries.
+1. `_haproxy_confd_bootstrap` installs HAProxy, creates the conf.d
+   directory, writes the systemd override, and ensures HAProxy is running.
+2. The AI-Horde template is written to `conf.d/ai_horde.cfg`.
+3. If the fragment changes, HAProxy is reloaded.
 
-Standalone render-only behavior:
+In render-only mode (`ai_horde_start_services=false`):
 
-- With `ai_horde_haproxy_mode=standalone` and
-  `ai_horde_start_services=false`, the role renders HAProxy config to
-  `ai_horde_haproxy_render_preview_path`.
-- Live `ai_horde_haproxy_config_path` is only written in apply mode
-  (`ai_horde_start_services=true`), with `haproxy -c` validation.
+- The template is still rendered to `conf.d/ai_horde.cfg` for offline
+  validation.
+- HAProxy is not started or reloaded.
 
-Existing config outside the markers is never modified. To roll back,
-copy the most recent backup from `ai_horde_haproxy_backup_dir` back to
-`/etc/haproxy/haproxy.cfg` and reload HAProxy.
-
-Safe-edit scope note: it injects a dedicated AI-Horde frontend/backend block.
-It does not merge AI-Horde ACLs into an existing shared frontend tree. If your
-HAProxy design requires deep integration into pre-existing frontends/ACLs,
-manage those rules explicitly and consider `ai_horde_install_haproxy=false`.
-
-Use `ai_horde_haproxy_mode=standalone` only on dedicated hosts where
-nothing else manages HAProxy.
-
-A standalone safe-edit script is also deployed to
-`/usr/local/bin/ai-horde-haproxy-safe-edit.sh` for manual operations.
+The conf.d approach means each service manages its own fragment without
+touching other configuration. To remove AI-Horde from HAProxy, delete
+`/etc/haproxy/conf.d/ai_horde.cfg` and reload.
 
 ## HAProxy Topology Guidance
 
 See [docs/ai-horde-haproxy-topology.md](../../docs/ai-horde-haproxy-topology.md)
-for mode selection guidance, reverse-proxy layering patterns, and the
-operator decision matrix.
+for topology patterns, reverse-proxy layering, and the operator decision
+matrix.
 
 ## Relationship to Other Roles
 
@@ -487,8 +448,7 @@ Worker (horde_regen_worker)  ──[horde_url]──▶  AI-Horde  ◀──[API
 # Native mode render + contract guardrail fail-fast tests
 ./tests/run_tests.sh ai_horde/test_ai_horde_native_render
 
-# Native logic checks (stale-instance detection, HAProxy backend rendering,
-# safe-edit block insertion, validation non-promotion)
+# Native logic checks (stale-instance detection, HAProxy conf.d rendering)
 ./tests/run_tests.sh ai_horde/test_ai_horde_native_logic
 
 # Integration smoke test (config coherence)

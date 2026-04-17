@@ -46,6 +46,7 @@ find the right folder before making changes.
 | Role path | Purpose |
 | --------- | ------- |
 | `roles/_uv_bootstrap/` | Shared micro-role: download, verify, and install a pinned uv version |
+| `roles/_haproxy_confd_bootstrap/` | Shared micro-role: install HAProxy, create conf.d directory, write systemd override for conf.d loading |
 | `roles/geerlingguy.swap/` | Third-party swap configuration role used as an infrastructure dependency |
 
 ## Meta folders to know first

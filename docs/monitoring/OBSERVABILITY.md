@@ -49,7 +49,7 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
 | `horde_monitoring` | Mimir, S3-compatible storage, Memcached, Grafana, Loki by default, optional Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
 | `horde_stats_exporter` | `horde-exporter` systemd service and optional downsampling timer |
 | `horde_alloy` | App-host telemetry collection and forwarding (metrics/logs/traces) |
-| `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager, and optional node_exporter (not managed by `horde_monitoring`) |
+| `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager (not managed by `horde_monitoring`; configured at the playbook level) |
 
 ## Full Stack Components
 
@@ -192,15 +192,19 @@ Complete example: [examples/alloy_app_host.yml](../../examples/alloy_app_host.ym
 
 ### Interaction With node_exporter Deployment
 
-In [examples/horde_monitoring_stack.yml](../../examples/horde_monitoring_stack.yml),
-node_exporter installation is decided per host using
-`horde_host_metrics_source`:
+**Grafana Alloy is the preferred host metrics source.** It collects host
+metrics natively via `prometheus.exporter.unix` and pushes them to Mimir,
+eliminating the need for a separate node_exporter binary and HAProxy
+basic-auth fronting.
+
+For legacy deployments that still run node_exporter, the monitoring stack
+example supports per-host selection via `horde_host_metrics_source`:
 
 - `auto` (recommended): skip node_exporter when the host has
   `horde_alloy_enabled: true` or `horde_alloy_collect_metrics: true`;
   otherwise install node_exporter.
-- `node_exporter`: force install on all hosts.
-- `alloy`: force skip on all hosts.
+- `node_exporter`: force install on all hosts (legacy).
+- `alloy`: force skip on all hosts (new deployments).
 
 ### Alloy Pipeline Toggles
 
@@ -217,7 +221,7 @@ Role validation fails fast if enabled pipelines do not have endpoints, or if
 ## End-To-End Data Flows
 
 - Exporter metrics: `horde-exporter` -> Prometheus scrape -> Mimir
-- Host metrics: node_exporter -> Prometheus scrape or Alloy `prometheus.exporter.unix` -> Mimir remote_write
+- Host metrics: Alloy `prometheus.exporter.unix` -> Mimir remote_write (preferred), or node_exporter -> Prometheus scrape (legacy)
 - Logs: Alloy journal/file/docker sources -> Loki push API
 - Traces: app OTLP -> Alloy OTLP receiver -> Tempo OTLP HTTP exporter
 - Trace-derived metrics: Tempo metrics generator -> Mimir remote_write

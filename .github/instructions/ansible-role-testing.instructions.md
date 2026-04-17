@@ -21,7 +21,7 @@ applyTo: "tests/**/*.yml,tests/**/*.sh,roles/**/tasks/*.yml,roles/**/defaults/*.
 - `tests/ai_horde/test_ai_horde_render.yml`: Validates Docker mode rendering, security-sensitive compose/env contracts, and fail-fast password/key validation.
 - `tests/ai_horde/test_ai_horde_docker_build_toggle.yml`: Canonical owner of the build-on-start toggle contract (both enabled and disabled cases).
 - `tests/ai_horde/test_ai_horde_native_render.yml`: Validates native systemd template rendering, multi-instance output, and expected file permissions.
-- `tests/ai_horde/test_ai_horde_native_logic.yml`: Validates native HAProxy and instance management logic (stale unit handling, safe edits, ownership normalization gates).
+- `tests/ai_horde/test_ai_horde_native_logic.yml`: Validates native HAProxy conf.d architecture and instance management logic (stale unit handling, ownership normalization gates).
 - `tests/ai_horde/test_ai_horde_policy_contracts.yml`: Enforces reproducibility and policy contracts (pinned refs/digests, installer verification, readiness semantics).
 - `tests/artbot/test_artbot_render.yml`: Validates Artbot rendering and HAProxy/certbot contract output.
 - `tests/frontpage/test_frontpage_render.yml`: Validates Frontpage Docker-mode render contracts, env keys, healthcheck wiring, ports, and log rotation.

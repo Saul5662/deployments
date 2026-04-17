@@ -52,10 +52,8 @@
         ai_horde_backend_host: "127.0.0.1"
         ai_horde_admins: ["admin_user#1"]
         ai_horde_install_haproxy: true
-        ai_horde_haproxy_mode: safe_edit
         ai_horde_haproxy_port: "{{ horde_api_ingress_port }}"
         # Production ingress override for dedicated ingress hosts:
-        # ai_horde_haproxy_mode: standalone
         # ai_horde_haproxy_port: 80
         # Preconditions:
         #   - No conflicting listeners on 80/443.

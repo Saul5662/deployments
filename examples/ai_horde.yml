@@ -52,7 +52,6 @@
 #         ai_horde_listen: "127.0.0.1"
 #         ai_horde_admins: ["admin_user#1"]
 #         ai_horde_install_haproxy: true
-#         ai_horde_haproxy_mode: safe_edit
 #         ai_horde_haproxy_port: 8080
 
 # Production ingress variant (80/443) for dedicated ingress hosts only:

@@ -449,7 +449,7 @@ horde_monitoring_loki_ingestion_port: 3101
 horde_monitoring_loki_ingestion_auth_user: "alloy"
 horde_monitoring_loki_ingestion_auth_password: "changeme-loki-ingestion"
 
-# HAProxy configuration (safe edit with permanent rolling backups)
+# HAProxy configuration (conf.d architecture via _haproxy_confd_bootstrap)
 horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
 horde_monitoring_haproxy_backup_dir: "/var/backups/haproxy"
 horde_monitoring_haproxy_backup_retention_count: 20

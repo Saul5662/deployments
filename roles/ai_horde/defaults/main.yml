@@ -80,15 +80,9 @@ ai_horde_uv_allow_unverified_installer: false
 ai_horde_install_postgres: false
 ai_horde_install_redis: false
 
-# HAProxy load balancing. See README for mode details.
+# HAProxy load balancing (uses conf.d architecture via _haproxy_confd_bootstrap).
 ai_horde_install_haproxy: false
 ai_horde_haproxy_port: 8080
 ai_horde_haproxy_listen: "*"
-# "safe_edit" (shared hosts, default) or "standalone" (dedicated hosts).
-ai_horde_haproxy_mode: "safe_edit"
-ai_horde_haproxy_backup_dir: "/var/backups/haproxy"
-ai_horde_haproxy_backup_retention_count: 20
-ai_horde_haproxy_config_path: "/etc/haproxy/haproxy.cfg"
 # 300s timeout for long AI requests.
 ai_horde_haproxy_timeout_server: 300000
-ai_horde_haproxy_render_preview_path: "{{ ai_horde_base_dir }}/rendered/haproxy.cfg"
