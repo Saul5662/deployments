@@ -56,6 +56,127 @@ render_configs() {
 }
 
 
+garage_exec() {
+  docker exec s3-store /garage -c /etc/garage.toml "$@"
+}
+
+
+bootstrap_embedded_garage() {
+  local retries=15
+  local health_code
+  local node_id
+  local garage_secret_key
+  local output
+  local -a garage_buckets
+
+  if ! docker ps --format '{{.Names}}' | grep -qx 's3-store'; then
+    warn "s3-store container is not running; skipping embedded Garage bootstrap."
+    return 0
+  fi
+
+  if [[ -z "${GARAGE_S3_ACCESS_KEY_ID:-}" || -z "${GARAGE_S3_ACCESS_KEY_NAME:-}" || -z "${GARAGE_S3_SECRET_KEY_FILE:-}" ]]; then
+    err "Missing embedded Garage bootstrap variables in $ENV_FILE."
+    return 1
+  fi
+
+  if [[ ! -f "$GARAGE_S3_SECRET_KEY_FILE" ]]; then
+    err "Garage secret key file not found at $GARAGE_S3_SECRET_KEY_FILE. Re-run '$0 up' to regenerate."
+    return 1
+  fi
+
+  garage_secret_key="$(tr -d '[:space:]' < "$GARAGE_S3_SECRET_KEY_FILE" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ ! "$GARAGE_S3_ACCESS_KEY_ID" =~ ^GK[0-9a-fA-F]{24}$ ]]; then
+    err "GARAGE_S3_ACCESS_KEY_ID must match GK + 24 hex chars."
+    return 1
+  fi
+
+  if [[ ! "$garage_secret_key" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    err "Garage secret key in $GARAGE_S3_SECRET_KEY_FILE is invalid (expected 64 hex chars)."
+    return 1
+  fi
+
+  log "Bootstrapping embedded Garage (layout, key, buckets) ..."
+  while [[ $retries -gt 0 ]]; do
+    if garage_exec status >/dev/null 2>&1; then
+      break
+    fi
+    retries=$((retries - 1))
+    sleep 2
+  done
+
+  if [[ $retries -eq 0 ]]; then
+    err "Embedded Garage CLI did not become ready in time."
+    return 1
+  fi
+
+  health_code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${GARAGE_S3_ADMIN_PORT}/health" || echo "000")
+  if [[ "$health_code" != "200" ]]; then
+    node_id="$(garage_exec node id | sed -nE 's/^([0-9a-f]{16,64})@.*$/\1/p' | head -1)"
+    if [[ -z "$node_id" ]]; then
+      node_id="$(garage_exec status | sed -nE 's/^([0-9a-f]{16,64})[[:space:]].*/\1/p' | head -1)"
+    fi
+    if [[ -z "$node_id" ]]; then
+      err "Could not parse embedded Garage node ID for layout assignment."
+      return 1
+    fi
+
+    garage_exec layout assign "$node_id" --zone dc1 --capacity "$GARAGE_S3_CAPACITY_BYTES" >/dev/null
+    garage_exec layout apply --version 1 >/dev/null
+  fi
+
+  if ! output="$(garage_exec key import --yes -n "$GARAGE_S3_ACCESS_KEY_NAME" "$GARAGE_S3_ACCESS_KEY_ID" "$garage_secret_key" 2>&1)"; then
+    if [[ "$output" == *"KeyAlreadyExists"* ]]; then
+      if ! garage_exec key info "$GARAGE_S3_ACCESS_KEY_ID" >/dev/null 2>&1; then
+        if [[ -n "${GARAGE_S3_ACCESS_KEY_SUFFIX_FILE:-}" ]]; then
+          rm -f "$GARAGE_S3_ACCESS_KEY_SUFFIX_FILE"
+          err "Embedded Garage key ID $GARAGE_S3_ACCESS_KEY_ID cannot be reused (tombstoned)."
+          err "Removed $GARAGE_S3_ACCESS_KEY_SUFFIX_FILE to force a new key ID on next render."
+          err "Re-run '$0 up' to regenerate credentials and restart the local stack."
+        else
+          err "Embedded Garage key ID $GARAGE_S3_ACCESS_KEY_ID cannot be reused (tombstoned)."
+          err "Re-run '$0 up' after regenerating local key ID metadata."
+        fi
+        return 1
+      fi
+    else
+      err "Failed to import embedded Garage S3 key."
+      err "$output"
+      return 1
+    fi
+  fi
+
+  garage_buckets=(
+    "$GARAGE_S3_BLOCKS_BUCKET"
+    "$GARAGE_S3_RULER_BUCKET"
+    "$GARAGE_S3_ALERTMANAGER_BUCKET"
+  )
+  if [[ -n "${GARAGE_S3_LOKI_BUCKET:-}" ]]; then
+    garage_buckets+=("$GARAGE_S3_LOKI_BUCKET")
+  fi
+  if [[ -n "${GARAGE_S3_TEMPO_BUCKET:-}" ]]; then
+    garage_buckets+=("$GARAGE_S3_TEMPO_BUCKET")
+  fi
+  if [[ -n "${GARAGE_S3_PYROSCOPE_BUCKET:-}" ]]; then
+    garage_buckets+=("$GARAGE_S3_PYROSCOPE_BUCKET")
+  fi
+
+  for bucket in "${garage_buckets[@]}"; do
+    if ! output="$(garage_exec bucket create "$bucket" 2>&1)"; then
+      if [[ "$output" != *"BucketAlreadyExists"* ]]; then
+        err "Failed to create Garage bucket '$bucket'."
+        err "$output"
+        return 1
+      fi
+    fi
+
+    garage_exec bucket allow --read --write --owner "$bucket" --key "$GARAGE_S3_ACCESS_KEY_ID" >/dev/null
+  done
+
+  wait_for_url "http://127.0.0.1:${GARAGE_S3_ADMIN_PORT}/health" "Embedded Garage" 60 || return 1
+}
+
+
 compose_up() {
   if [ ! -f "$COMPOSE_DIR/docker-compose.yml" ]; then
     err "No docker-compose.yml found — run '$0 up' first."
@@ -88,6 +209,8 @@ with open(sys.argv[1], 'w') as f:
 
   log "Starting Docker Compose stack ..."
   dc up -d
+
+  bootstrap_embedded_garage
 
   wait_for_url "http://127.0.0.1:${MIMIR_PORT}/ready" "Mimir" 60 || true
   wait_for_url "http://127.0.0.1:${GRAFANA_PORT}/api/health" "Grafana" 60 || true

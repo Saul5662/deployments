@@ -165,34 +165,30 @@
           - targets:
               - "localhost:9150"
       - job_name: s3
-        # Garage metrics are exposed on the admin API port, not the S3 API port.
-        # Embedded mode defaults to localhost:3903 with bearer auth.
-        # In external mode, set horde_monitoring_external_s3_host,
-        # horde_monitoring_external_s3_metrics_port, and
-        # horde_monitoring_external_s3_metrics_token to match your backend.
-        # If you proxy metrics through HAProxy (as in ops/site_monitoring.yml),
-        # point this target at the proxy and switch to basic_auth.
+        # Garage metrics scrape target — mode-aware.
+        #
+        # Embedded mode (default): scrape the local Garage admin API directly
+        # with a Bearer token on localhost:3903.
+        #
+        # External mode: the standalone garage role deploys an HAProxy proxy
+        # (garage_metrics_haproxy_enabled) that fronts the admin API with
+        # basic auth. Switch to the basic_auth block below and set:
+        #   horde_monitoring_external_s3_host
+        #   horde_monitoring_external_s3_metrics_port  (default 3910)
+        #   horde_monitoring_external_s3_metrics_username / _password
+        # See ops/group_vars/mimir/vars.yml for a production wiring example.
         metrics_path: /metrics
         static_configs:
           - targets:
-              - >-
-                {{
-                  (
-                    horde_monitoring_external_s3_host
-                    ~ ':'
-                    ~ ((horde_monitoring_external_s3_metrics_port | default(3903)) | string)
-                  )
-                  if horde_monitoring_s3_deployment_mode == 'external'
-                  else 'localhost:' ~ (horde_monitoring_s3_admin_port | string)
-                }}
+              - "{{ horde_monitoring_s3_metrics_target }}"
+        # -- Embedded mode (default): Bearer token to local Garage admin API --
         authorization:
           type: Bearer
-          credentials: >-
-            {{
-              horde_monitoring_external_s3_metrics_token
-              if horde_monitoring_s3_deployment_mode == 'external'
-              else horde_monitoring_s3_admin_token
-            }}
+          credentials: "{{ horde_monitoring_s3_admin_token }}"
+          # -- External mode: uncomment basic_auth and remove authorization above --
+          # basic_auth:
+          #   username: "{{ horde_monitoring_external_s3_metrics_username }}"
+          #   password: "{{ horde_monitoring_external_s3_metrics_password }}"
       - job_name: loki
         static_configs:
           - targets:

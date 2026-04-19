@@ -140,8 +140,9 @@ horde_alloy_forward_otlp_metrics: true
 horde_alloy_otlp_metrics_tenant_id: "{{ horde_alloy_tenant_id }}"
 
 # Bind address for the OTLP receiver — apps on this host send traces here.
-# 127.0.0.1 restricts to local apps only. Use 0.0.0.0 if containers need access.
-horde_alloy_otlp_listen_address: "127.0.0.1"
+# 0.0.0.0 allows Docker containers to reach Alloy via the bridge gateway
+# (host.docker.internal).  Host firewall should restrict external access.
+horde_alloy_otlp_listen_address: "0.0.0.0"
 horde_alloy_otlp_grpc_port: 4317
 horde_alloy_otlp_http_port: 4318
 

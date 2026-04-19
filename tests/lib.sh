@@ -140,6 +140,7 @@ clone_or_update_source() {
       log "Cloning $repo_url into $dest_dir (ref: $ref) ..."
       git clone "$repo_url" "$dest_dir"
       git -C "$dest_dir" checkout --quiet "$ref"
+      git -C "$dest_dir" submodule update --init --recursive --quiet
       return 0
     fi
 
@@ -152,6 +153,9 @@ clone_or_update_source() {
     git clone "$repo_url" "$dest_dir"
     git -C "$dest_dir" checkout --quiet "$ref"
   fi
+
+  # Initialise submodules (no-op for repos without .gitmodules).
+  git -C "$dest_dir" submodule update --init --recursive --quiet
 }
 
 # ── Dockerfile patching (Docker Desktop workarounds) ────────

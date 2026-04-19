@@ -15,3 +15,10 @@
   become: true
   changed_when: true
   when: garage_start_services | bool
+
+- name: Reload HAProxy (garage-metrics)
+  ansible.builtin.systemd:
+    name: haproxy
+    state: reloaded
+  become: true
+  when: garage_start_services | bool

@@ -1,0 +1,15 @@
+---
+- name: Require HAProxy conf.d bootstrap role if proxy is enabled
+  ansible.builtin.include_role:
+    name: _haproxy_confd_bootstrap
+  when: garage_start_services | bool
+
+- name: Deploy Garage HAProxy metrics configuration
+  ansible.builtin.template:
+    src: garage_metrics_proxy.cfg.j2
+    dest: /etc/haproxy/conf.d/garage_metrics.cfg
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Reload HAProxy (garage-metrics)

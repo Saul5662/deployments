@@ -1,0 +1,12 @@
+---
+- name: Reload systemd daemon for HAProxy override
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Start HAProxy to lock in override
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: true
+    state: started
+  become: true

@@ -353,3 +353,7 @@
   when:
     - garage_start_services | bool
     - garage_healthcheck_url | default('') | length > 0
+
+- name: Configure HAProxy for Garage metrics
+  ansible.builtin.include_tasks: haproxy_metrics.yml
+  when: garage_metrics_haproxy_enabled | default(false) | bool

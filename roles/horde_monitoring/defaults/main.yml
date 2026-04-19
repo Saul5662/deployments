@@ -110,6 +110,30 @@ horde_monitoring_s3_ruler_bucket: "mimir-ruler"
 horde_monitoring_s3_alertmanager_bucket: "mimir-alertmanager"
 horde_monitoring_s3_memory_limit: "512m"
 
+# External S3 metrics scraping (used when horde_monitoring_s3_deployment_mode == 'external').
+# In external mode, the standalone garage role exposes metrics through an
+# authenticated HAProxy proxy (basic-auth → Bearer translation).
+# These defaults are intentionally empty/safe so that an operator must
+# explicitly wire them (typically via hostvars lookups in group_vars, as
+# demonstrated in ops/group_vars/mimir/vars.yml).
+horde_monitoring_external_s3_host: ""
+horde_monitoring_external_s3_port: 3900
+horde_monitoring_external_s3_metrics_port: 3910
+horde_monitoring_external_s3_metrics_username: "prometheus"
+horde_monitoring_external_s3_metrics_password: ""
+# Computed scrape target — resolves to the HAProxy proxy in external mode,
+# or the local Garage admin API in embedded mode.
+horde_monitoring_s3_metrics_target: >-
+  {{
+    (
+      horde_monitoring_external_s3_host
+      ~ ':'
+      ~ (horde_monitoring_external_s3_metrics_port | string)
+    )
+    if horde_monitoring_s3_deployment_mode == 'external'
+    else 'localhost:' ~ ((horde_monitoring_s3_admin_port | default(3903)) | string)
+  }}
+
 # Offsite backup via S3 client (mc) mirror.
 # Only applies when horde_monitoring_mimir_enable_s3 is true.
 # Embedded mode defaults to strict backup behavior because local storage is
@@ -348,12 +372,16 @@ horde_monitoring_loki_allow_structured_metadata: true
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Tempo alongside Mimir in the Docker Compose stack.
 # When enabled, Tempo receives OTLP traces and stores them in S3-compatible storage.
-horde_monitoring_install_tempo: false
+horde_monitoring_install_tempo: true
 
 horde_monitoring_tempo_image: "grafana/tempo:2.7.1"
 horde_monitoring_tempo_http_port: 3200
 horde_monitoring_tempo_otlp_grpc_port: 4317
 horde_monitoring_tempo_otlp_http_port: 4318
+# Whether Tempo publishes OTLP ports to the host.  Set to false when Alloy
+# is the external OTLP receiver (recommended) so the ports are only
+# reachable inside the Docker network.
+horde_monitoring_tempo_publish_otlp_ports: false
 horde_monitoring_tempo_config_dir: "/etc/tempo"
 horde_monitoring_tempo_data_dir: "/var/lib/tempo"
 horde_monitoring_tempo_memory_limit: "2g"
@@ -392,7 +420,7 @@ horde_monitoring_tempo_ingester_max_block_duration: "5m"
 # ---------------------------------------------------------------------------
 # Opt-in: set to true to deploy Pyroscope alongside Mimir in the Docker Compose stack.
 # When enabled, Pyroscope receives profiling data and stores it in S3-compatible storage.
-horde_monitoring_install_pyroscope: false
+horde_monitoring_install_pyroscope: true
 
 horde_monitoring_pyroscope_image: "grafana/pyroscope:1.19.0"
 horde_monitoring_pyroscope_port: 4040
@@ -448,6 +476,18 @@ horde_monitoring_loki_ingestion_port: 3101
 # horde_alloy_basic_auth_username / password on remote Alloy agents.
 horde_monitoring_loki_ingestion_auth_user: "alloy"
 horde_monitoring_loki_ingestion_auth_password: "changeme-loki-ingestion"
+
+# Tempo ingestion frontend — exposes Tempo's OTLP HTTP API to remote Alloy
+# agents behind HAProxy basic auth.  Requires horde_monitoring_install_tempo: true.
+# The frontend forwards to the horde_monitoring_tempo_otlp_backend defined above.
+horde_monitoring_configure_tempo_ingestion_frontend: false
+# Port HAProxy listens on for remote Alloy trace pushes (distinct from Tempo's
+# internal OTLP port to avoid conflicts with the localhost-only Docker mapping).
+horde_monitoring_tempo_ingestion_port: 4320
+# Basic auth credentials — override in vault.  These must match the
+# horde_alloy_basic_auth_username / password on remote Alloy agents.
+horde_monitoring_tempo_ingestion_auth_user: "alloy"
+horde_monitoring_tempo_ingestion_auth_password: "changeme-tempo-ingestion"
 
 # HAProxy configuration (conf.d architecture via _haproxy_confd_bootstrap)
 horde_monitoring_haproxy_config_path: "/etc/haproxy/haproxy.cfg"

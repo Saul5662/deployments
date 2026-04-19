@@ -146,6 +146,14 @@
           - "'basic_auth' in (horde_alloy_config.content | b64decode)"
         fail_msg: "Alloy config must contain metrics pipeline with tenant header"
 
+    - name: Assert no duplicate prometheus.remote_write component labels (WI-1 regression)
+      ansible.builtin.assert:
+        that:
+          - (horde_alloy_config.content | b64decode).split('prometheus.remote_write "mimir"') | length == 2
+        fail_msg: >-
+          Found duplicate prometheus.remote_write "mimir" blocks in rendered config.
+          Alloy requires unique component labels — this would cause a startup failure.
+
     - name: Assert extra scrape target is present
       ansible.builtin.assert:
         that:
@@ -302,6 +310,14 @@
         that:
           - "'prometheus.exporter.unix' in (horde_alloy_metrics_only.content | b64decode)"
           - "'prometheus.remote_write' in (horde_alloy_metrics_only.content | b64decode)"
+
+    - name: Assert no duplicate prometheus.remote_write component labels (WI-1 regression)
+      ansible.builtin.assert:
+        that:
+          - (horde_alloy_metrics_only.content | b64decode).split('prometheus.remote_write "mimir"') | length == 2
+        fail_msg: >-
+          Found duplicate prometheus.remote_write "mimir" blocks in rendered config.
+          Alloy requires unique component labels — this would cause a startup failure.
 
     - name: Assert log and trace pipelines are NOT present
       ansible.builtin.assert:
@@ -580,3 +596,116 @@
         that:
           - "'action        = \"keep\"' not in (horde_alloy_nofilter_config.content | b64decode)"
         fail_msg: "No keep filter should appear when horde_alloy_docker_log_filter_label is empty"
+
+# ---------------------------------------------------------------------------
+# Play 7: Full role include (validate → install → configure)
+# ---------------------------------------------------------------------------
+# Exercises the actual role entry point rather than direct template rendering.
+# The install step adds the Grafana APT repo and installs alloy — requires
+# internet access in the test container.
+- name: Test horde_alloy - Full role include (metrics + logs)
+  hosts: testhost
+  become: true
+  gather_facts: true
+
+  vars:
+    horde_alloy_version: "1.8.1"
+    horde_alloy_config_dir: "/etc/alloy"
+    horde_alloy_data_dir: "/var/lib/alloy"
+    horde_alloy_log_level: "warn"
+    horde_alloy_http_listen_address: "127.0.0.1"
+    horde_alloy_http_port: 12345
+    horde_alloy_scrape_interval: "15s"
+    horde_alloy_unix_exporter_filesystem_fs_types_exclude: "^(tmpfs|overlay|nsfs|cgroup.*|tracefs|^bpf|ramfs|squashfs|sysfs|proc|mqueue|devpts)$"
+    horde_alloy_unix_exporter_filesystem_mount_timeout: "10s"
+    horde_alloy_journal_app_rules: []
+    horde_alloy_journal_parse_level: true
+    horde_alloy_tls_ca_cert: ""
+    horde_alloy_journal_max_age: "24h"
+    horde_alloy_forward_otlp_metrics: false
+    horde_alloy_otlp_listen_address: "127.0.0.1"
+    horde_alloy_otlp_grpc_port: 4317
+    horde_alloy_otlp_http_port: 4318
+    horde_alloy_otlp_metrics_tenant_id: "test-tenant"
+    horde_alloy_trace_batch_timeout: "5s"
+    horde_alloy_trace_batch_size: 8192
+    horde_alloy_mimir_endpoint: "https://mimir.test.local/api/v1/push"
+    horde_alloy_loki_endpoint: "https://loki.test.local/loki/api/v1/push"
+    horde_alloy_tempo_endpoint: ""
+    horde_alloy_tenant_id: "test-tenant"
+    horde_alloy_basic_auth_username: "alloy"
+    horde_alloy_basic_auth_password: "test-secret-not-default"
+    horde_alloy_collect_metrics: true
+    horde_alloy_collect_logs: true
+    horde_alloy_collect_journal: true
+    horde_alloy_collect_log_files: []
+    horde_alloy_collect_docker_logs: false
+    horde_alloy_collect_traces: false
+    horde_alloy_external_labels:
+      environment: "ci"
+    horde_alloy_log_labels:
+      app: "roletest"
+    horde_alloy_unix_exporter_set_collectors: []
+    horde_alloy_unix_exporter_enable_collectors: []
+    horde_alloy_unix_exporter_disable_collectors: []
+    horde_alloy_unix_exporter_include_exporter_metrics: false
+    horde_alloy_unix_exporter_textfile_directory: ""
+    horde_alloy_unix_exporter_filesystem_mount_points_exclude: ""
+    horde_alloy_extra_scrape_targets: []
+    horde_alloy_start_service: false
+
+  tasks:
+    - name: Apply horde_alloy role via include_role
+      ansible.builtin.include_role:
+        name: horde_alloy
+
+  post_tasks:
+    - name: Read rendered Alloy config (role include)
+      ansible.builtin.slurp:
+        path: "{{ horde_alloy_config_dir }}/config.alloy"
+      register: _role_config
+
+    - name: Assert metrics and log pipelines rendered via role include
+      ansible.builtin.assert:
+        that:
+          - "'prometheus.exporter.unix' in (_role_config.content | b64decode)"
+          - "'prometheus.remote_write' in (_role_config.content | b64decode)"
+          - "'loki.source.journal' in (_role_config.content | b64decode)"
+          - "'loki.write' in (_role_config.content | b64decode)"
+          - "'mimir.test.local' in (_role_config.content | b64decode)"
+          - "'loki.test.local' in (_role_config.content | b64decode)"
+          - "'basic_auth' in (_role_config.content | b64decode)"
+          - "'test-tenant' in (_role_config.content | b64decode)"
+        fail_msg: "Role include must produce the same config as direct template rendering"
+
+    - name: Assert trace pipeline is present with default settings
+      ansible.builtin.assert:
+        that:
+          - "'otelcol.receiver.otlp' in (_role_config.content | b64decode)"
+          - "'otelcol.exporter.otlphttp' in (_role_config.content | b64decode)"
+        fail_msg: "Trace pipeline must appear when horde_alloy_collect_traces defaults to true"
+
+    - name: Stat Alloy config file permissions (role include)
+      ansible.builtin.stat:
+        path: "{{ horde_alloy_config_dir }}/config.alloy"
+      register: _role_config_stat
+
+    - name: Assert config file permissions set by role
+      ansible.builtin.assert:
+        that:
+          - _role_config_stat.stat.mode == '0640'
+          - _role_config_stat.stat.pw_name == 'alloy'
+          - _role_config_stat.stat.gr_name == 'alloy'
+        fail_msg: "Role must set config to 0640 owned by alloy:alloy"
+
+    - name: Stat Alloy environment file (role include)
+      ansible.builtin.stat:
+        path: /etc/default/alloy
+      register: _role_env_stat
+
+    - name: Assert environment file was created by role
+      ansible.builtin.assert:
+        that:
+          - _role_env_stat.stat.exists
+          - _role_env_stat.stat.mode == '0644'
+        fail_msg: "Role must create /etc/default/alloy with mode 0644"

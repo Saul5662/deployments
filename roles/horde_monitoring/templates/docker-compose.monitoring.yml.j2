@@ -262,8 +262,10 @@ services:
       - "-config.file=/etc/tempo/tempo.yaml"
     ports:
       - "127.0.0.1:{{ horde_monitoring_tempo_http_port }}:{{ horde_monitoring_tempo_http_port }}"
+{% if horde_monitoring_tempo_publish_otlp_ports | bool %}
       - "127.0.0.1:{{ horde_monitoring_tempo_otlp_grpc_port }}:{{ horde_monitoring_tempo_otlp_grpc_port }}"
       - "127.0.0.1:{{ horde_monitoring_tempo_otlp_http_port }}:{{ horde_monitoring_tempo_otlp_http_port }}"
+{% endif %}
     volumes:
       - {{ horde_monitoring_tempo_config_dir }}/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - {{ horde_monitoring_tempo_data_dir }}:/var/tempo
@@ -310,8 +312,7 @@ services:
     ports:
       - "127.0.0.1:{{ horde_monitoring_pyroscope_port }}:{{ horde_monitoring_pyroscope_port }}"
     volumes:
-      - {{ horde_monitoring_pyroscope_config_dir }}/pyroscope.yaml:/etc/pyroscope/pyroscope.yaml:ro
-      - {{ horde_monitoring_pyroscope_config_dir }}/runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro
+      - {{ horde_monitoring_pyroscope_config_dir }}:/etc/pyroscope:ro
       - {{ horde_monitoring_pyroscope_data_dir }}:/data
     restart: unless-stopped
     deploy:

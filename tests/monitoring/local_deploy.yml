@@ -20,6 +20,10 @@
 
   vars:
     _local_root: "{{ playbook_dir }}/../../local-deploy"
+    _local_secret_dir: "{{ _local_root }}/.secrets/monitoring"
+    _local_garage_access_key_suffix_file: "{{ _local_secret_dir }}/garage-access-key-suffix.hex"
+    _local_garage_secret_key_file: "{{ _local_secret_dir }}/garage-secret-key.hex"
+    _local_garage_rpc_secret_file: "{{ _local_secret_dir }}/garage-rpc-secret.hex"
 
     horde_monitoring_install_mimir: true
     horde_monitoring_install_grafana: true
@@ -42,6 +46,9 @@
     horde_monitoring_tempo_data_dir: "{{ _local_root }}/tempo/data"
     horde_monitoring_pyroscope_config_dir: "{{ _local_root }}/pyroscope/config"
     horde_monitoring_pyroscope_data_dir: "{{ _local_root }}/pyroscope/data"
+    horde_monitoring_s3_config_dir: "{{ _local_root }}/garage/config"
+    horde_monitoring_s3_data_dir: "{{ _local_root }}/garage/data"
+    horde_monitoring_s3_metadata_dir: "{{ _local_root }}/garage/meta"
 
     horde_monitoring_grafana_admin_password: "localdev"
     horde_monitoring_grafana_anonymous_enabled: true
@@ -86,6 +93,45 @@
     # Exporter install source
     _local_exporter_repo_url: "https://github.com/Haidra-Org/horde-exporters"
     _local_exporter_repo_ref: "main"
+
+  pre_tasks:
+    - name: Ensure local secret directory exists
+      ansible.builtin.file:
+        path: "{{ _local_secret_dir }}"
+        state: directory
+        mode: "0700"
+      become: false
+
+    - name: Generate stable local embedded Garage access key suffix
+      ansible.builtin.set_fact:
+        horde_monitoring__garage_access_key_suffix: >-
+          {{ lookup('ansible.builtin.password', _local_garage_access_key_suffix_file ~ ' length=24 chars=hexdigits') | lower }}
+      no_log: true
+      become: false
+
+    - name: Generate stable local embedded Garage credentials
+      ansible.builtin.set_fact:
+        horde_monitoring_s3_access_key: >-
+          GK{{ horde_monitoring__garage_access_key_suffix }}
+        horde_monitoring_s3_access_key_name: >-
+          mimir-{{ horde_monitoring__garage_access_key_suffix[-8:] }}
+        horde_monitoring_s3_secret_key: >-
+          {{ lookup('ansible.builtin.password', _local_garage_secret_key_file ~ ' length=64 chars=hexdigits') | lower }}
+        horde_monitoring_s3_rpc_secret: >-
+          {{ lookup('ansible.builtin.password', _local_garage_rpc_secret_file ~ ' length=64 chars=hexdigits') | lower }}
+      no_log: true
+      become: false
+
+    - name: Assert generated Garage credentials match required formats
+      ansible.builtin.assert:
+        that:
+          - horde_monitoring_s3_access_key is match('^GK[0-9a-f]{24}$')
+          - horde_monitoring_s3_secret_key is match('^[0-9a-f]{64}$')
+          - horde_monitoring_s3_rpc_secret is match('^[0-9a-f]{64}$')
+        fail_msg: >-
+          Generated Garage credentials are invalid. Remove files in
+          {{ _local_secret_dir }} and re-run this playbook.
+      become: false
 
   roles:
     - role: horde_monitoring

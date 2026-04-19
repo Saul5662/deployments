@@ -70,3 +70,15 @@ frontend loki_ingestion_front
     http-request auth realm loki unless authenticated
     default_backend horde_monitoring_loki_backend
 {% endif %}
+
+{% if horde_monitoring_configure_tempo_ingestion_frontend | default(false) | bool and horde_monitoring_install_tempo | bool %}
+userlist tempo_ingestion_auth
+    user {{ horde_monitoring_tempo_ingestion_auth_user }} insecure-password {{ horde_monitoring_tempo_ingestion_auth_password }}
+
+frontend tempo_ingestion_front
+    bind 0.0.0.0:{{ horde_monitoring_tempo_ingestion_port }}
+    mode http
+    acl authenticated http_auth(tempo_ingestion_auth)
+    http-request auth realm tempo unless authenticated
+    default_backend horde_monitoring_tempo_otlp_backend
+{% endif %}

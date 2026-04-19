@@ -405,6 +405,12 @@
   gather_facts: false
 
   tasks:
+    # Use set_fact (precedence 19) instead of include_role vars (precedence 20)
+    # so the rescue set_fact can override it for handler suppression.
+    - name: Enable service start for fail-fast credential test
+      ansible.builtin.set_fact:
+        horde_monitoring_start_services: true
+
     - name: Attempt role with default passwords and start_services=true
       block:
         - name: Run role with default credentials (should fail)
@@ -415,7 +421,6 @@
             horde_monitoring_install_grafana: true
             horde_monitoring_configure_firewall: false
             horde_monitoring_configure_haproxy: false
-            horde_monitoring_start_services: true
             horde_monitoring_host_filesystem_metrics_available: true
             horde_monitoring_s3_secret_key: "changeme-s3-secret"
             horde_monitoring_grafana_admin_password: "changeme"
@@ -425,6 +430,13 @@
             msg: "Role should have failed with default passwords but did not"
 
       rescue:
+        - name: Prevent leaked handlers from starting services (password test)
+          ansible.builtin.set_fact:
+            horde_monitoring_start_services: false
+
+        - name: Flush handlers from failed role run (password test)
+          ansible.builtin.meta: flush_handlers
+
         - name: Assert failure was specifically about default credentials
           ansible.builtin.assert:
             that:
@@ -447,6 +459,12 @@
   gather_facts: false
 
   tasks:
+    # Use set_fact (precedence 19) instead of include_role vars (precedence 20)
+    # so the rescue set_fact can override it for handler suppression.
+    - name: Enable service start for fail-fast metrics test
+      ansible.builtin.set_fact:
+        horde_monitoring_start_services: true
+
     - name: Attempt role with host disk alerts enabled but metrics flag unset
       block:
         - name: Run role with host disk alerts enabled and metrics flag false (should fail)
@@ -456,7 +474,6 @@
             horde_monitoring_install_mimir: false
             horde_monitoring_install_grafana: false
             horde_monitoring_install_alerting_rules: true
-            horde_monitoring_start_services: true
             horde_monitoring_install_host_disk_alerts: true
             horde_monitoring_host_filesystem_metrics_available: false
 
@@ -465,6 +482,13 @@
             msg: "Role should have failed when host disk alerts are enabled without host filesystem metrics"
 
       rescue:
+        - name: Prevent leaked handlers from starting services (metrics test)
+          ansible.builtin.set_fact:
+            horde_monitoring_start_services: false
+
+        - name: Flush handlers from failed role run (metrics test)
+          ansible.builtin.meta: flush_handlers
+
         - name: Assert failure was specifically about host filesystem metrics prerequisite
           ansible.builtin.assert:
             that:
@@ -795,6 +819,21 @@
         that:
           - _pyroscope_data_dir.stat.exists
           - _pyroscope_data_dir.stat.isdir
+
+    - name: Read HAProxy monitoring conf.d fragment (Loki+Tempo play)
+      ansible.builtin.slurp:
+        path: /etc/haproxy/conf.d/horde-monitoring.cfg
+      register: _haproxy_lt_cfg_content
+
+    - name: Assert stats exporter and alertmanager HAProxy backends are present
+      ansible.builtin.assert:
+        that:
+          - "'horde_monitoring_stats_exporter_backend' in (_haproxy_lt_cfg_content.content | b64decode)"
+          - "'horde_monitoring_alertmanager_backend' in (_haproxy_lt_cfg_content.content | b64decode)"
+        fail_msg: >-
+          HAProxy config must contain stats_exporter and alertmanager backends when
+          horde_monitoring_configure_stats_exporter_backend and
+          horde_monitoring_configure_alertmanager_backend are true.
 
 # ---------------------------------------------------------------------------
 # Play 4: Verify Loki+Tempo are NOT present when disabled

@@ -11,6 +11,8 @@
   vars:
     horde_monitoring_install_mimir: true
     horde_monitoring_install_grafana: true
+    horde_monitoring_install_tempo: false
+    horde_monitoring_install_pyroscope: false
     horde_monitoring_configure_firewall: false
     horde_monitoring_configure_haproxy: false
     horde_monitoring_grafana_admin_password: "testpass123"

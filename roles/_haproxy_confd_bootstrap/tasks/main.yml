@@ -32,18 +32,6 @@
       ExecReload=/usr/sbin/haproxy -Ws -f $CONFIG -f /etc/haproxy/conf.d/ -c -q $EXTRAOPTS
     mode: "0644"
   become: true
-  register: _haproxy_confd_systemd
-
-- name: Reload systemd daemon for HAProxy override
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
-  when: _haproxy_confd_systemd.changed
-
-- name: Start HAProxy to lock in override
-  ansible.builtin.systemd:
-    name: haproxy
-    enabled: true
-    state: started
-  become: true
-  when: _haproxy_confd_systemd.changed
+  notify:
+    - Reload systemd daemon for HAProxy override
+    - Start HAProxy to lock in override

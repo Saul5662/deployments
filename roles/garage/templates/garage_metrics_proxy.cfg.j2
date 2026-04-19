@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+
+userlist garage_metrics_auth
+    user {{ garage_metrics_haproxy_username }} insecure-password {{ garage_metrics_haproxy_password }}
+
+frontend garage_metrics_front
+    bind {{ garage_metrics_haproxy_bind_address }}:{{ garage_metrics_haproxy_port }}
+    mode http
+
+    acl metrics_path path -i /metrics
+    acl authenticated http_auth(garage_metrics_auth)
+
+    http-request deny unless metrics_path
+    http-request auth realm garage-metrics if metrics_path !authenticated
+
+    default_backend garage_metrics_back
+
+backend garage_metrics_back
+    mode http
+    http-request set-header Authorization "Bearer {{ garage_admin_token }}"
+    server garage_admin_local 127.0.0.1:{{ garage_admin_port }} check

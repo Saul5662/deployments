@@ -72,6 +72,19 @@ garage_healthcheck_url: "http://127.0.0.1:{{ garage_admin_port }}/health"
 # and health-check waits. Configs are still rendered and can be asserted on.
 garage_start_services: true
 
+# HAProxy metrics exposure configuration
+# Set to true to deploy a `/etc/haproxy/conf.d/garage_metrics.cfg` file
+# that exposes the Garage admin /metrics endpoint behind basic auth.
+# The proxy translates basic-auth into a Bearer token for the Garage admin API,
+# keeping the admin port bound to localhost.
+# Variable names match the convention used in ops/group_vars/garage/vars.yml
+# so that the monitoring role can resolve credentials via hostvars lookups.
+garage_metrics_haproxy_enabled: false
+garage_metrics_haproxy_bind_address: "0.0.0.0"
+garage_metrics_haproxy_port: 3910
+garage_metrics_haproxy_username: "prometheus"
+garage_metrics_haproxy_password: "changeme"
+
 # Bucket bootstrap — list of bucket names to create on first start.
 # The init sidecar creates buckets and grants the access key full permissions.
 garage_buckets: []

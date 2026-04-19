@@ -69,6 +69,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "127.0.0.1:{{ _local_alloy_http_port }}:{{ _local_alloy_http_port }}"
+      - "127.0.0.1:{{ _local_otlp_grpc_port }}:{{ _local_otlp_grpc_port }}"
+      - "127.0.0.1:{{ _local_otlp_http_port }}:{{ _local_otlp_http_port }}"
     restart: unless-stopped
     networks:
       - monitoring
