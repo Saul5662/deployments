@@ -202,7 +202,8 @@ services:
       - tempo
 {% endif %}
 {% if horde_monitoring_install_pyroscope | bool %}
-      - pyroscope
+      pyroscope:
+        condition: service_healthy
 {% endif %}
 {% endif %}
 
@@ -325,7 +326,7 @@ services:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:{{ horde_monitoring_pyroscope_port }}/ready"]
+      test: ["CMD", "/usr/bin/profilecli", "ready", "--url", "http://localhost:{{ horde_monitoring_pyroscope_port }}"]
       interval: 30s
       timeout: 5s
       retries: 5
