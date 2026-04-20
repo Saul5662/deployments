@@ -2,7 +2,9 @@
 # AI-Horde backend deployment defaults
 
 # Docker image for AI-Horde backend.
-ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
+# ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
+ai_horde_image: "ghcr.io/tazlin/ai-horde:main"
+
 
 # Docker-mode images (pinned by digest).
 ai_horde_postgres_image: "ghcr.io/haidra-org/ai-horde-postgres@sha256:25984d05fdb328d3283166222efd569303c0221736fc332b8f4be1b8ff37e1e4"

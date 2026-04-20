@@ -148,17 +148,19 @@ all:
 
 ## Data Retention
 
-| Layer                          | Default        | Purpose                                 |
-| ------------------------------ | -------------- | --------------------------------------- |
-| Prometheus (local)             | `48h`          | Buffer for `remote_write` — short-lived |
-| Mimir `ai-horde-app` tenant    | Infinite (`0`) | AI Horde application metrics            |
-| Mimir `infrastructure` tenant  | `30d`          | Host and infrastructure metrics         |
-| Mimir `ai-horde-public` tenant | `90d`          | Public-facing dashboard metrics         |
-| Loki (opt-in)                  | `90d`          | Log retention                           |
-| Tempo (opt-in)                 | `7d`           | Trace retention                         |
+| Layer                               | Default        | Purpose                                             |
+| ----------------------------------- | -------------- | --------------------------------------------------- |
+| Prometheus (local)                  | `48h`          | Buffer for `remote_write` — short-lived             |
+| Mimir `ai-horde-app` tenant         | Infinite (`0`) | AI Horde application metrics                        |
+| Mimir `infrastructure` tenant       | `30d`          | Host and infrastructure metrics                     |
+| Mimir `ai-horde-telemetry` tenant   | `3d`           | Tempo span metrics + OTLP-sourced app metrics       |
+| Mimir `ai-horde-public` tenant      | `90d`          | Public-facing dashboard metrics                     |
+| Loki (opt-in)                       | `90d`          | Log retention                                       |
+| Tempo (opt-in)                      | `7d`           | Trace retention                                     |
 
 Prometheus splits data by job: `horde-exporter` → app tenant, everything else
-→ infrastructure tenant. See the
+→ infrastructure tenant. Tempo-generated span metrics and OTLP-sourced metrics
+from instrumented applications go to the telemetry tenant. See the
 [example playbook](examples/horde_monitoring_stack.yml) for the exact
 `write_relabel_configs`.
 

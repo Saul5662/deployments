@@ -137,7 +137,7 @@ horde_alloy_collect_traces: true
 # Reuses the same OTLP receiver — requires horde_alloy_collect_traces: true.
 horde_alloy_forward_otlp_metrics: true
 # Tenant ID for OTLP-sourced metrics (may differ from scraped metrics).
-horde_alloy_otlp_metrics_tenant_id: "{{ horde_alloy_tenant_id }}"
+horde_alloy_otlp_metrics_tenant_id: "ai-horde-telemetry"
 
 # Bind address for the OTLP receiver — apps on this host send traces here.
 # 0.0.0.0 allows Docker containers to reach Alloy via the bridge gateway

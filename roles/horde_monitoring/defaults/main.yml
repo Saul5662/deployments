@@ -170,9 +170,10 @@ horde_monitoring_mimir_backup_grafana_db: false
 # when multitenancy is enabled, so keep these tenant IDs aligned with Prometheus remote_write
 # headers and Grafana datasource provisioning.
 horde_monitoring_application_tenant_id: "ai-horde-app"
-# ⚠ Infinite retention: blocks accumulate indefinitely (~2 GB/month at 50k series).
-# This is an intentional trade-off — full history is valuable, and disk usage is
-# bounded in practice by monitoring alerts (HostDiskUsageHigh).
+# ⚠ Infinite retention: blocks accumulate indefinitely.  This tenant receives
+# only application-level metrics (horde-stats-exporter) — roughly ~2 GB/month
+# at steady state.  High-volume telemetry (Tempo span metrics, OTLP metrics)
+# is routed to the telemetry tenant with short retention.
 # If growth becomes a problem, change to a bounded value
 # (e.g. "365d") — the compactor will garbage-collect blocks beyond the window.
 horde_monitoring_application_retention: "0"
@@ -181,6 +182,15 @@ horde_monitoring_application_datasource_name: "AI Horde App"
 horde_monitoring_infrastructure_tenant_id: "infrastructure"
 horde_monitoring_infrastructure_retention: "30d"
 horde_monitoring_infrastructure_datasource_name: "Infrastructure"
+
+# Telemetry tenant — receives high-volume, high-churn derived metrics:
+#   • Tempo span metrics (service graphs + RED metrics)
+#   • OTLP-sourced metrics forwarded by Alloy from instrumented applications
+# Short retention keeps disk usage bounded; these metrics are most valuable
+# for recent debugging and are reproducible from traces.
+horde_monitoring_telemetry_tenant_id: "ai-horde-telemetry"
+horde_monitoring_telemetry_retention: "3d"
+horde_monitoring_telemetry_datasource_name: "Telemetry"
 
 # Public tenant — receives real-time data via dual remote_write plus downsampled
 # historical data.  Strict query limits protect Mimir from expensive anonymous queries.
@@ -194,12 +204,29 @@ horde_monitoring_public_max_fetched_series: 50000
 horde_monitoring_mimir_extra_tenant_overrides: {}
 # Mimir performance tuning
 horde_monitoring_mimir_grpc_max_msg_size: 104857600
-horde_monitoring_mimir_max_global_series_per_user: 500000
+horde_monitoring_mimir_max_global_series_per_user: 1000000
 horde_monitoring_mimir_ingestion_rate: 10000
 horde_monitoring_mimir_ingestion_burst_size: 200000
 horde_monitoring_mimir_compaction_interval: "1h"
 horde_monitoring_mimir_compactor_deletion_delay: "12h"
 horde_monitoring_mimir_split_queries_interval: "24h"
+
+# TSDB early head compaction (experimental in Mimir 2.15).
+# When in-memory series reach this threshold the ingester compacts the TSDB
+# head, evicting stale series older than active_series_metrics_idle_timeout
+# (default 20m).  This prevents high-churn tenants (e.g. infrastructure) from
+# hitting max_global_series_per_user due to stale series accumulation.
+# Set to 0 to disable.
+horde_monitoring_mimir_early_head_compaction_min_in_memory_series: 200000
+horde_monitoring_mimir_early_head_compaction_min_estimated_series_reduction_percentage: 15
+
+# Per-tenant series limits applied via runtime overrides.  These supplement
+# the global default (max_global_series_per_user) and allow right-sizing each
+# tenant independently.  0 means inherit the global default.
+horde_monitoring_mimir_app_tenant_max_series: 0
+horde_monitoring_mimir_infra_tenant_max_series: 300000
+horde_monitoring_mimir_telemetry_tenant_max_series: 500000
+horde_monitoring_mimir_public_tenant_max_series: 200000
 
 # Memcached caching layer (chunks, metadata, and query results)
 horde_monitoring_mimir_enable_memcached: true
@@ -398,7 +425,7 @@ horde_monitoring_tempo_trace_retention: "168h"
 # to Mimir. Enables service graph and span metrics visualisations in Grafana.
 horde_monitoring_tempo_metrics_generator_enabled: true
 # Tenant ID used when the metrics generator writes to Mimir via remote_write.
-horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
+horde_monitoring_tempo_metrics_generator_tenant_id: "ai-horde-telemetry"
 # Processors to enable (service-graphs provides service map, span-metrics provides RED).
 horde_monitoring_tempo_metrics_generator_processors:
   - "service-graphs"
@@ -443,6 +470,7 @@ horde_monitoring_pyroscope_retention_period: "0s"
 # Per-tenant retention (matches Mimir's multi-tenant model).
 horde_monitoring_pyroscope_application_retention: "0"
 horde_monitoring_pyroscope_infrastructure_retention: "30d"
+horde_monitoring_pyroscope_telemetry_retention: "3d"
 horde_monitoring_pyroscope_public_retention: "90d"
 
 # Additional per-tenant override entries (dict). Merged into runtime-overrides.yaml.

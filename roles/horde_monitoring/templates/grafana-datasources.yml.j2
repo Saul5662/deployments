@@ -29,6 +29,18 @@ datasources:
       httpHeaderName1: X-Scope-OrgID
     secureJsonData:
       httpHeaderValue1: {{ horde_monitoring_infrastructure_tenant_id }}
+  - name: {{ horde_monitoring_telemetry_datasource_name }}
+    uid: mimir-telemetry
+    orgId: 1
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: {{ horde_monitoring_telemetry_tenant_id }}
 {% if horde_monitoring_alertmanager_url %}
   - name: Alertmanager
     uid: alertmanager
@@ -99,9 +111,9 @@ datasources:
         filterBySpanID: true
 {% endif %}
       tracesToMetrics:
-        datasourceUid: mimir-infra
+        datasourceUid: mimir-telemetry
       serviceMap:
-        datasourceUid: mimir-infra
+        datasourceUid: mimir-telemetry
       nodeGraph:
         enabled: true
 {% endif %}
