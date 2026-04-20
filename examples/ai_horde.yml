@@ -1,5 +1,5 @@
 ---
-# Example: Deploy AI-Horde backend
+# Example: Deploy AI-Horde backend (Docker-only role)
 #
 # Usage:
 #   ansible-playbook examples/ai_horde.yml -i inventory.yml
@@ -8,55 +8,26 @@
 #   ai_horde_postgres_password  — PostgreSQL password (no default, fail-fast)
 #   ai_horde_secret_key         — Flask secret key (no default, fail-fast)
 #
-# The regen worker connects to AI-Horde via horde_url.
-# Deploy AI-Horde first, then point workers at it.
-# See examples/regen_worker.yml for worker deployment.
+# Notes:
+# - This role is Docker-only and does not manage HAProxy/Nginx.
+# - For single-host/dev usage keep `ai_horde_listen: "127.0.0.1"`.
+# - For cross-host consumers (workers/exporter on other hosts), set
+#   `ai_horde_listen: "0.0.0.0"` and restrict access with firewall rules.
 
-# Docker mode — self-contained dev/test deployment
-- name: Deploy AI-Horde backend (Docker)
+- name: Deploy AI-Horde backend
   hosts: horde_server
   become: true
   roles:
     - role: ai_horde
       vars:
-        ai_horde_deploy_mode: docker
-        # Pin source and runtime image explicitly; bump only after validation.
-        ai_horde_repo_version: "af0a85a78613cdba9863e16bbec0c179a4b2b132"
-        # Optional source override (public fork):
-        # ai_horde_repo: "https://github.com/your-org/AI-Horde.git"
+        # Recommended for deterministic deployments:
+        # ai_horde_image: "ghcr.io/haidra-org/ai-horde@sha256:<digest>"
+        ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
         ai_horde_postgres_image: "ghcr.io/haidra-org/ai-horde-postgres@sha256:25984d05fdb328d3283166222efd569303c0221736fc332b8f4be1b8ff37e1e4"
         ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
+        ai_horde_port: 7001
         ai_horde_listen: "127.0.0.1"
+        ai_horde_replicas: 1
         ai_horde_admins: ["admin_user#1"]
-
-# Native mode — shared-host baseline (non-privileged ingress)
-# Uncomment and adjust for your environment:
-#
-# - name: Deploy AI-Horde backend (native, conservative baseline)
-#   hosts: horde_server
-#   become: true
-#   roles:
-#     - role: ai_horde
-#       vars:
-#         ai_horde_deploy_mode: native
-#         ai_horde_repo_version: "af0a85a78613cdba9863e16bbec0c179a4b2b132"
-#         # Conservative starting point; ramp gradually (2 -> 4 -> 6+) with
-#         # metrics-based checks on CPU, DB connection pressure, and latency.
-#         # See README sizing guidance for host-class recommendations.
-#         ai_horde_instance_count: 2
-#         ai_horde_postgres_password: "{{ vault_ai_horde_pg_password }}"
-#         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
-#         ai_horde_postgres_host: "db.internal"
-#         ai_horde_redis_host: "redis.internal"
-#         ai_horde_listen: "127.0.0.1"
-#         ai_horde_admins: ["admin_user#1"]
-#         ai_horde_install_haproxy: true
-#         ai_horde_haproxy_port: 8080
-
-# Production ingress variant (80/443) for dedicated ingress hosts only:
-#   - Ensure no conflicting service already binds 80/443.
-#   - Ensure firewall/security groups allow intended traffic.
-#   - Ensure TLS termination strategy is explicitly configured.
-# Then override:
-#   ai_horde_haproxy_port: 80
+        ai_horde_otel_service_name: "ai-horde"

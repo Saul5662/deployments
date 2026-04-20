@@ -1,12 +1,8 @@
 ---
 # AI-Horde backend deployment defaults
 
-# "docker" (default) or "native". See README.md for details.
-ai_horde_deploy_mode: "docker"
-
-# Source repository and pinned version.
-ai_horde_repo: "https://github.com/Haidra-Org/AI-Horde.git"
-ai_horde_repo_version: "af0a85a78613cdba9863e16bbec0c179a4b2b132"
+# Docker image for AI-Horde backend.
+ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
 
 # Docker-mode images (pinned by digest).
 ai_horde_postgres_image: "ghcr.io/haidra-org/ai-horde-postgres@sha256:25984d05fdb328d3283166222efd569303c0221736fc332b8f4be1b8ff37e1e4"
@@ -14,8 +10,6 @@ ai_horde_redis_image: "redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe246
 
 ai_horde_port: 7001
 ai_horde_listen: "127.0.0.1"
-# Loopback target for health checks and HAProxy backends.
-ai_horde_backend_host: "127.0.0.1"
 
 ai_horde_horde_type: "stable"
 ai_horde_verbosity: "-vvvvi"
@@ -27,62 +21,39 @@ ai_horde_data_dir: "/var/lib/ai-horde"
 # ai_horde_postgres_password:
 # ai_horde_secret_key:
 
+ai_horde_postgres_host: "postgres"
+ai_horde_postgres_port: 5432
 ai_horde_postgres_user: "aihorde"
 ai_horde_postgres_db: "aihorde"
-ai_horde_postgres_host: "127.0.0.1"
-ai_horde_postgres_port: 5432
-# Safety valve: keep false to prevent connecting as the PostgreSQL
-# superuser or placing application data in system databases (postgres,
-# template0, template1).  Set true only as a one-time bootstrap opt-in.
-ai_horde_allow_postgres_superuser_management: false
-# Override for POSTGRES_URL fragment (host[:port]/db[?opts]). See README.
-ai_horde_postgres_url_override: ""
 
-ai_horde_redis_host: "127.0.0.1"
-# Must be 6379 in native mode (AI-Horde runtime hard-codes this).
+ai_horde_redis_host: "redis"
 ai_horde_redis_port: 6379
 
 ai_horde_admins: []
 # Extra env vars merged into .env (e.g. R2, OAuth keys).
 ai_horde_env_overrides: {}
 
-# Docker-mode logging.
-ai_horde_log_driver: "local"
-ai_horde_log_max_size: "50m"
-ai_horde_log_max_file: 5
+# Docker-mode logging.  journald avoids double-writing (Alloy already
+# collects from the journal) while keeping `docker logs` functional.
+ai_horde_log_driver: "journald"
 
-# false = render-only mode (CI/test). See README.
+# false = render-only mode (CI/test).
 ai_horde_start_services: true
-ai_horde_force_build: false
-# true = run docker compose build --pull on every systemd start.
-ai_horde_docker_build_on_service_start: false
 
-# ── Native-mode settings (ignored in docker mode) ─────────
-ai_horde_instance_count: 1
-
-# Waitress tuning. See README "Host-Class Sizing".
+# Replicas for AI-Horde backend (uses Docker Compose deploy: replicas)
+ai_horde_replicas: 1
 ai_horde_waitress_threads: 45
 ai_horde_waitress_connection_limit: 1024
-# Advisory-only capacity signal used for warnings; does not change runtime DB config.
-ai_horde_db_pool_size_per_instance: 50
 
-ai_horde_user: "aihorde"
-ai_horde_group: "aihorde"
-ai_horde_venv_dir: "{{ ai_horde_base_dir }}/venv"
+# Telemetry defaults
+ai_horde_otel_service_name: "ai-horde"
+ai_horde_otel_sdk_disabled: "false"
+ai_horde_pyroscope_enabled: "false"
+ai_horde_pyroscope_server_address: "http://host.docker.internal:4040"
+ai_horde_pyroscope_tenant_id: ""
+ai_horde_deployment_environment: "production"
 
-# uv installer (pinned version + checksum).
-# Installation logic lives in the shared _uv_bootstrap micro-role.
-ai_horde_uv_version: "0.11.2"
-ai_horde_uv_installer_checksum: "sha256:a6ccba649ac029ce18500400019d60de389838d13a6751aa2908ede1b2aa3a87"
-ai_horde_uv_allow_unverified_installer: false
-
-# Local PostgreSQL/Redis provisioning (false = external).
-ai_horde_install_postgres: false
-ai_horde_install_redis: false
-
-# HAProxy load balancing (uses conf.d architecture via _haproxy_confd_bootstrap).
-ai_horde_install_haproxy: false
-ai_horde_haproxy_port: 8080
-ai_horde_haproxy_listen: "*"
-# 300s timeout for long AI requests.
-ai_horde_haproxy_timeout_server: 300000
+# OTLP endpoint — containers reach Alloy directly via host.docker.internal.
+# Alloy must bind its OTLP receiver to an address reachable from Docker
+# (e.g. 0.0.0.0 or 172.17.0.1).  See horde_alloy_otlp_listen_address.
+ai_horde_alloy_otlp_port: 4318

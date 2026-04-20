@@ -31,10 +31,66 @@
     - ai_horde
 
   post_tasks:
-    - name: Write local-deploy.env for shell script
+    - name: Render local-deploy.env
       ansible.builtin.copy:
         content: |
           AI_HORDE_PORT={{ ai_horde_port }}
           AI_HORDE_BASE_DIR={{ ai_horde_base_dir }}
         dest: "{{ ai_horde_base_dir }}/local-deploy.env"
+        mode: "0644"
+
+    - name: Render docker-compose.override.yml to provide an HAProxy load-balancer for replicas
+      ansible.builtin.copy:
+        content: |
+          services:
+            haproxy:
+              image: haproxy:3.0-alpine
+              ports:
+                - "127.0.0.1:8080:8080"
+              volumes:
+                - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+              depends_on:
+                - aihorde
+              networks:
+                - aihorde_network
+        dest: "{{ ai_horde_base_dir }}/docker-compose.override.yml"
+        mode: "0644"
+
+    - name: Render haproxy.cfg for load-balancer
+      ansible.builtin.copy:
+        content: |
+          global
+            log stdout format raw local0
+
+          defaults
+            log global
+            mode http
+            timeout client 10s
+            timeout connect 5s
+            timeout server 10s
+            timeout http-request 10s
+
+          frontend aihorde_fe
+            bind *:8080
+            default_backend aihorde_be
+
+          backend aihorde_be
+            balance roundrobin
+            option forwardfor
+            http-request set-header X-Forwarded-Port %[dst_port]
+            http-request set-header X-Forwarded-Proto http
+            server-template worker 5 aihorde:7001 check resolvers docker init-addr libc,none
+
+          resolvers docker
+            nameserver dns 127.0.0.11:53
+            resolve_retries 3
+            timeout resolve 1s
+            timeout retry   1s
+            hold other      10s
+            hold refused    10s
+            hold nx         10s
+            hold timeout    10s
+            hold valid      10s
+            hold obsolete   10s
+        dest: "{{ ai_horde_base_dir }}/haproxy.cfg"
         mode: "0644"

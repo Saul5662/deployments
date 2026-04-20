@@ -98,7 +98,11 @@
     - name: Assert AI-Horde compose listens on 0.0.0.0 (for integration)
       ansible.builtin.assert:
         that:
-          - "'0.0.0.0:7001:7001' in _compose_content.content | b64decode"
+          - "'0.0.0.0:7001-' in _compose_content.content | b64decode"
+          - "':7001' in _compose_content.content | b64decode"
+        fail_msg: >-
+          Compose port binding should contain host-range format
+          (e.g. 0.0.0.0:7001-7001:7001 for replicas=1).
 
     - name: Create worker config directory
       ansible.builtin.file:

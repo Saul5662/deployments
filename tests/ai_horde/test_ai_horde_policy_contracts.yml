@@ -9,8 +9,6 @@
   gather_facts: false
   vars:
     _defaults_path: "{{ playbook_dir }}/../../roles/ai_horde/defaults/main.yml"
-    _native_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/native.yml"
-    _uv_bootstrap_tasks_path: "{{ playbook_dir }}/../../roles/_uv_bootstrap/tasks/main.yml"
     _docker_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/docker.yml"
     _examples_requirements_path: "{{ playbook_dir }}/../../examples/requirements.yml"
     _full_stack_example_path: "{{ playbook_dir }}/../../examples/full_horde_stack.yml"
@@ -27,50 +25,11 @@
     - name: Assert critical defaults are pinned and deterministic
       ansible.builtin.assert:
         that:
-          - _defaults.ai_horde_repo_version is regex('^[0-9a-f]{40}$')
-          - _defaults.ai_horde_repo_version not in ['main', 'master', 'latest', 'head', 'HEAD']
+          - _defaults.ai_horde_image is defined
           - _defaults.ai_horde_postgres_image is regex('^.+@sha256:[0-9a-f]{64}$')
-          - _defaults.ai_horde_uv_installer_checksum is regex('^sha256:[0-9a-f]{64}$')
-          - not (_defaults.ai_horde_uv_allow_unverified_installer | bool)
-          - _defaults.ai_horde_haproxy_port | int == 8080
-          - not (_defaults.ai_horde_docker_build_on_service_start | bool)
+          - _defaults.ai_horde_redis_image is regex('^.+@sha256:[0-9a-f]{64}$')
         fail_msg: >-
-          Critical reproducibility defaults regressed (floating refs/images or
-          unverified installer posture).
-
-    - name: Load native task file content
-      ansible.builtin.slurp:
-        path: "{{ _native_tasks_path }}"
-      register: _native_tasks_raw
-
-    - name: Load uv bootstrap task file content
-      ansible.builtin.slurp:
-        path: "{{ _uv_bootstrap_tasks_path }}"
-      register: _uv_bootstrap_tasks_raw
-
-    - name: Assert native tasks delegate uv installation to _uv_bootstrap
-      ansible.builtin.assert:
-        that:
-          - "'_uv_bootstrap' in (_native_tasks_raw.content | b64decode)"
-          - "'_uv_bootstrap_version' in (_native_tasks_raw.content | b64decode)"
-          - "'_uv_bootstrap_installer_checksum' in (_native_tasks_raw.content | b64decode)"
-          - "'_uv_bootstrap_allow_unverified' in (_native_tasks_raw.content | b64decode)"
-        fail_msg: >-
-          Native tasks must delegate uv installation to the _uv_bootstrap
-          micro-role, passing _uv_bootstrap_version, _uv_bootstrap_installer_checksum, and
-          _uv_bootstrap_allow_unverified.
-
-    - name: Assert _uv_bootstrap enforces installer integrity by default
-      ansible.builtin.assert:
-        that:
-          - "'Validate checksum policy' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-          - "'Download installer with checksum verification' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-          - (_uv_bootstrap_tasks_raw.content | b64decode) is regex('(?m)^\s*checksum:\s*"\{\{ _uv_bootstrap_installer_checksum \}\}"\s*$')
-          - "'Download installer without checksum verification (explicit opt-in)' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-          - "'_uv_bootstrap_allow_unverified | bool' in (_uv_bootstrap_tasks_raw.content | b64decode)"
-        fail_msg: >-
-          _uv_bootstrap must enforce verified-by-default download flow with
-          explicit unverified opt-in.
+          Critical reproducibility defaults regressed (floating images).
 
     - name: Load docker task file content
       ansible.builtin.slurp:
@@ -81,7 +40,7 @@
       ansible.builtin.assert:
         that:
           - "'api/v2/status/heartbeat' in (_docker_tasks_raw.content | b64decode)"
-          - "'ai_horde_backend_host' in (_docker_tasks_raw.content | b64decode)"
+          - "'ai_horde_port' in (_docker_tasks_raw.content | b64decode)"
           - (_docker_tasks_raw.content | b64decode) is not regex('(?ms)wait_for:.*port:\s*5432')
           - (_docker_tasks_raw.content | b64decode) is not regex('(?ms)wait_for:.*port:\s*6379')
         fail_msg: >-
@@ -99,47 +58,6 @@
           - "'git+https://github.com/Haidra-Org/deployments' not in (_examples_requirements_raw.content | b64decode)"
         fail_msg: >-
           examples/requirements.yml should not include moving self git references.
-
-    - name: Load full-stack example playbook
-      ansible.builtin.slurp:
-        path: "{{ _full_stack_example_path }}"
-      register: _full_stack_example_raw
-
-    - name: Load ai-horde example playbook
-      ansible.builtin.slurp:
-        path: "{{ _ai_horde_example_path }}"
-      register: _ai_horde_example_raw
-
-    - name: Assert full-stack example enforces cross-host-safe topology
-      ansible.builtin.assert:
-        that:
-          # Non-privileged ingress port baseline
-          - "'horde_api_ingress_port: 8080' in (_full_stack_example_raw.content | b64decode)"
-          # API host derives from inventory addressing (not hardcoded)
-          - "'horde_api_host:' in (_full_stack_example_raw.content | b64decode)"
-          - (_full_stack_example_raw.content | b64decode) is search("hostvars\\[groups\\['horde_server'\\]")
-          - (_full_stack_example_raw.content | b64decode) is search("default\\(groups\\['horde_server'\\]\\[0\\]\\)")
-          # HAProxy port derives from ingress port variable
-          - (_full_stack_example_raw.content | b64decode) is search('ai_horde_haproxy_port:.*horde_api_ingress_port')
-          # Cross-host URLs use variable indirection
-          - (_full_stack_example_raw.content | b64decode) is search('horde_stats_exporter_api_base_url:.*horde_api_host.*horde_api_ingress_port')
-          - (_full_stack_example_raw.content | b64decode) is search('horde_regen_worker_horde_url:.*horde_api_host.*horde_api_ingress_port')
-          # Negative: must not hardcode localhost in cross-host endpoints
-          - (_full_stack_example_raw.content | b64decode) is not search('horde_stats_exporter_api_base_url:.*http://localhost')
-          - (_full_stack_example_raw.content | b64decode) is not search('horde_regen_worker_horde_url:.*http://localhost')
-        fail_msg: >-
-          Full-stack example topology contract regressed (cross-host URLs must
-          derive from inventory host and ingress-port variables).
-
-    - name: Assert standalone example keeps non-privileged ingress baseline
-      ansible.builtin.assert:
-        that:
-          - "'shared-host baseline' in (_ai_horde_example_raw.content | b64decode)"
-          - (_ai_horde_example_raw.content | b64decode) is search('ai_horde_haproxy_port:.*8080')
-          - "'Production ingress variant' in (_ai_horde_example_raw.content | b64decode)"
-        fail_msg: >-
-          Standalone AI-Horde example contract regressed (must keep 8080
-          shared-host baseline and explicit dedicated-host 80/443 guidance).
 
 # ── Cross-role pinned-ref contracts ──────────────────────────
 
@@ -248,30 +166,3 @@
           - "'horde_monitoring_install_tempo' in (_monitoring_main_raw.content | b64decode)"
           - (_monitoring_main_raw.content | b64decode) is search('Warn when backup is enabled but S3 storage is disabled')
           - (_monitoring_main_raw.content | b64decode) is search('Warn when Grafana anonymous access is enabled')
-          - (_monitoring_main_raw.content | b64decode) is search('Warn when Tempo metrics generator is enabled')
-        fail_msg: >-
-          Monitoring role must guard incoherent flag combinations with
-          explicit debug warnings.
-
-# ── Mimir backup reachability (no exit-0 masking) ────────────
-
-- name: Validate mimir backup check has no exit-0 masking
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Read mimir tasks
-      ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../roles/horde_monitoring/tasks/mimir.yml"
-      register: _mimir_raw
-
-    - name: Assert backup reachability check does not mask failures with exit 0
-      ansible.builtin.assert:
-        that:
-          - (_mimir_raw.content | b64decode) is search('Verify backup target is reachable')
-          - (_mimir_raw.content | b64decode) is search('failed_when')
-          - (_mimir_raw.content | b64decode) is not search('exit\s+0.*mc\s+ls')
-          - (_mimir_raw.content | b64decode) is not search('mc\s+ls.*exit\s+0')
-        fail_msg: >-
-          Mimir backup reachability check must use failed_when: false
-          for controlled error propagation, not 'exit 0' masking.

@@ -1,20 +1,28 @@
 # {{ ansible_managed }}
 services:
   aihorde:
-    build:
-      context: {{ ai_horde_base_dir }}/src
-      dockerfile: Dockerfile
-    image: ai-horde:{{ ai_horde_repo_version }}
-    container_name: aihorde
+    image: {{ ai_horde_image }}
     restart: unless-stopped
+    command:
+      - python
+      - server.py
+      - "{{ ai_horde_verbosity }}"
+      - "--horde"
+      - "{{ ai_horde_horde_type }}"
+      - "--waitress_threads"
+      - "{{ ai_horde_waitress_threads }}"
+      - "--waitress_connection_limit"
+      - "{{ ai_horde_waitress_connection_limit }}"
     labels:
       horde.logs: "true"
       horde.app: "ai-horde"
       horde.component: "backend"
     ports:
-      - "{{ ai_horde_listen }}:{{ ai_horde_port }}:7001"
+      - "{{ ai_horde_listen }}:{{ ai_horde_port }}-{{ ai_horde_port + (ai_horde_replicas | default(1) | int) - 1 }}:7001"
     env_file:
       - {{ ai_horde_base_dir }}/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - aihorde_network
     depends_on:
@@ -30,14 +38,16 @@ services:
       start_period: 60s
     logging:
       driver: {{ ai_horde_log_driver }}
+{% if ai_horde_log_driver == 'journald' %}
       options:
-        max-size: "{{ ai_horde_log_max_size }}"
-        max-file: "{{ ai_horde_log_max_file }}"
+        tag: "ai-horde"
+{% endif %}
 
   postgres:
     image: {{ ai_horde_postgres_image }}
     container_name: aihorde-postgres
     restart: always
+    command: ["postgres", "-c", "cron.database_name={{ ai_horde_postgres_db }}"]
     labels:
       horde.logs: "true"
       horde.app: "ai-horde"
@@ -58,9 +68,10 @@ services:
       - aihorde_network
     logging:
       driver: {{ ai_horde_log_driver }}
+{% if ai_horde_log_driver == 'journald' %}
       options:
-        max-size: "{{ ai_horde_log_max_size }}"
-        max-file: "{{ ai_horde_log_max_file }}"
+        tag: "ai-horde-postgres"
+{% endif %}
 
   redis:
     image: {{ ai_horde_redis_image }}
@@ -79,9 +90,10 @@ services:
       - aihorde_network
     logging:
       driver: {{ ai_horde_log_driver }}
+{% if ai_horde_log_driver == 'journald' %}
       options:
-        max-size: "{{ ai_horde_log_max_size }}"
-        max-file: "{{ ai_horde_log_max_file }}"
+        tag: "ai-horde-redis"
+{% endif %}
 
 networks:
   aihorde_network:

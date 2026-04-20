@@ -15,6 +15,7 @@
   vars:
     # AI-Horde settings
     ai_horde_start_services: false
+    ai_horde_log_driver: "local"
     ai_horde_base_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde"
     ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde/data"
     ai_horde_postgres_password: "localdev"

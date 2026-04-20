@@ -34,6 +34,7 @@ WITH_MONITORING=false
 WITH_WORKER=false
 WITH_ARTBOT=false
 USE_LATEST_REFS=false
+INSTANCES=3
 
 # Pinned refs for reproducible local deploys.
 # Use --latest (or set USE_LATEST_REFS=true in env) to follow branch heads.
@@ -44,8 +45,8 @@ else
   AI_HORDE_REPO="$AI_HORDE_REPO"
 fi
 
-AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
-FRONTPAGE_REF_DEFAULT="a56aec53f46470ca3796e1a7eabbe029e32563d3"
+AI_HORDE_REF_DEFAULT="f40ae696acd0f23f6484db7f3d2408884185e960"
+FRONTPAGE_REF_DEFAULT="17e5052ad5d7da01037c3c8e8770e1471c4b481a"
 ARTBOT_REF_DEFAULT="main"
 
 if [ -z "${AI_HORDE_REF+x}" ]; then
@@ -133,10 +134,16 @@ check_fullstack_prerequisites() {
   check_prerequisites git ss
 
   # Port conflict detection
-  local core_ports=(80 7001 8006 8404)
+  local core_ports=(80 8006 8404)
   for port in "${core_ports[@]}"; do
     if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
       err "Port $port is already in use."
+      exit 1
+    fi
+  done
+  for port in $(seq 7001 $((7001 + INSTANCES - 1))); do
+    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+      err "Port $port is already in use (AI-Horde instance)."
       exit 1
     fi
   done
@@ -183,6 +190,7 @@ render_configs() {
   "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
+      -e "ai_horde_replicas=$INSTANCES" \
       --become \
       -v
   log "Backend + frontpage config rendering complete."
@@ -473,7 +481,7 @@ cmd_up() {
   log "Building AI-Horde Docker image ..."
   dc_backend build
   log "Starting AI-Horde backend ..."
-  dc_backend up -d
+  dc_backend up -d --scale aihorde="$INSTANCES"
   wait_for_url "http://127.0.0.1:7001/api/v2/status/heartbeat" "AI-Horde" 300 || {
     err "AI-Horde did not start. Dumping logs:"
     dc_backend logs --tail=50
@@ -645,7 +653,12 @@ print_banner() {
   log "═══════════════════════════════════════════════════════════"
   info "  Frontpage:     http://localhost/"
   info "  API:           http://localhost/api/v2/status/heartbeat"
-  info "  API (direct):  http://localhost:7001/api/v2/status/heartbeat"
+  if [ "$INSTANCES" -gt 1 ]; then
+    local port_end=$(( 7001 + INSTANCES - 1 ))
+    info "  API (direct):  http://localhost:7001–${port_end}  (${INSTANCES} instances)"
+  else
+    info "  API (direct):  http://localhost:7001/api/v2/status/heartbeat"
+  fi
   info "  HAProxy stats: http://localhost:8404/stats"
   if [ "$WITH_MONITORING" = true ]; then
     info "  Grafana:       http://localhost:3000/"
@@ -675,6 +688,7 @@ main() {
       --with-artbot)     WITH_ARTBOT=true ;;
       --latest)          USE_LATEST_REFS=true ;;
       --all)             WITH_MONITORING=true; WITH_WORKER=true; WITH_ARTBOT=true ;;
+      --instances=*)     INSTANCES="${arg#--instances=}" ;;
       -*)                warn "Unknown flag: $arg" ;;
       *)                 positional+=("$arg") ;;
     esac
@@ -694,7 +708,7 @@ main() {
       cmd_logs "${positional[0]:-}"
       ;;
     *)
-      echo "Usage: $0 {up|down|status|logs} [--with-monitoring] [--with-worker] [--with-artbot] [--latest] [--all]"
+      echo "Usage: $0 {up|down|status|logs} [--with-monitoring] [--with-worker] [--with-artbot] [--latest] [--all] [--instances=N]"
       exit 1
       ;;
   esac

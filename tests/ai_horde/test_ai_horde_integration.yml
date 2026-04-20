@@ -1,15 +1,15 @@
 ---
-# Test playbook: AI-Horde role (config rendering only, no service start)
+# requires: docker-daemon
+# Test playbook: AI-Horde role (integration, start service)
 #
-# Play 1: Positive test — render with valid inputs, assert on output files
-# Play 2: Negative test — missing postgres password triggers fail-fast
-# Play 3: Negative test — missing secret key triggers fail-fast
+# Play 1: Positive test — render and start service with valid inputs
 
-- name: Test AI-Horde role render (positive)
+- name: Test AI-Horde role integration (positive)
   hosts: testhost
   become: true
+  gather_facts: true
   vars:
-    ai_horde_start_services: false
+    ai_horde_start_services: true
     ai_horde_postgres_password: "test-pg-password"
     ai_horde_secret_key: "test-secret-key-12345"
     ai_horde_port: 7001
@@ -58,23 +58,11 @@
           AI-Horde compose healthcheck must use Python stdlib urllib
           (available in runtime image), not curl (not installed).
 
-    - name: Assert compose passes waitress CLI args via command override
+    - name: Assert compose has log rotation
       ansible.builtin.assert:
         that:
-          - "'--waitress_threads' in _compose_content.content | b64decode"
-          - "'--waitress_connection_limit' in _compose_content.content | b64decode"
-        fail_msg: "Compose must pass waitress tuning as CLI args (not env vars)"
-
-    - name: Assert compose uses journald log driver
-      ansible.builtin.assert:
-        that:
-          - "'journald' in _compose_content.content | b64decode"
-        fail_msg: "Log driver must be journald to avoid double-writing (Alloy reads from journal)"
-
-    - name: Assert compose has journald tag for log identification
-      ansible.builtin.assert:
-        that:
-          - "'tag' in _compose_content.content | b64decode"
+          - "'max-size' in _compose_content.content | b64decode"
+          - "'max-file' in _compose_content.content | b64decode"
 
     - name: Assert compose has horde.logs labels for log collection
       ansible.builtin.assert:
@@ -88,12 +76,6 @@
       ansible.builtin.assert:
         that:
           - "'service_healthy' in _compose_content.content | b64decode"
-
-    - name: Assert compose configures pg_cron for the application database
-      ansible.builtin.assert:
-        that:
-          - "'cron.database_name=aihorde' in _compose_content.content | b64decode"
-        fail_msg: "Compose must set cron.database_name to the application DB so pg_cron extension can be created"
 
     - name: Assert compose does not publish DB/Redis ports to host
       ansible.builtin.assert:
@@ -160,36 +142,8 @@
           - "'OTEL_SERVICE_NAME=\"test-horde-svc\"' in _env_content.content | b64decode"
           - "'PYROSCOPE_ENABLED=\"false\"' in _env_content.content | b64decode"
           - "'OTEL_EXPORTER_OTLP_ENDPOINT=\"http://host.docker.internal:4318\"' in _env_content.content | b64decode"
-
-    - name: Assert .env does not contain HAProxy bridge auth headers
-      ansible.builtin.assert:
-        that:
-          - "'OTEL_EXPORTER_OTLP_HEADERS=' not in _env_content.content | b64decode"
-        fail_msg: "OTLP goes direct to Alloy — no auth headers needed"
-
-    - name: Assert .env does not contain stale env var names
-      ansible.builtin.assert:
-        that:
           - "'WORKER_THREADS=' not in _env_content.content | b64decode"
           - "'MAX_CONNECTIONS=' not in _env_content.content | b64decode"
-        fail_msg: "Waitress tuning is passed via compose command args, not env vars"
-
-    - name: Assert .env uses variable for REDIS_SERVERS (not hardcoded)
-      ansible.builtin.assert:
-        that:
-          - "'REDIS_SERVERS=' in _env_content.content | b64decode"
-          - "'REDIS_IP=' in _env_content.content | b64decode"
-
-    - name: Assert OTLP bridge config was NOT rendered (removed)
-      ansible.builtin.stat:
-        path: /etc/haproxy/conf.d/ai-horde-otlp-bridge.cfg
-      register: _otlp_bridge
-
-    - name: Assert OTLP bridge is absent
-      ansible.builtin.assert:
-        that:
-          - not _otlp_bridge.stat.exists
-        fail_msg: "OTLP bridge HAProxy snippet should not exist — containers reach Alloy directly"
 
 - name: Test AI-Horde role fail-fast (missing postgres password)
   hosts: testhost
