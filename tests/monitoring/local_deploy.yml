@@ -1,6 +1,6 @@
 ---
 # Local deployment playbook — renders the full monitoring stack config
-# into local-deploy/ for manual validation via Docker Compose.
+# into local-deploy/runtime/ for manual validation via Docker Compose.
 #
 # This playbook is driven by tests/monitoring/local_deploy.sh — do not run directly.
 # It applies the horde_monitoring role against localhost with
@@ -19,7 +19,7 @@
   gather_facts: true
 
   vars:
-    _local_root: "{{ playbook_dir }}/../../local-deploy"
+    _local_root: "{{ playbook_dir }}/../../local-deploy/runtime"
     _local_secret_dir: "{{ _local_root }}/.secrets/monitoring"
     _local_garage_access_key_suffix_file: "{{ _local_secret_dir }}/garage-access-key-suffix.hex"
     _local_garage_secret_key_file: "{{ _local_secret_dir }}/garage-secret-key.hex"
@@ -59,21 +59,22 @@
     # Tenants
     horde_monitoring_application_tenant_id: "ai-horde-app"
     horde_monitoring_infrastructure_tenant_id: "infrastructure"
+    horde_monitoring_telemetry_tenant_id: "ai-horde-telemetry"
     horde_monitoring_public_tenant_id: "ai-horde-public"
 
     # Loki / Tempo local settings
     horde_monitoring_loki_retention_period: "168h"  # 7 days for local dev
     horde_monitoring_tempo_trace_retention: "24h"  # 1 day for local dev
     horde_monitoring_tempo_metrics_generator_enabled: true
-    horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
+    horde_monitoring_tempo_metrics_generator_tenant_id: "ai-horde-telemetry"
 
     # Pyroscope local settings
     horde_monitoring_pyroscope_retention_period: "0s"
     horde_monitoring_pyroscope_self_profiling: true
 
-    # Alertmanager — runs as Docker container in local-deploy
+    # Alertmanager — runs as Docker container in local runtime
     horde_monitoring_alertmanager_url: "http://alertmanager:9093"
-    # Redirect alerting rules into local-deploy so they can be mounted
+    # Redirect alerting rules into local runtime so they can be mounted
     horde_monitoring_alerting_rules_dir: "{{ _local_root }}/prometheus/rules"
 
     # Ports for services that the shell script manages
@@ -137,7 +138,7 @@
     - role: horde_monitoring
 
   post_tasks:
-    - name: Create local-deploy subdirectories
+    - name: Create local runtime subdirectories
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory

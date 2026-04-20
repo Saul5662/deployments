@@ -1,6 +1,6 @@
 ---
 # Local deployment playbook — renders AI-Horde stack configs
-# into local-deploy/ai-horde/ for manual validation via Docker Compose.
+# into local-deploy/runtime/ai-horde/ for manual validation via Docker Compose.
 #
 # Driven by tests/ai_horde/local_deploy.sh — do not run directly.
 # Applies the ai_horde role against localhost with
@@ -14,8 +14,8 @@
 
   vars:
     ai_horde_start_services: false
-    ai_horde_base_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde"
-    ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde/data"
+    ai_horde_base_dir: "{{ playbook_dir }}/../../local-deploy/runtime/ai-horde"
+    ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/runtime/ai-horde/data"
     ai_horde_postgres_password: "localdev"
     ai_horde_secret_key: "localdev-secret-key-not-for-production"
     ai_horde_postgres_user: "aihorde"
@@ -24,6 +24,8 @@
     ai_horde_admins: ["test_user#1"]
     ai_horde_repo: "https://github.com/Haidra-Org/AI-Horde.git"
     ai_horde_repo_version: "main"
+    ai_horde_pyroscope_enabled: "true"
+    ai_horde_pyroscope_tenant_id: "ai-horde-app"
     ai_horde_env_overrides:
       KUDOS_TRUST_THRESHOLD: "100"
 

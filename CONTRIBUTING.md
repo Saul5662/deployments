@@ -54,7 +54,8 @@ tests.
 | `roles/` | Ansible roles — the source of truth for deployment logic |
 | `examples/` | Example playbooks and inventory templates |
 | `tests/` | Render tests, integration tests, and local deploy scripts |
-| `local-deploy/` | Generated configs and Docker Compose files for local runs |
+| `local-deploy/static/` | Committed local deploy overlays and HAProxy config |
+| `local-deploy/runtime/` | Generated configs, source checkouts, and runtime data (safe to delete) |
 | `docs/` | Operational guides (monitoring, backup, migration, upgrades) |
 
 See [`README.md`](README.md) for the full role map and documentation index.
