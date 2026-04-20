@@ -507,11 +507,31 @@ cmd_up() {
   if [ "$WITH_MONITORING" = true ]; then
     log "═══ Tier 3: Monitoring Stack ═══"
     cleanup_monitoring_container_name_conflicts || return 1
+
+    # Load monitoring env for Garage/Grafana bootstrap variables.
+    local mon_env="$LOCAL_ROOT/local-deploy.env"
+    if [ -f "$mon_env" ]; then
+      load_env "$mon_env"
+    else
+      warn "Monitoring env file not found at $mon_env — bootstrap steps will be skipped."
+    fi
+
+    # Phase 1: strip Org-2 provisioning before first Grafana boot.
+    grafana_strip_org2_provisioning "$LOCAL_ROOT"
+
     log "Starting monitoring stack ..."
     dc_monitoring up -d
-    wait_for_url "http://127.0.0.1:3000/api/health" "Grafana" 200 || {
+
+    # Bootstrap embedded Garage (import key, create buckets).
+    bootstrap_embedded_garage
+
+    wait_for_url "http://127.0.0.1:${MIMIR_PORT:-9009}/ready" "Mimir" 60 || true
+    wait_for_url "http://127.0.0.1:${GRAFANA_PORT:-3000}/api/health" "Grafana" 200 || {
       warn "Grafana did not become healthy."
     }
+
+    # Phase 2: create Org 2, restore full provisioning, restart Grafana.
+    grafana_create_org2_and_restore "$LOCAL_ROOT" dc_monitoring
     echo ""
   fi
 

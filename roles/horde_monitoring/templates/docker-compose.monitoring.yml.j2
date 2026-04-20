@@ -202,8 +202,7 @@ services:
       - tempo
 {% endif %}
 {% if horde_monitoring_install_pyroscope | bool %}
-      pyroscope:
-        condition: service_healthy
+      - pyroscope
 {% endif %}
 {% endif %}
 
