@@ -16,7 +16,8 @@ find the right folder before making changes.
 | `docs/monitoring/` | Monitoring operations runbooks (backup, credentials, migration, upgrades) | Operate or troubleshoot observability stack behavior |
 | `docs/plans/` | Design and implementation plans, audits, and follow-ups | Understand why changes were made and what remains |
 | `tests/` | Render, integration, and full-stack test harness | Validate role output and cross-role behavior |
-| `local-deploy/` | Local runtime layout for rendered configs, compose overlays, and local stack runs | Run integration/full-stack local deployments and inspect generated assets |
+| `local-deploy/static/` | Committed overlays and static local infra config | Reference/maintain tracked local deploy assets used by scripts and tests |
+| `local-deploy/runtime/` | Generated configs, checkouts, and runtime data for local stack runs | Run integration/full-stack local deployments and inspect generated assets |
 | `meta/` | Collection metadata and runtime metadata | Check collection-level metadata and compatibility |
 | `.github/` | CI workflows and repository instructions | Update automation and contributor guidance |
 
@@ -77,10 +78,10 @@ find the right folder before making changes.
 - Serves as the local deployment workspace used by integration and full-stack
   scripts (`tests/integration/local_deploy.sh`,
   `tests/full_stack/local_deploy.sh`).
-- Holds rendered configuration outputs and Docker Compose topology files for
-  local runs.
-- May contain local checkouts under `*/src` and runtime artifacts during local
-  testing.
+- `local-deploy/static/` contains committed overlays and HAProxy config that
+  are version-controlled and used by scripts/tests.
+- `local-deploy/runtime/` contains rendered outputs, local source checkouts,
+  and runtime data. It is safe to delete to reset local state.
 - Treat role templates and tasks under `roles/` as authoritative for deployment
   logic; treat `local-deploy/` as the operational surface for local execution.
 
@@ -92,7 +93,7 @@ find the right folder before making changes.
 | Find variable defaults | `roles/<role_name>/defaults/main.yml` |
 | See usage examples | `examples/` |
 | Run or update tests | `tests/` |
-| Run local stack orchestration | `tests/integration/` or `tests/full_stack/` and `local-deploy/` |
+| Run local stack orchestration | `tests/integration/` or `tests/full_stack/` and `local-deploy/runtime/` |
 | Understand monitoring operations | `docs/monitoring/` |
 | Review roadmap and implementation rationale | `docs/plans/` |
 

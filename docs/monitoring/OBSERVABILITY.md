@@ -38,7 +38,8 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
              │   + optional Loki / Tempo / Pyroscope              │
              │                                                    │
              │ Tenant model:                                      │
-             │   ai-horde-app, infrastructure, ai-horde-public    │
+             │   ai-horde-app, infrastructure,                     │
+             │   ai-horde-telemetry, ai-horde-public               │
              └────────────────────────────────────────────────────┘
 ```
 
@@ -99,7 +100,7 @@ horde_monitoring_install_pyroscope: true
 | `horde_monitoring_tempo_otlp_http_port` | `4318` |
 | `horde_monitoring_tempo_trace_retention` | `168h` |
 | `horde_monitoring_tempo_metrics_generator_enabled` | `true` |
-| `horde_monitoring_tempo_metrics_generator_tenant_id` | `infrastructure` |
+| `horde_monitoring_tempo_metrics_generator_tenant_id` | `ai-horde-telemetry` |
 | `horde_monitoring_tempo_traces_bucket` | `tempo-traces` |
 
 Tempo metrics-generator output is remote-written to Mimir and powers Grafana
@@ -116,6 +117,7 @@ service-map/span-metrics views.
 | `horde_monitoring_pyroscope_retention_period` | `0s` |
 | `horde_monitoring_pyroscope_application_retention` | `0` |
 | `horde_monitoring_pyroscope_infrastructure_retention` | `30d` |
+| `horde_monitoring_pyroscope_telemetry_retention` | `3d` |
 | `horde_monitoring_pyroscope_public_retention` | `90d` |
 
 Pyroscope per-tenant retention is rendered into runtime overrides, matching
@@ -129,12 +131,14 @@ Default tenants:
     - For core AI-Horde application metrics, currently indefinately retained
 - `horde_monitoring_infrastructure_tenant_id: infrastructure`
     - For host and infrastructure metrics, retained for 30 days by default
+- `horde_monitoring_telemetry_tenant_id: ai-horde-telemetry`
+    - High-volume derived metrics (Tempo span metrics, OTLP metrics), retained for 3 days
 - `horde_monitoring_public_tenant_id: ai-horde-public`
     - Downsampled and restricted metrics suitable for public dashboards.
 
 Grafana datasource provisioning is automatic:
 
-- Org 1: Mimir app + infrastructure datasources
+- Org 1: Mimir app, infrastructure, and telemetry datasources
     - Optional Org 1 datasources when enabled: Loki, Tempo, Pyroscope
 - Org 2 (public, anonymous) datasource set when
   `horde_monitoring_grafana_anonymous_enabled: true`
@@ -144,7 +148,7 @@ Grafana datasource provisioning is automatic:
 Cross-signal features auto-configure when components are enabled:
 
 - Loki derived field links (`trace_id`/`traceID`/`traceId`) to Tempo
-- Tempo trace-to-metrics service map to Mimir infrastructure datasource
+- Tempo trace-to-metrics service map to Mimir telemetry datasource (`ai-horde-telemetry`)
 
 ## Alerting Coverage
 
@@ -220,15 +224,13 @@ Role validation fails fast if enabled pipelines do not have endpoints, or if
 
 ## End-To-End Data Flows
 
-- Exporter metrics: `horde-exporter` -> Prometheus scrape -> Mimir
-- Host metrics: Alloy `prometheus.exporter.unix` -> Mimir remote_write (preferred), or node_exporter -> Prometheus scrape (legacy)
-- Logs: Alloy journal/file/docker sources -> Loki push API
-- Traces: app OTLP -> Alloy OTLP receiver -> Tempo OTLP HTTP exporter
-- Trace-derived metrics: Tempo metrics generator -> Mimir remote_write
-- Profiles: app profiler SDK/agent -> Pyroscope HTTP ingest endpoint
-
-Note: profile ingestion is not handled by `horde_alloy` today; applications
-push profiles directly to Pyroscope.
+- Exporter metrics: `horde-exporter` → Prometheus scrape → Mimir (`ai-horde-app` tenant)
+- Host metrics: Alloy `prometheus.exporter.unix` → Mimir remote_write (`infrastructure` tenant, preferred), or node_exporter → Prometheus scrape (legacy)
+- Logs: Alloy journal/file/docker sources → Loki push API (`infrastructure` tenant)
+- Traces: app OTLP → Alloy OTLP receiver → Tempo OTLP HTTP exporter
+- Trace-derived metrics: Tempo metrics generator → Mimir remote_write (`ai-horde-telemetry` tenant, 3d retention)
+- OTLP metrics from apps: Alloy `otelcol.exporter.prometheus` → Mimir remote_write (`ai-horde-telemetry` tenant, 3d retention)
+- Profiles: app profiler SDK/agent → Pyroscope HTTP ingest endpoint (`ai-horde-app` tenant)
 
 ## Retention Defaults
 
@@ -236,12 +238,14 @@ push profiles directly to Pyroscope.
 | --- | --- | --- | --- |
 | Mimir application tenant | Mimir | infinite (`0`) | `horde_monitoring_application_retention` |
 | Mimir infrastructure tenant | Mimir | `30d` | `horde_monitoring_infrastructure_retention` |
+| Mimir telemetry tenant | Mimir | `3d` | `horde_monitoring_telemetry_retention` |
 | Mimir public tenant | Mimir | `90d` | `horde_monitoring_public_retention` |
 | Logs | Loki | `2160h` (90 days) | `horde_monitoring_loki_retention_period` |
 | Traces | Tempo | `168h` (7 days) | `horde_monitoring_tempo_trace_retention` |
 | Profiles (global default) | Pyroscope | `0s` (infinite) | `horde_monitoring_pyroscope_retention_period` |
 | Profiles (application tenant) | Pyroscope | `0` | `horde_monitoring_pyroscope_application_retention` |
 | Profiles (infrastructure tenant) | Pyroscope | `30d` | `horde_monitoring_pyroscope_infrastructure_retention` |
+| Profiles (telemetry tenant) | Pyroscope | `3d` | `horde_monitoring_pyroscope_telemetry_retention` |
 | Profiles (public tenant) | Pyroscope | `90d` | `horde_monitoring_pyroscope_public_retention` |
 | Prometheus local TSDB | Prometheus | `48h` in example playbook | `prometheus_storage_retention` |
 

@@ -33,6 +33,8 @@
     horde_monitoring_application_retention: "0"
     horde_monitoring_infrastructure_tenant_id: "infrastructure"
     horde_monitoring_infrastructure_retention: "30d"
+    horde_monitoring_telemetry_tenant_id: "ai-horde-telemetry"
+    horde_monitoring_telemetry_retention: "3d"
     horde_monitoring_public_tenant_id: "ai-horde-public"
     horde_monitoring_public_retention: "90d"
     horde_monitoring_install_host_disk_alerts: true
@@ -49,7 +51,7 @@
     horde_monitoring_install_tempo: true
     horde_monitoring_tempo_trace_retention: "168h"  # 7 days
     horde_monitoring_tempo_metrics_generator_enabled: true
-    horde_monitoring_tempo_metrics_generator_tenant_id: "infrastructure"
+    horde_monitoring_tempo_metrics_generator_tenant_id: "ai-horde-telemetry"
 
     # -- Pyroscope (continuous profiling — opt-in) --
     horde_monitoring_install_pyroscope: true
@@ -352,4 +354,5 @@
           - "Pyroscope: http://127.0.0.1:4040 (local only)"
           - "Application tenant: {{ horde_monitoring_application_tenant_id }} (retention {{ horde_monitoring_application_retention }})"
           - "Infrastructure tenant: {{ horde_monitoring_infrastructure_tenant_id }} (retention {{ horde_monitoring_infrastructure_retention }})"
+          - "Telemetry tenant: {{ horde_monitoring_telemetry_tenant_id }} (retention {{ horde_monitoring_telemetry_retention }})"
           - "Stats Exporter: http://localhost:9150/metrics"

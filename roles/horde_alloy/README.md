@@ -129,9 +129,10 @@ complete example playbook.
 | `horde_alloy_otlp_listen_address`  | `127.0.0.1` | OTLP receiver bind address                       |
 | `horde_alloy_otlp_grpc_port`       | `4317`      | OTLP gRPC port                                   |
 | `horde_alloy_otlp_http_port`       | `4318`      | OTLP HTTP port                                   |
-| `horde_alloy_trace_batch_timeout`  | `5s`        | Batch flush interval                             |
-| `horde_alloy_trace_batch_size`     | `8192`      | Max batch size (spans)                           |
-| `horde_alloy_forward_otlp_metrics` | `true`      | Forward OTLP metrics to Mimir                    |
+| `horde_alloy_trace_batch_timeout`  | `5s`                   | Batch flush interval                                                                                                     |
+| `horde_alloy_trace_batch_size`     | `8192`                 | Max batch size (spans)                                                                                                   |
+| `horde_alloy_forward_otlp_metrics` | `true`                 | Forward OTLP metrics to Mimir                                                                                            |
+| `horde_alloy_otlp_metrics_tenant_id` | `ai-horde-telemetry` | Mimir tenant for OTLP-sourced metrics; defaults to the dedicated telemetry tenant with short retention (3d) to contain high-churn derived metric cardinality |
 
 ## Validation
 

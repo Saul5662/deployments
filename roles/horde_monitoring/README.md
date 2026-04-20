@@ -44,9 +44,11 @@ binds to `127.0.0.1` by default — use HAProxy or another reverse proxy for
 external access.
 
 Mimir operates in monolithic mode. Prometheus splits `remote_write` into
-separate Mimir tenants (e.g., `ai-horde-app` for exporter metrics,
-`infrastructure` for host metrics) so each tenant can have independent
-retention policies.
+separate Mimir tenants (`ai-horde-app` for exporter metrics, `infrastructure`
+for host metrics). Tempo-generated span metrics and OTLP-sourced metrics
+from instrumented apps flow to a dedicated `ai-horde-telemetry` tenant with
+short retention, keeping high-churn derived data from inflating
+long-retention tenants.
 
 ## Requirements
 
@@ -149,14 +151,30 @@ Garage and managed external S3 a variable-only change.
 
 ### Multi-Tenant Retention
 
-| Variable                              | Default           | Description                          |
-| ------------------------------------- | ----------------- | ------------------------------------ |
-| `horde_monitoring_application_tenant_id`    | `ai-horde-app`    | Tenant for AI Horde exporter metrics |
-| `horde_monitoring_application_retention`    | `0`               | Retention (`0` = infinite)           |
-| `horde_monitoring_infrastructure_tenant_id` | `infrastructure`  | Tenant for host/infra metrics        |
-| `horde_monitoring_infrastructure_retention` | `30d`             | Retention period                     |
-| `horde_monitoring_public_tenant_id`         | `ai-horde-public` | Read-only public tenant              |
-| `horde_monitoring_public_retention`         | `90d`             | Retention period                     |
+| Variable                                  | Default              | Description                                      |
+| ----------------------------------------- | -------------------- | ------------------------------------------------ |
+| `horde_monitoring_application_tenant_id`  | `ai-horde-app`       | Tenant for AI Horde exporter metrics             |
+| `horde_monitoring_application_retention`  | `0`                  | Retention (`0` = infinite)                       |
+| `horde_monitoring_infrastructure_tenant_id` | `infrastructure`   | Tenant for host/infra metrics                    |
+| `horde_monitoring_infrastructure_retention` | `30d`              | Retention period                                 |
+| `horde_monitoring_telemetry_tenant_id`    | `ai-horde-telemetry` | Tenant for Tempo span metrics + OTLP metrics     |
+| `horde_monitoring_telemetry_retention`    | `3d`                 | Retention period (short — high-churn data)       |
+| `horde_monitoring_public_tenant_id`       | `ai-horde-public`    | Read-only public tenant                          |
+| `horde_monitoring_public_retention`       | `90d`                | Retention period                                 |
+
+### Mimir Performance Tuning
+
+| Variable                                                         | Default   | Description                                                                                            |
+| ---------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| `horde_monitoring_mimir_max_global_series_per_user`              | `1000000` | Global per-tenant series limit ceiling                                                                 |
+| `horde_monitoring_mimir_ingestion_rate`                          | `10000`   | Samples/sec ingestion rate limit per tenant                                                            |
+| `horde_monitoring_mimir_ingestion_burst_size`                    | `200000`  | Burst allowance above the ingestion rate                                                               |
+| `horde_monitoring_mimir_app_tenant_max_series`                   | `0`       | Series limit override for the application tenant (`0` inherits global)                                 |
+| `horde_monitoring_mimir_infra_tenant_max_series`                 | `300000`  | Series limit override for the infrastructure tenant                                                    |
+| `horde_monitoring_mimir_telemetry_tenant_max_series`             | `500000`  | Series limit override for the telemetry tenant                                                         |
+| `horde_monitoring_mimir_public_tenant_max_series`                | `200000`  | Series limit override for the public tenant                                                            |
+| `horde_monitoring_mimir_early_head_compaction_min_in_memory_series` | `200000` | Trigger TSDB head compaction when in-memory series reaches this threshold (0 = disabled, experimental) |
+| `horde_monitoring_mimir_memory_limit`                            | `3g`      | Container memory limit                                                                                 |
 
 ### Grafana
 

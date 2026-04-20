@@ -62,6 +62,10 @@ blocks_storage:
 {% if horde_monitoring_mimir_blocks_retention %}
     retention_period: {{ horde_monitoring_mimir_blocks_retention }}
 {% endif %}
+{% if horde_monitoring_mimir_early_head_compaction_min_in_memory_series | default(0) | int > 0 %}
+    early_head_compaction_min_in_memory_series: {{ horde_monitoring_mimir_early_head_compaction_min_in_memory_series }}
+    early_head_compaction_min_estimated_series_reduction_percentage: {{ horde_monitoring_mimir_early_head_compaction_min_estimated_series_reduction_percentage | default(15) }}
+{% endif %}
 
 limits:
 {% if horde_monitoring_mimir_blocks_retention %}
