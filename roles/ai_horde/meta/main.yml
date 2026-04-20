@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: ai_horde
   author: Haidra-Org
-  description: Deploy AI-Horde backend via Docker Compose or native systemd instances
+  description: Deploy AI-Horde backend via Docker Compose
   license: AGPL-3.0-or-later
   min_ansible_version: "2.14"
   platforms:

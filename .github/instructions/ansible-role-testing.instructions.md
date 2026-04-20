@@ -19,9 +19,7 @@ applyTo: "tests/**/*.yml,tests/**/*.sh,roles/**/tasks/*.yml,roles/**/defaults/*.
 # Existing Test Playbooks And Purpose
 
 - `tests/ai_horde/test_ai_horde_render.yml`: Validates Docker mode rendering, security-sensitive compose/env contracts, and fail-fast password/key validation.
-- `tests/ai_horde/test_ai_horde_docker_build_toggle.yml`: Canonical owner of the build-on-start toggle contract (both enabled and disabled cases).
-- `tests/ai_horde/test_ai_horde_native_render.yml`: Validates native systemd template rendering, multi-instance output, and expected file permissions.
-- `tests/ai_horde/test_ai_horde_native_logic.yml`: Validates native HAProxy conf.d architecture and instance management logic (stale unit handling, ownership normalization gates).
+- `tests/ai_horde/test_ai_horde_integration.yml`: Validates Docker-mode rendering with service start, heartbeat checks, and end-to-end contract (requires docker-daemon).
 - `tests/ai_horde/test_ai_horde_policy_contracts.yml`: Enforces reproducibility and policy contracts (pinned refs/digests, installer verification, readiness semantics).
 - `tests/artbot/test_artbot_render.yml`: Validates Artbot rendering and HAProxy/certbot contract output.
 - `tests/frontpage/test_frontpage_render.yml`: Validates Frontpage Docker-mode render contracts, env keys, healthcheck wiring, ports, and log rotation.
@@ -33,6 +31,7 @@ applyTo: "tests/**/*.yml,tests/**/*.sh,roles/**/tasks/*.yml,roles/**/defaults/*.
 - `tests/monitoring/test_full_stack.yml`: Validates monitoring stack render outputs for full component topology and expected configuration content.
 - `tests/monitoring/test_prometheus_only.yml`: Validates Mimir/Prometheus-focused deployment mode without full Grafana stack assumptions.
 - `tests/monitoring/test_runtime_services.yml`: Validates runtime service health and live metrics push behavior for monitoring components.
+- `tests/monitoring/test_stats_exporter_render.yml`: Validates horde_stats_exporter template rendering for config, systemd service unit, and logrotate.
 - `tests/regen_worker/test_regen_worker_render.yml`: Validates regen worker rendering contracts for bridge data and systemd unit output.
 
 # Related Non-Discovered Harness Files

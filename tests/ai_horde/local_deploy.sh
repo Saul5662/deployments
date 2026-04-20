@@ -24,6 +24,7 @@ export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 USE_LATEST_REF=false
+INSTANCES=3
 AI_HORDE_REPO_DEFAULT="https://github.com/Haidra-Org/AI-Horde.git"
 if [ -z "${AI_HORDE_REPO+x}" ]; then
   AI_HORDE_REPO="$AI_HORDE_REPO_DEFAULT"
@@ -31,7 +32,7 @@ else
   AI_HORDE_REPO="$AI_HORDE_REPO"
 fi
 
-AI_HORDE_REF_DEFAULT="af0a85a78613cdba9863e16bbec0c179a4b2b132"
+AI_HORDE_REF_DEFAULT="f40ae696acd0f23f6484db7f3d2408884185e960"
 if [ -z "${AI_HORDE_REF+x}" ]; then
   AI_HORDE_REF="$AI_HORDE_REF_DEFAULT"
   AI_HORDE_REF_EXPLICIT=false
@@ -52,6 +53,7 @@ render_configs() {
   "$ANSIBLE_PLAYBOOK" \
       -i "localhost," \
       "$SCRIPT_DIR/local_deploy.yml" \
+      -e "ai_horde_replicas=$INSTANCES" \
       --become \
       -v
   log "Config rendering complete."
@@ -85,25 +87,33 @@ compose_up() {
   dc build
 
   log "Starting Docker Compose stack ..."
-  dc up -d
+  dc up -d --scale aihorde="$INSTANCES"
 
-  wait_for_url "http://127.0.0.1:${AI_HORDE_PORT}/api/v2/status/heartbeat" "AI-Horde heartbeat" 120 || true
+  wait_for_url "http://127.0.0.1:8080/api/v2/status/heartbeat" "AI-Horde heartbeat (load balanced)" 120 || true
 }
-
 
 print_banner() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "AI-Horde API      →  http://localhost:${AI_HORDE_PORT}"
-  info "Heartbeat         →  http://localhost:${AI_HORDE_PORT}/api/v2/status/heartbeat"
-  info "Registration      →  http://localhost:${AI_HORDE_PORT}/register"
+  info "AI-Horde API      →  http://localhost:8080"
+  info "Heartbeat         →  http://localhost:8080/api/v2/status/heartbeat"
+  info "Registration      →  http://localhost:8080/register"
   echo ""
   info "Test user setup:"
-  info "  curl -X POST --data-raw 'username=test_user' http://localhost:${AI_HORDE_PORT}/register"
+  info "  curl -X POST --data-raw 'username=test_user' http://localhost:8080/register"
+  echo ""
+  info "Direct Replica Access (Bypass Proxy):"
+  if [ "$INSTANCES" -gt 1 ]; then
+    local port_end=$(( AI_HORDE_PORT + INSTANCES - 1 ))
+    info "  Ports: ${AI_HORDE_PORT}–${port_end}  (${INSTANCES} instances)"
+  else
+    info "  http://localhost:${AI_HORDE_PORT}"
+  fi
   echo ""
   info "Tear down:  $0 down"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
+
 
 
 main() {
@@ -113,6 +123,7 @@ main() {
   for arg in "$@"; do
     case "$arg" in
       --latest) USE_LATEST_REF=true ;;
+      --instances=*) INSTANCES="${arg#--instances=}" ;;
       -*) warn "Unknown flag: $arg" ;;
     esac
   done
@@ -136,7 +147,7 @@ main() {
       compose_logs "$LOCAL_ROOT/docker-compose.yml"
       ;;
     *)
-      echo "Usage: $0 {up|down|status|logs} [--latest]"
+      echo "Usage: $0 {up|down|status|logs} [--latest] [--instances=N]"
       exit 1
       ;;
   esac

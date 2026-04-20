@@ -1,82 +1,13 @@
 ---
 # Handlers for ai_horde role
 
-# ── Shared ───────────────────────────────────────────────────
-- name: Reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
-  when: ai_horde_start_services | bool
-
-# ── Docker mode ──────────────────────────────────────────────
-- name: Rebuild AI-Horde Docker stack
-  ansible.builtin.shell: >
-    docker compose build --pull &&
-    docker compose up -d
-  args:
-    chdir: "{{ ai_horde_base_dir }}"
-  become: true
-  changed_when: true
-  when: ai_horde_start_services | bool
-
+# ── Docker Compose lifecycle ─────────────────────────────────
 - name: Restart AI-Horde Docker stack
-  ansible.builtin.shell: >
-    docker compose up -d
-  args:
-    chdir: "{{ ai_horde_base_dir }}"
-  become: true
-  changed_when: true
-  when: ai_horde_start_services | bool
-
-# ── Native mode ──────────────────────────────────────────────
-- name: Restart AI-Horde native instances
-  ansible.builtin.systemd:
-    name: "ai-horde@{{ item }}"
-    state: restarted
-  become: true
-  loop: "{{ range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) | list }}"
-  throttle: 1
-  when: ai_horde_start_services | bool
-
-- name: Wait for restarted instance health
-  ansible.builtin.uri:
-    url: "http://{{ ai_horde_backend_host }}:{{ item }}/api/v2/status/heartbeat"
-    method: GET
-    status_code: 200
-  register: ai_horde__restart_health
-  until: ai_horde__restart_health.status == 200
-  retries: 20
-  delay: 3
-  become: true
-  loop: "{{ range(ai_horde_port | int, ai_horde_port | int + ai_horde_instance_count | int) | list }}"
-  throttle: 1
-  when: ai_horde_start_services | bool
-
-# ── Optional services ────────────────────────────────────────
-- name: Restart PostgreSQL
-  ansible.builtin.systemd:
-    name: postgresql
-    state: restarted
-  become: true
-  when: ai_horde_start_services | bool
-
-- name: Restart Redis
-  ansible.builtin.systemd:
-    name: redis-server
-    state: restarted
-  become: true
-  when: ai_horde_start_services | bool
-
-- name: Restart HAProxy
-  ansible.builtin.systemd:
-    name: haproxy
-    state: restarted
-  become: true
-  when: ai_horde_start_services | bool
-
-- name: Reload HAProxy
-  ansible.builtin.systemd:
-    name: haproxy
-    state: reloaded
+  community.docker.docker_compose_v2:
+    project_src: "{{ ai_horde_base_dir }}"
+    state: present
+    pull: always
+    build: never
+    scale: "{{ {'aihorde': (ai_horde_replicas | int)} }}"
   become: true
   when: ai_horde_start_services | bool

@@ -1,16 +1,6 @@
 ---
 # Deploy AiHordeFrontpage (Angular SSR + Express)
-# Supports two deploy modes:
 #   docker — build and run inside a Docker container (default)
-#   native — install Node.js on the host, build and run directly
-
-- name: Validate deploy mode
-  ansible.builtin.assert:
-    that:
-      - aihorde_frontpage_deploy_mode in ['docker', 'native']
-    fail_msg: >-
-      Invalid aihorde_frontpage_deploy_mode '{{ aihorde_frontpage_deploy_mode }}'.
-      Must be 'docker' or 'native'.
 
 - name: Create AiHordeFrontpage directories
   ansible.builtin.file:
@@ -32,8 +22,3 @@
 
 - name: Include Docker deployment tasks
   ansible.builtin.include_tasks: docker.yml
-  when: aihorde_frontpage_deploy_mode == 'docker'
-
-- name: Include native deployment tasks
-  ansible.builtin.include_tasks: native.yml
-  when: aihorde_frontpage_deploy_mode == 'native'
