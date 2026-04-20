@@ -21,7 +21,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-LOCAL_ROOT="$REPO_ROOT/local-deploy"
+LOCAL_ROOT="$REPO_ROOT/local-deploy/runtime"
+STATIC_ROOT="$REPO_ROOT/local-deploy/static"
 
 # shellcheck source=../lib.sh
 source "$REPO_ROOT/tests/lib.sh"
@@ -80,7 +81,7 @@ fi
 dc_backend() {
   docker compose \
     -f "$LOCAL_ROOT/ai-horde/docker-compose.yml" \
-    -f "$LOCAL_ROOT/ai-horde/docker-compose.network-overlay.yml" \
+    -f "$STATIC_ROOT/ai-horde/docker-compose.network-overlay.yml" \
     --project-name horde-aihorde \
     "$@"
 }
@@ -88,7 +89,7 @@ dc_backend() {
 dc_frontpage() {
   docker compose \
     -f "$LOCAL_ROOT/frontpage/docker-compose.yml" \
-    -f "$LOCAL_ROOT/frontpage/docker-compose.network-overlay.yml" \
+    -f "$STATIC_ROOT/frontpage/docker-compose.network-overlay.yml" \
     --project-name horde-frontpage \
     "$@"
 }
@@ -109,14 +110,14 @@ dc_exporter_overlay() {
   if [ -f "$LOCAL_ROOT/compose/docker-compose.local.yml" ]; then
     args="$args -f $LOCAL_ROOT/compose/docker-compose.local.yml"
   fi
-  args="$args -f $LOCAL_ROOT/exporter/docker-compose.network-overlay.yml"
+  args="$args -f $STATIC_ROOT/exporter/docker-compose.network-overlay.yml"
   # shellcheck disable=SC2086
   docker compose $args --project-name horde-monitoring "$@"
 }
 
 dc_haproxy() {
   docker compose \
-    -f "$LOCAL_ROOT/compose/docker-compose.fullstack-haproxy.yml" \
+    -f "$STATIC_ROOT/compose/docker-compose.fullstack-haproxy.yml" \
     --project-name horde-fullstack \
     "$@"
 }

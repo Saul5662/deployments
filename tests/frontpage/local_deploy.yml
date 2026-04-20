@@ -1,6 +1,6 @@
 ---
 # Local deployment playbook — renders AiHordeFrontpage configs
-# into local-deploy/frontpage/ for manual validation via Docker Compose.
+# into local-deploy/runtime/frontpage/ for manual validation via Docker Compose.
 #
 # Driven by tests/frontpage/local_deploy.sh — do not run directly.
 # Applies the aihorde_frontpage role against localhost with
@@ -14,7 +14,7 @@
 
   vars:
     aihorde_frontpage_start_services: false
-    aihorde_frontpage_base_dir: "{{ playbook_dir }}/../../local-deploy/frontpage"
+    aihorde_frontpage_base_dir: "{{ playbook_dir }}/../../local-deploy/runtime/frontpage"
     aihorde_frontpage_build_config: local
     aihorde_frontpage_listen: "0.0.0.0"
     aihorde_frontpage_port: 8006

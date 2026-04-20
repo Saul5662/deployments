@@ -24,7 +24,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-LOCAL_ROOT="$REPO_ROOT/local-deploy"
+LOCAL_ROOT="$REPO_ROOT/local-deploy/runtime"
 
 # shellcheck source=../lib.sh
 source "$REPO_ROOT/tests/lib.sh"

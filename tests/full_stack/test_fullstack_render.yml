@@ -68,7 +68,7 @@
 
     - name: Assert AI-Horde network overlay exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../../local-deploy/ai-horde/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/ai-horde/docker-compose.network-overlay.yml"
       register: aihorde_overlay
     - name: Verify AI-Horde network overlay exists
       ansible.builtin.assert:
@@ -77,7 +77,7 @@
 
     - name: Assert Frontpage network overlay exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../../local-deploy/frontpage/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/frontpage/docker-compose.network-overlay.yml"
       register: frontpage_overlay
     - name: Verify Frontpage network overlay exists
       ansible.builtin.assert:
@@ -86,7 +86,7 @@
 
     - name: Assert Exporter network overlay exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../../local-deploy/exporter/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/exporter/docker-compose.network-overlay.yml"
       register: exporter_overlay
     - name: Verify Exporter network overlay exists
       ansible.builtin.assert:
@@ -95,7 +95,7 @@
 
     - name: Assert HAProxy config exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../../local-deploy/haproxy/haproxy.cfg"
+        path: "{{ playbook_dir }}/../../local-deploy/static/haproxy/haproxy.cfg"
       register: haproxy_cfg
     - name: Verify HAProxy config exists
       ansible.builtin.assert:
@@ -104,7 +104,7 @@
 
     - name: Read HAProxy config
       ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../local-deploy/haproxy/haproxy.cfg"
+        path: "{{ playbook_dir }}/../../local-deploy/static/haproxy/haproxy.cfg"
       register: haproxy_content
 
     - name: Assert HAProxy routes to frontpage
@@ -139,7 +139,7 @@
 
     - name: Assert HAProxy compose exists
       ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../../local-deploy/compose/docker-compose.fullstack-haproxy.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/compose/docker-compose.fullstack-haproxy.yml"
       register: haproxy_compose
     - name: Verify HAProxy compose exists
       ansible.builtin.assert:
@@ -148,7 +148,7 @@
 
     - name: Read HAProxy compose
       ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../local-deploy/compose/docker-compose.fullstack-haproxy.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/compose/docker-compose.fullstack-haproxy.yml"
       register: haproxy_compose_content
 
     - name: Assert HAProxy compose uses horde-stack network
@@ -160,7 +160,7 @@
 
     - name: Read AI-Horde network overlay
       ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../local-deploy/ai-horde/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/ai-horde/docker-compose.network-overlay.yml"
       register: aihorde_overlay_content
 
     - name: Assert AI-Horde overlay connects aihorde to horde-stack
@@ -173,7 +173,7 @@
 
     - name: Read Frontpage network overlay
       ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../local-deploy/frontpage/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/frontpage/docker-compose.network-overlay.yml"
       register: frontpage_overlay_content
 
     - name: Assert Frontpage overlay connects frontpage to horde-stack
@@ -186,7 +186,7 @@
 
     - name: Read Exporter network overlay
       ansible.builtin.slurp:
-        path: "{{ playbook_dir }}/../../local-deploy/exporter/docker-compose.network-overlay.yml"
+        path: "{{ playbook_dir }}/../../local-deploy/static/exporter/docker-compose.network-overlay.yml"
       register: exporter_overlay_content
 
     - name: Assert Exporter overlay connects horde-exporter to horde-stack

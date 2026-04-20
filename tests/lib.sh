@@ -128,6 +128,7 @@ compose_logs() {
 # Usage: clone_or_update_source <repo_url> <dest_dir> <ref>
 clone_or_update_source() {
   local repo_url="$1" dest_dir="$2" ref="$3"
+  local target_ref="$ref"
   if [ -d "$dest_dir/.git" ]; then
     local current_origin
     current_origin="$(git -C "$dest_dir" remote get-url origin 2>/dev/null || true)"
@@ -145,13 +146,28 @@ clone_or_update_source() {
     fi
 
     log "Updating source in $dest_dir to ref: $ref ..."
-    git -C "$dest_dir" fetch --quiet --tags origin
-    git -C "$dest_dir" checkout --quiet "$ref"
-    git -C "$dest_dir" reset --hard "$ref" >/dev/null
+    git -C "$dest_dir" fetch --quiet --tags --prune origin
+
+    if git -C "$dest_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
+      # If ref is a branch, track and hard-sync to the latest remote head.
+      target_ref="origin/$ref"
+      git -C "$dest_dir" checkout --quiet -B "$ref" "$target_ref"
+    else
+      git -C "$dest_dir" checkout --quiet "$ref"
+    fi
+
+    git -C "$dest_dir" reset --hard "$target_ref" >/dev/null
   else
     log "Cloning $repo_url into $dest_dir (ref: $ref) ..."
     git clone "$repo_url" "$dest_dir"
-    git -C "$dest_dir" checkout --quiet "$ref"
+    git -C "$dest_dir" fetch --quiet --tags --prune origin
+
+    if git -C "$dest_dir" show-ref --verify --quiet "refs/remotes/origin/$ref"; then
+      target_ref="origin/$ref"
+      git -C "$dest_dir" checkout --quiet -B "$ref" "$target_ref"
+    else
+      git -C "$dest_dir" checkout --quiet "$ref"
+    fi
   fi
 
   # Initialise submodules (no-op for repos without .gitmodules).

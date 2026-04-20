@@ -56,6 +56,17 @@ source .venv/bin/activate
 > echo '{}' > ~/.docker/config.json
 > ```
 
+## Local Deploy Layout
+
+- `local-deploy/static/` contains committed infrastructure files used by local deploy scripts.
+- `local-deploy/runtime/` contains generated configs, cloned sources, and runtime data.
+
+To reset local state safely:
+
+```bash
+rm -rf local-deploy/runtime
+```
+
 ---
 
 ## Test an AI-Horde code change
@@ -91,16 +102,16 @@ done
 
 ### Iterate on code
 
-The source is cloned to `local-deploy/ai-horde/src/`. Edit files there,
+The source is cloned to `local-deploy/runtime/ai-horde/src/`. Edit files there,
 then rebuild and restart:
 
 ```bash
 # Edit your code
-vim local-deploy/ai-horde/src/horde/routes.py    # or whatever you changed
+vim local-deploy/runtime/ai-horde/src/horde/routes.py    # or whatever you changed
 
 # Rebuild the Docker image and restart
-docker compose -f local-deploy/ai-horde/docker-compose.yml build
-docker compose -f local-deploy/ai-horde/docker-compose.yml up -d
+docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml build
+docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml up -d
 
 # Verify your change (service may take a few seconds to accept traffic)
 for i in {1..2}; do
@@ -143,12 +154,12 @@ local deploy source tree, then rebuild:
 
 ```bash
 # Copy your working tree (avoid symlinking to avoid unintentional edits during ansible cleanup)
-rm -rf local-deploy/ai-horde/src
-cp -a /path/to/your/AI-Horde local-deploy/ai-horde/src
+rm -rf local-deploy/runtime/ai-horde/src
+cp -a /path/to/your/AI-Horde local-deploy/runtime/ai-horde/src
 
 # Rebuild + restart
-docker compose -f local-deploy/ai-horde/docker-compose.yml build
-docker compose -f local-deploy/ai-horde/docker-compose.yml up -d
+docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml build
+docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml up -d
 ```
 
 ---

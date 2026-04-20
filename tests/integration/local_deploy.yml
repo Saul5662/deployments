@@ -1,6 +1,6 @@
 ---
 # Integration test deployment playbook — renders AI-Horde stack configs
-# and a worker bridgeData.yaml into local-deploy/ for live validation.
+# and a worker bridgeData.yaml into local-deploy/runtime/ for live validation.
 #
 # Driven by tests/integration/local_deploy.sh — do not run directly.
 # Applies the ai_horde role against localhost with
@@ -16,8 +16,8 @@
     # AI-Horde settings
     ai_horde_start_services: false
     ai_horde_log_driver: "local"
-    ai_horde_base_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde"
-    ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/ai-horde/data"
+    ai_horde_base_dir: "{{ playbook_dir }}/../../local-deploy/runtime/ai-horde"
+    ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/runtime/ai-horde/data"
     ai_horde_postgres_password: "localdev"
     ai_horde_secret_key: "integration-test-secret"
     ai_horde_listen: "0.0.0.0"
@@ -34,7 +34,7 @@
   post_tasks:
     - name: Create integration directory
       ansible.builtin.file:
-        path: "{{ playbook_dir }}/../../local-deploy/integration"
+        path: "{{ playbook_dir }}/../../local-deploy/runtime/integration"
         state: directory
         mode: "0755"
 
@@ -43,8 +43,8 @@
         content: |
           AI_HORDE_PORT={{ ai_horde_port }}
           AI_HORDE_BASE_DIR={{ ai_horde_base_dir }}
-          INTEGRATION_DIR={{ playbook_dir }}/../../local-deploy/integration
-        dest: "{{ playbook_dir }}/../../local-deploy/integration/local-deploy.env"
+          INTEGRATION_DIR={{ playbook_dir }}/../../local-deploy/runtime/integration
+        dest: "{{ playbook_dir }}/../../local-deploy/runtime/integration/local-deploy.env"
         mode: "0644"
 
     - name: Write AI-Horde local-deploy.env

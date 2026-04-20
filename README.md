@@ -213,6 +213,17 @@ the unified edge router. Monitoring and the GPU worker are optional tiers.
 ./tests/full_stack/local_deploy.sh logs artbot
 ```
 
+**Local-deploy layout:**
+
+- `local-deploy/static/` contains committed overlays/config files used by local deploy scripts.
+- `local-deploy/runtime/` contains generated configs, cloned sources, and runtime data.
+
+Reset local deploy state safely:
+
+```bash
+rm -rf local-deploy/runtime
+```
+
 **Port assignments (full-stack local deploy):**
 
 | Service          | Port | Notes                                |

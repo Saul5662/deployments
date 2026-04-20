@@ -29,7 +29,7 @@ source "$REPO_ROOT/tests/lib.sh"
 
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
-LOCAL_ROOT="$REPO_ROOT/local-deploy"
+LOCAL_ROOT="$REPO_ROOT/local-deploy/runtime"
 COMPOSE_DIR="$LOCAL_ROOT/compose"
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 
