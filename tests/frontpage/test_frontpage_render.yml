@@ -161,4 +161,3 @@
       ansible.builtin.file:
         path: "{{ aihorde_frontpage_base_dir }}"
         state: absent
-

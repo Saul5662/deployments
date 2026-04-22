@@ -218,7 +218,7 @@
 
 - name: Default empty infra dashboard list when provisioning is disabled
   ansible.builtin.set_fact:
-    horde_monitoring__infra_dashboard_files: { files: [] }
+    horde_monitoring__infra_dashboard_files: {files: []}
   when: not (horde_monitoring_grafana_provision_infra_dashboards | bool)
 
 # --- Copy dashboards into their target directories -----------------------
