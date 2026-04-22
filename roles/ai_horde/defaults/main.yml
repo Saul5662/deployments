@@ -5,6 +5,21 @@
 # ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
 ai_horde_image: "ghcr.io/tazlin/ai-horde:main"
 
+# Optional: when set, render a `build:` directive so `docker compose build`
+# rebuilds the image from a local source checkout instead of using the
+# pre-published one. Local-deploy uses this to pick up uncommitted source
+# changes (e.g. iterating on horde/telemetry.py). Production deployments
+# leave this empty so the registry image is used as-is.
+ai_horde_build_context: ""
+ai_horde_build_dockerfile: ""
+
+# Optional list of extra docker-compose env_file entries to attach to the
+# AI-Horde service. Each entry is either an absolute path or a basename
+# relative to ai_horde_base_dir. They are loaded with `required: false`
+# so the stack starts even when the file is absent. Used by local-deploy
+# to inject Garage/S3 credentials rendered after the AI-Horde tier.
+ai_horde_extra_env_files: []
+
 
 # Docker-mode images (pinned by digest).
 ai_horde_postgres_image: "ghcr.io/haidra-org/ai-horde-postgres@sha256:25984d05fdb328d3283166222efd569303c0221736fc332b8f4be1b8ff37e1e4"
@@ -50,10 +65,24 @@ ai_horde_waitress_connection_limit: 1024
 # Telemetry defaults
 ai_horde_otel_service_name: "ai-horde"
 ai_horde_otel_sdk_disabled: "false"
+# Enable OTel Redis instrumentation — noisy by default.  Pair with Alloy-side
+# span filtering (horde_alloy_trace_filter_enabled) to drop fast cache hits.
+ai_horde_otel_instrument_redis: "false"
 ai_horde_pyroscope_enabled: "false"
 ai_horde_pyroscope_server_address: "http://host.docker.internal:4040"
 ai_horde_pyroscope_tenant_id: ""
 ai_horde_deployment_environment: "production"
+
+# App-side head sampler ratio (0.0-1.0).  Default 1.0: every root span is
+# created at the SDK and forwarded to Alloy, where the tail sampler does the
+# trimming (100% of errors and slow traces, 1% baseline; see horde_alloy
+# defaults).  Head sampling decides BEFORE span creation, so any value < 1.0
+# here proportionally erodes the tail sampler's view of errors — only lower
+# this if SDK CPU on a high-RPS instance becomes a bottleneck (>1k rps/instance
+# is a reasonable threshold; below that the savings are negligible).  When
+# lowering, prefer parentbased_traceidratio so child spans inherit the
+# parent's keep/drop decision and traces stay coherent.
+ai_horde_otel_traces_sampler_arg: "1.0"
 
 # OTLP endpoint — containers reach Alloy directly via host.docker.internal.
 # Alloy must bind its OTLP receiver to an address reachable from Docker

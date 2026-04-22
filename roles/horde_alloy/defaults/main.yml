@@ -34,6 +34,17 @@ horde_alloy_start_service: true
 # Example: "https://mimir.example.com/api/v1/push"
 horde_alloy_mimir_endpoint: ""
 
+# Mimir OTLP ingestion endpoint — receives OTLP metrics directly,
+# preserving delta-temporality histograms (Prometheus remote_write path
+# drops delta histograms via otelcol.exporter.prometheus).
+# Example: "https://mimir.example.com/otlp"
+horde_alloy_mimir_otlp_endpoint: ""
+
+# Max staleness window for the deltatocumulative metrics processor. Streams
+# with no updates within this window are evicted. Must comfortably exceed
+# the client's metrics export interval (default 60s).
+horde_alloy_deltatocumulative_max_stale: "5m"
+
 # Loki push endpoint — receives log streams.
 # Example: "https://loki.example.com/loki/api/v1/push"
 horde_alloy_loki_endpoint: ""
@@ -149,3 +160,64 @@ horde_alloy_otlp_http_port: 4318
 # Batch processor tuning
 horde_alloy_trace_batch_timeout: "5s"
 horde_alloy_trace_batch_size: 8192
+
+# ---------------------------------------------------------------------------
+# OTLP span filtering (pre-sampling)
+# ---------------------------------------------------------------------------
+# Drop high-volume / low-signal spans before they reach the sampler / exporter.
+# Enabled by default: the patterns below cap ingest without losing operationally
+# meaningful spans (errors are always preserved by the status_code != ERROR guard).
+# Override `horde_alloy_trace_filter_exclude_spans` to extend or replace this list.
+# Expressions use OTTL span context:
+# https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.processor.filter/
+horde_alloy_trace_filter_enabled: true
+horde_alloy_trace_filter_exclude_spans:
+  # Redis spans faster than 2ms (end_time-start_time is in nanoseconds).
+  - 'attributes["db.system"] == "redis" and (end_time_unix_nano - start_time_unix_nano) < 2000000 and status.code != STATUS_CODE_ERROR'
+  # Healthcheck and heartbeat probes (HAProxy + worker poll loops dwarf real traffic).
+  - 'attributes["http.target"] == "/" and status.code != STATUS_CODE_ERROR'
+  - 'attributes["http.target"] == "/healthcheck" and status.code != STATUS_CODE_ERROR'
+  - 'attributes["http.target"] == "/status/heartbeat" and status.code != STATUS_CODE_ERROR'
+  - 'attributes["http.route"] == "/healthcheck" and status.code != STATUS_CODE_ERROR'
+
+# ---------------------------------------------------------------------------
+# OTLP tail-based sampling
+# ---------------------------------------------------------------------------
+# Tail-based sampling sits behind the filter and probabilistic head sampler.
+# Enabled by default: in production the head sampler (set via the app-side
+# OTEL_TRACES_SAMPLER_ARG; default 0.10 in prod, 1.0 in local-deploy) caps span
+# *creation* CPU; the tail sampler then promotes 100% of errors and slow traces
+# back to full fidelity from the head-sampled set, keeping diagnostic value
+# without the storage burden of full-rate ingest.  Override
+# `horde_alloy_trace_tail_sampling_enabled: false` for tiny local stacks where
+# every trace must be visible regardless of latency/error.
+horde_alloy_trace_tail_sampling_enabled: true
+
+# How long to buffer a trace before deciding whether to keep it.  Must exceed
+# the p99 request duration you want to catch, or late spans are dropped.
+# 5s comfortably covers the slowest endpoint p99 (/generate/async ~3s) while
+# bounding tail_sampling memory pressure.
+horde_alloy_trace_sampling_decision_wait: "5s"
+
+# Max concurrently-buffered traces (memory-bounded).  At 200k * ~10 spans avg
+# this buffer fits well under 1GB RSS for the Alloy process.  Tune up if
+# `expected_new_traces_per_sec * decision_wait` would exceed it.
+horde_alloy_trace_sampling_num_traces: 200000
+
+# Throughput hint used to pre-size the buffer.  Sized for a ~25 instance
+# fleet running ~10-20 rps each (after head sampling).
+horde_alloy_trace_sampling_expected_new_per_sec: 500
+
+# Latency threshold (ms) above which the full trace is always kept.
+horde_alloy_trace_sampling_latency_ms: 1000
+
+# Baseline probabilistic keep rate for healthy / fast traces (0-100).  This
+# is applied AFTER the app-side head sampler, so the effective ingest rate
+# for baseline traffic is roughly head_ratio * (probability/100).  At
+# defaults (0.10 head, 1% tail) we retain ~0.1% of healthy traces while
+# still keeping 100% of errors and slow traces.
+horde_alloy_trace_sampling_probability: 1
+
+# Additional raw Alloy `policy { ... }` blocks — advanced use only.
+# Each entry is a string spliced verbatim into the tail_sampling component.
+horde_alloy_trace_sampling_extra_policies: []

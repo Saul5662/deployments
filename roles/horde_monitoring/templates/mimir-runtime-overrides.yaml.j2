@@ -7,15 +7,24 @@ overrides:
 {% if horde_monitoring_mimir_app_tenant_max_series | default(0) | int > 0 %}
     max_global_series_per_user: {{ horde_monitoring_mimir_app_tenant_max_series }}
 {% endif %}
+{% if horde_monitoring_mimir_native_histograms_enabled | default(true) | bool %}
+    native_histograms_ingestion_enabled: true
+{% endif %}
   {{ horde_monitoring_infrastructure_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_infrastructure_retention }}
 {% if horde_monitoring_mimir_infra_tenant_max_series | default(0) | int > 0 %}
     max_global_series_per_user: {{ horde_monitoring_mimir_infra_tenant_max_series }}
 {% endif %}
+{% if horde_monitoring_mimir_native_histograms_enabled | default(true) | bool %}
+    native_histograms_ingestion_enabled: true
+{% endif %}
   {{ horde_monitoring_telemetry_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_telemetry_retention }}
 {% if horde_monitoring_mimir_telemetry_tenant_max_series | default(0) | int > 0 %}
     max_global_series_per_user: {{ horde_monitoring_mimir_telemetry_tenant_max_series }}
+{% endif %}
+{% if horde_monitoring_mimir_native_histograms_enabled | default(true) | bool %}
+    native_histograms_ingestion_enabled: true
 {% endif %}
   {{ horde_monitoring_public_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_public_retention }}
@@ -23,6 +32,9 @@ overrides:
     max_fetched_series_per_query: {{ horde_monitoring_public_max_fetched_series }}
 {% if horde_monitoring_mimir_public_tenant_max_series | default(0) | int > 0 %}
     max_global_series_per_user: {{ horde_monitoring_mimir_public_tenant_max_series }}
+{% endif %}
+{% if horde_monitoring_mimir_native_histograms_enabled | default(true) | bool %}
+    native_histograms_ingestion_enabled: true
 {% endif %}
 {% if horde_monitoring_mimir_extra_tenant_overrides %}
 {{ horde_monitoring_mimir_extra_tenant_overrides | to_nice_yaml(indent=2, sort_keys=False) | indent(2, False) }}

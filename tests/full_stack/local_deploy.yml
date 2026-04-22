@@ -20,6 +20,23 @@
     ai_horde_data_dir: "{{ playbook_dir }}/../../local-deploy/runtime/ai-horde/data"
     aihorde_frontpage_base_dir: "{{ playbook_dir }}/../../local-deploy/runtime/frontpage"
 
+    # Build the AI-Horde image from the cloned source so iterative changes
+    # to /root/horde/AI-Horde (or whatever upstream ref local_deploy.sh
+    # checks out into runtime/ai-horde/src) are picked up by
+    # `dc_backend build`. Without this, the compose only references
+    # `image:` and the build step is a no-op.
+    ai_horde_build_context: "./src"
+    # Tag the locally-built image with a -local suffix so it can never be
+    # overwritten by a `docker pull` from the registry.
+    ai_horde_image: "ai-horde:local"
+
+    # Garage S3 credentials are rendered into runtime/ai-horde/.env.garage
+    # by local_deploy.sh after the embedded Garage bootstrap completes.
+    # Loaded as a second env_file with required:false so the stack still
+    # boots cleanly when monitoring (and therefore Garage) is disabled.
+    ai_horde_extra_env_files:
+      - .env.garage
+
     ai_horde_start_services: false
     ai_horde_log_driver: "local"
     ai_horde_listen: "127.0.0.1"
@@ -31,6 +48,17 @@
     ai_horde_repo_version: "main"
     ai_horde_pyroscope_enabled: "true"
     ai_horde_pyroscope_tenant_id: "ai-horde-app"
+
+    # In local-deploy, alloy + pyroscope run as sibling containers and are
+    # attached to the shared `horde-stack` network by local_deploy.sh.  We
+    # override the endpoints (which default to host.docker.internal in the
+    # role) so ai-horde containers reach them by service name over the
+    # shared network — this avoids the IPv6 ENETUNREACH issue with
+    # host.docker.internal on Linux Docker.
+    ai_horde_env_overrides:
+      KUDOS_TRUST_THRESHOLD: "100"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy:4318"
+      PYROSCOPE_SERVER_ADDRESS: "http://pyroscope:4040"
 
     aihorde_frontpage_start_services: false
     aihorde_frontpage_build_config: local

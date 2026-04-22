@@ -15,6 +15,10 @@ providers:
     options:
       path: /etc/grafana/dashboards/app
       foldersFromFilesStructure: false
+{# Infra provider is gated on provision_infra_dashboards so the role can ship
+   without infra dashboards (and without a dangling provider yaml entry that
+   would cause Grafana to log "no such file or directory" on every reload). #}
+{% if horde_monitoring_grafana_provision_infra_dashboards | default(false) | bool %}
   - name: infra
     orgId: 1
     folder: 'Infrastructure'
@@ -25,6 +29,7 @@ providers:
     options:
       path: /etc/grafana/dashboards/infra
       foldersFromFilesStructure: false
+{% endif %}
 {# Include the public-org provider only when anonymous access is enabled
    AND the public org is confirmed to exist.  The role sets the internal
    flag horde_monitoring__public_org_exists after creating (or verifying)

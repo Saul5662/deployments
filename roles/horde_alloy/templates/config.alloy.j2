@@ -423,9 +423,93 @@ otelcol.receiver.otlp "local" {
 {% if horde_alloy_forward_otlp_metrics | bool %}
     metrics = [otelcol.processor.batch.default.input]
 {% endif %}
+{% if horde_alloy_trace_filter_enabled | bool %}
+    traces  = [otelcol.processor.filter.traces.input]
+{% elif horde_alloy_trace_tail_sampling_enabled | bool %}
+    traces  = [otelcol.processor.tail_sampling.traces.input]
+{% else %}
     traces  = [otelcol.processor.batch.default.input]
+{% endif %}
   }
 }
+
+{% if horde_alloy_trace_filter_enabled | bool %}
+// ---------------------------------------------------------------------------
+// Span filter — drops fast, high-volume spans that dominate ingest but carry
+// little operational signal (e.g. sub-millisecond Redis GETs).  Anything
+// slower than the threshold is preserved for root-cause analysis.
+// ---------------------------------------------------------------------------
+otelcol.processor.filter "traces" {
+  error_mode = "ignore"
+
+  traces {
+    span = [
+{% for expr in horde_alloy_trace_filter_exclude_spans %}
+      {{ expr | to_json }},
+{% endfor %}
+    ]
+  }
+
+  output {
+{% if horde_alloy_trace_tail_sampling_enabled | bool %}
+    traces = [otelcol.processor.tail_sampling.traces.input]
+{% else %}
+    traces = [otelcol.processor.batch.default.input]
+{% endif %}
+  }
+}
+
+{% endif %}
+{% if horde_alloy_trace_tail_sampling_enabled | bool %}
+// ---------------------------------------------------------------------------
+// Tail-based sampling — buffers whole traces long enough to inspect them and
+// keeps any trace matching an `and_policy` below.  The final policy acts as
+// the catch-all probabilistic sampler for healthy traffic.
+//
+// Defaults keep:
+//   * 100 % of traces containing an error
+//   * 100 % of traces slower than horde_alloy_trace_sampling_latency_ms
+//   * `horde_alloy_trace_sampling_probability` percent of the rest
+// ---------------------------------------------------------------------------
+otelcol.processor.tail_sampling "traces" {
+  decision_wait              = {{ horde_alloy_trace_sampling_decision_wait | to_json }}
+  num_traces                 = {{ horde_alloy_trace_sampling_num_traces }}
+  expected_new_traces_per_sec = {{ horde_alloy_trace_sampling_expected_new_per_sec }}
+
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  policy {
+    name = "slow"
+    type = "latency"
+    latency {
+      threshold_ms = {{ horde_alloy_trace_sampling_latency_ms }}
+    }
+  }
+
+{% for policy in horde_alloy_trace_sampling_extra_policies %}
+{{ policy }}
+
+{% endfor %}
+  policy {
+    name = "baseline_probabilistic"
+    type = "probabilistic"
+    probabilistic {
+      sampling_percentage = {{ horde_alloy_trace_sampling_probability }}
+    }
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+{% endif %}
 
 otelcol.processor.batch "default" {
   timeout             = {{ horde_alloy_trace_batch_timeout | to_json }}
@@ -433,46 +517,53 @@ otelcol.processor.batch "default" {
 
   output {
 {% if horde_alloy_forward_otlp_metrics | bool %}
-    metrics = [otelcol.exporter.prometheus.mimir.input]
+    metrics = [otelcol.processor.deltatocumulative.default.input]
 {% endif %}
     traces  = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
 {% if horde_alloy_forward_otlp_metrics | bool %}
-otelcol.exporter.prometheus "mimir" {
-  forward_to = [prometheus.remote_write.otlp_metrics.receiver]
+// Convert delta-temporality histograms/counters to cumulative before
+// shipping to Mimir. Logfire exports histograms as delta regardless of
+// OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, and Mimir's OTLP
+// ingest silently drops delta histograms (counters pass through, but
+// bucket/sum/count series never materialize).
+otelcol.processor.deltatocumulative "default" {
+  max_stale = {{ horde_alloy_deltatocumulative_max_stale | default('5m') | to_json }}
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.mimir.input]
+  }
 }
 
-prometheus.remote_write "otlp_metrics" {
-  external_labels = {
-    "instance" = {{ ansible_hostname | to_json }},
-{% for k, v in horde_alloy_external_labels.items() %}
-    {{ k | to_json }} = {{ v | to_json }},
-{% endfor %}
-  }
-
-  endpoint {
-    url = {{ horde_alloy_mimir_endpoint | to_json }}
-
-    headers = {
+// Route OTLP metrics directly to Mimir's OTLP ingest endpoint.
+// Mimir's OTLP endpoint preserves delta-temporality histograms which
+// the older otelcol.exporter.prometheus → prometheus.remote_write chain
+// dropped (the Prometheus exporter only accepts cumulative temporality).
+otelcol.exporter.otlphttp "mimir" {
+  client {
+    endpoint = {{ horde_alloy_mimir_otlp_endpoint | to_json }}
+    headers  = {
       "X-Scope-OrgID" = {{ horde_alloy_otlp_metrics_tenant_id | to_json }},
     }
-
 {% if horde_alloy_basic_auth_username %}
-    basic_auth {
-      username = {{ horde_alloy_basic_auth_username | to_json }}
-      password = {{ horde_alloy_basic_auth_password | to_json }}
-    }
+    auth     = otelcol.auth.basic.mimir.handler
 {% endif %}
-
 {% if horde_alloy_tls_ca_cert %}
-    tls_config {
+    tls {
       ca_file = "{{ horde_alloy_config_dir }}/ca.crt"
     }
 {% endif %}
   }
 }
+
+{% if horde_alloy_basic_auth_username %}
+otelcol.auth.basic "mimir" {
+  username = {{ horde_alloy_basic_auth_username | to_json }}
+  password = {{ horde_alloy_basic_auth_password | to_json }}
+}
+{% endif %}
 
 {% endif %}
 {% if horde_alloy_basic_auth_username %}

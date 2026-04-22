@@ -181,6 +181,16 @@ datasources:
     isDefault: false
     editable: false
     jsonData:
+{% if horde_monitoring_install_loki | bool %}
+      tracesToLogsV2:
+        datasourceUid: loki-public
+        filterByTraceID: true
+        filterBySpanID: true
+{% endif %}
+      tracesToMetrics:
+        datasourceUid: mimir-public
+      serviceMap:
+        datasourceUid: mimir-public
       nodeGraph:
         enabled: true
 {% endif %}

@@ -10,7 +10,11 @@ scrape_intervals:
   teams: 300
 
 api:
-  base_url: "https://aihorde.net/api/v2"
+  # Target the local AI-Horde container (joined to horde-stack network by
+  # local_deploy.sh after the monitoring tier comes up).  Prior to that
+  # connect, scrapes will fail and retry — once attached, scrapes succeed
+  # within one polling interval.
+  base_url: "http://aihorde:7001/api/v2"
   user_agent: "horde_prometheus_exporter/local-dev"
   timeout: 10
 

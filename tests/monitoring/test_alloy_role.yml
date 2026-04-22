@@ -41,6 +41,19 @@
       - "/var/log/test/*.log"
     horde_alloy_collect_docker_logs: false
     horde_alloy_collect_traces: true
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_external_labels:
       environment: "test"
     horde_alloy_log_labels:
@@ -289,6 +302,19 @@
     horde_alloy_collect_metrics: true
     horde_alloy_collect_logs: false
     horde_alloy_collect_traces: false
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_start_service: false
 
   tasks:
@@ -380,6 +406,19 @@
     horde_alloy_collect_metrics: "false"
     horde_alloy_collect_logs: "false"
     horde_alloy_collect_traces: "false"
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_collect_journal: "false"
     horde_alloy_collect_docker_logs: "false"
     horde_alloy_collect_log_files: []
@@ -486,6 +525,19 @@
     horde_alloy_collect_log_files: []
     horde_alloy_collect_docker_logs: true
     horde_alloy_collect_traces: false
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_forward_otlp_metrics: false
     horde_alloy_log_labels: {}
     horde_alloy_external_labels: {}
@@ -559,6 +611,19 @@
     horde_alloy_collect_log_files: []
     horde_alloy_collect_docker_logs: true
     horde_alloy_collect_traces: false
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_forward_otlp_metrics: false
     horde_alloy_log_labels: {}
     horde_alloy_external_labels: {}
@@ -641,6 +706,19 @@
     horde_alloy_collect_log_files: []
     horde_alloy_collect_docker_logs: false
     horde_alloy_collect_traces: false
+    # Trace pipeline knobs (newly added to role defaults; declared here to
+    # keep this test resilient to default flips. Override per-play above if
+    # you want to exercise filter/tail_sampling rendering.)
+    horde_alloy_trace_filter_enabled: false
+    horde_alloy_trace_filter_exclude_spans: []
+    horde_alloy_trace_tail_sampling_enabled: false
+    horde_alloy_trace_sampling_decision_wait: "5s"
+    horde_alloy_trace_sampling_num_traces: 50000
+    horde_alloy_trace_sampling_expected_new_per_sec: 50
+    horde_alloy_trace_sampling_latency_ms: 1000
+    horde_alloy_trace_sampling_probability: 1
+    # OTLP-direct mimir endpoint (separate from prometheus remote_write endpoint).
+    horde_alloy_mimir_otlp_endpoint: ""
     horde_alloy_external_labels:
       environment: "ci"
     horde_alloy_log_labels:

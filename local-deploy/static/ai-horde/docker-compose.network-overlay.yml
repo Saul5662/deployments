@@ -1,10 +1,18 @@
 # Overlay: connects the AI-Horde API to the shared horde-stack network.
 # Used with: docker compose -f docker-compose.yml -f docker-compose.network-overlay.yml
+#
+# We must spell out the `aliases:` on horde-stack so HAProxy (which lives
+# only on horde-stack) can resolve `aihorde` via Docker's embedded DNS.
+# Without the explicit alias, compose only registers per-replica container
+# names on the secondary network, and `server-template aihorde 5 aihorde:7001`
+# in haproxy.cfg gets NXDOMAIN → all backend slots stay in MAINT → 503.
 services:
   aihorde:
     networks:
-      - aihorde_network
-      - horde-stack
+      aihorde_network: {}
+      horde-stack:
+        aliases:
+          - aihorde
 
 networks:
   aihorde_network:

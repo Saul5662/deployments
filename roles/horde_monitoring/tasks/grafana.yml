@@ -32,6 +32,30 @@
   become: true
   notify: Restart monitoring stack
 
+# Grafana scans every provisioning subdirectory on startup AND on each
+# poll interval. If a subdir is missing it logs an error every cycle:
+#
+#   Failed to read plugin provisioning files from directory
+#       path=/etc/grafana/provisioning/plugins
+#       error="open ...: no such file or directory"
+#
+# We don't ship plugin or alerting provisioning files, but we still
+# create the directories so the scanner finds an empty (valid) provider
+# set instead of an open() error. Cheap; eliminates per-poll log noise.
+- name: Ensure optional Grafana provisioning subdirs exist
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_grafana_provisioning_dir }}/{{ item }}"
+    state: directory
+    owner: "472"
+    group: "472"
+    mode: "0755"
+  become: true
+  loop:
+    - plugins
+    - alerting
+    - notifiers
+    - access-control
+
 # ── Phase 1: probe public org, template safe config, create org ──
 
 - name: Probe Grafana health (failure is expected on fresh installs)

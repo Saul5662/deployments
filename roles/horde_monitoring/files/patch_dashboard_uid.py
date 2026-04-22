@@ -63,6 +63,42 @@ def patch(obj, uid, datasource_name=None):
             patch(v, uid, datasource_name)
 
 
+def _strip_v2beta1_server_fields(obj):
+    """Strip server-managed bookkeeping from v2beta1 dashboard exports.
+
+    Dashboards exported from Grafana 11.x/12.x via the v2beta1 resource
+    API retain ``metadata.managedFields`` and other read-only server-side
+    fields. The file provisioner refuses to apply such resources ("the
+    field is managed by ..."). Stripping these fields is safe — Grafana
+    will repopulate them on the next save — and turns the export back
+    into a provisionable dashboard.
+
+    Note: this does NOT silence the separate Grafana 12.x apiserver
+    warning ``[SHOULD NOT HAPPEN] failed to update managedFields ...
+    .spec.elements.panel-NN.kind: field not declared in schema``. That
+    message originates from the v2beta1 schema validator rejecting fields
+    in externally-authored dashboard exports. The file provisioner is
+    designed for classic v1 JSON; the durable fix lives upstream in
+    ``horde-exporters`` (publish dashboards as classic v1 JSON). See
+    MONITORING.md → Troubleshooting → "Known harmless log noise".
+    """
+    if not isinstance(obj, dict):
+        return
+    metadata = obj.get("metadata")
+    if isinstance(metadata, dict):
+        for key in (
+            "managedFields",
+            "creationTimestamp",
+            "resourceVersion",
+            "generation",
+            "uid",
+            "deletionTimestamp",
+            "ownerReferences",
+            "selfLink",
+        ):
+            metadata.pop(key, None)
+
+
 def main():
     if len(sys.argv) not in (3, 4):
         print(
@@ -76,6 +112,7 @@ def main():
     datasource_name = sys.argv[3] if len(sys.argv) == 4 else None
 
     data = json.loads(path.read_text())
+    _strip_v2beta1_server_fields(data)
     patch(data, uid, datasource_name)
     path.write_text(json.dumps(data, indent=2) + "\n")
 

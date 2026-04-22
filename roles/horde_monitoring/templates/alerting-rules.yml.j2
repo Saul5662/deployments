@@ -520,6 +520,78 @@ groups:
           description: >-
             The AI Horde API has entered raid mode, indicating a potential abuse
             event. Anonymous and untrusted user access is restricted.
+
+{% if horde_monitoring_install_otlp_app_alerts | default(true) | bool %}
+  # --- AI Horde OTLP application latency / reliability ---
+  # Driven by histograms emitted from horde/telemetry.py via OTLP through
+  # Alloy. All series live in the `{{ horde_monitoring_telemetry_tenant_id }}`
+  # Mimir tenant. Histograms are exported as **native histograms**
+  # (exponential buckets) and ingested into Mimir with
+  # `native_histograms_ingestion_enabled: true`. Quantiles therefore use the
+  # bare metric name (no `_bucket` / `_seconds` suffix) and `histogram_quantile`
+  # operates on the rate of the bare series.
+  - name: ai-horde-app-latency
+    rules:
+      - alert: HordeGenerateLatencyHigh
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (horde_gentype) (
+              rate(horde_generate_duration[5m])
+            )
+          ) > {{ horde_monitoring_otlp_generate_p95_threshold_seconds | default(2.0) }}
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Horde /generate p95 latency high ({{ '{{' }} $labels.horde_gentype {{ '}}' }})"
+          description: >-
+            p95 latency of POST /generate has exceeded
+            {{ horde_monitoring_otlp_generate_p95_threshold_seconds | default(2.0) }}s
+            for 15 minutes. Investigate request validation, queue selection,
+            and database load via the horde-app-traces dashboard.
+
+      - alert: HordePopLatencyHigh
+        expr: >-
+          histogram_quantile(0.95,
+            sum(rate(horde_pop_duration[5m]))
+          ) > {{ horde_monitoring_otlp_pop_p95_threshold_seconds | default(1.0) }}
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Horde /generate/pop p95 latency high"
+          description: >-
+            p95 latency of worker pop has exceeded
+            {{ horde_monitoring_otlp_pop_p95_threshold_seconds | default(1.0) }}s
+            for 10 minutes. Workers will appear slow / idle; check
+            horde_pop_wp_query_duration for DB-level regressions.
+
+      - alert: HordeWebhookFailureBurst
+        expr: >-
+          sum(rate(horde_webhook_outcomes_total{outcome="giveup"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI Horde webhook retries are exhausting repeatedly"
+          description: >-
+            More than one webhook per 10 seconds has failed all 3 retries
+            over the past 5 minutes. This indicates downstream webhook
+            consumers are unreachable or rejecting payloads.
+
+      - alert: HordeBackgroundJobFailures
+        expr: >-
+          sum by (horde_job_name) (rate(horde_job_failures_total[10m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Horde background job {{ '{{' }} $labels.horde_job_name {{ '}}' }} is failing"
+          description: >-
+            The PrimaryTimedFunction {{ '{{' }} $labels.horde_job_name {{ '}}' }} has
+            raised at least one exception per evaluation window for 15 minutes.
+            Check the process journal for tracebacks.
+{% endif %}
 {% endif %}
 
 {% if horde_monitoring_install_prometheus_alerts | default(true) | bool %}

@@ -70,25 +70,33 @@ otelcol.processor.batch "default" {
   send_batch_max_size = 8192
 
   output {
-    metrics = [otelcol.exporter.prometheus.mimir.input]
+    metrics = [otelcol.processor.deltatocumulative.default.input]
     traces  = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
-otelcol.exporter.prometheus "mimir" {
-  forward_to = [prometheus.remote_write.otlp_metrics.receiver]
+// Convert delta-temporality histograms/counters to cumulative before
+// shipping to Mimir. Logfire exports histograms as delta regardless of
+// OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, and Mimir's OTLP
+// ingest silently drops delta histograms (counters pass through, but
+// bucket/sum/count series never materialize).
+otelcol.processor.deltatocumulative "default" {
+  max_stale = "5m"
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.mimir.input]
+  }
 }
 
-prometheus.remote_write "otlp_metrics" {
-  external_labels = {
-    "instance" = "local-deploy",
-  }
-
-  endpoint {
-    url = "http://mimir:{{ horde_monitoring_mimir_port }}/api/v1/push"
-
-    headers = {
-      "X-Scope-OrgID" = "{{ horde_monitoring_application_tenant_id }}",
+// Route OTLP metrics directly to Mimir's OTLP ingest endpoint.
+// Use the dedicated telemetry tenant (ai-horde-telemetry) to match the
+// production roles/horde_alloy default `horde_alloy_otlp_metrics_tenant_id`
+// — the application tenant is reserved for the stats exporter scrape job.
+otelcol.exporter.otlphttp "mimir" {
+  client {
+    endpoint = "http://mimir:{{ horde_monitoring_mimir_port }}/otlp"
+    headers  = {
+      "X-Scope-OrgID" = "{{ horde_monitoring_telemetry_tenant_id }}",
     }
   }
 }

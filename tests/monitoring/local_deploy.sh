@@ -13,6 +13,8 @@
 # Usage:
 #   ./tests/monitoring/local_deploy.sh up       # render configs + start full stack
 #   ./tests/monitoring/local_deploy.sh down     # tear down stack + remove files
+#   ./tests/monitoring/local_deploy.sh restart  # equivalent to: down + up
+#   ./tests/monitoring/local_deploy.sh render   # render configs only (no docker)
 #   ./tests/monitoring/local_deploy.sh status   # show running containers
 #   ./tests/monitoring/local_deploy.sh logs     # tail compose logs
 #
@@ -33,6 +35,22 @@ LOCAL_ROOT="$REPO_ROOT/local-deploy/runtime"
 COMPOSE_DIR="$LOCAL_ROOT/compose"
 ENV_FILE="$LOCAL_ROOT/local-deploy.env"
 
+# Compose project name. Pinned (rather than letting Docker derive it from
+# $COMPOSE_DIR's basename) so that subsequent `up` / `down` invocations
+# — or the parent full_stack/local_deploy.sh script, which uses the same
+# name — always target the same set of containers.
+MONITORING_PROJECT="horde-monitoring"
+
+# Containers in this stack use fixed `container_name:` values (see
+# roles/horde_monitoring/templates/docker-compose.monitoring.yml.j2 and
+# tests/monitoring/templates/local-deploy/docker-compose.local.yml.j2).
+# Listed here so we can detect orphans from prior runs whose project
+# label differs from MONITORING_PROJECT.
+MONITORING_CONTAINER_NAMES=(
+  s3-store s3-init memcached mimir grafana loki tempo pyroscope
+  alertmanager prometheus horde-exporter alloy
+)
+
 # Helper: run docker compose with all files
 dc() {
   local args="-f $COMPOSE_DIR/docker-compose.yml"
@@ -40,7 +58,7 @@ dc() {
     args="$args -f $COMPOSE_DIR/docker-compose.local.yml"
   fi
   # shellcheck disable=SC2086
-  docker compose $args "$@"
+  docker compose $args --project-name "$MONITORING_PROJECT" "$@"
 }
 
 
@@ -61,6 +79,12 @@ compose_up() {
     err "No docker-compose.yml found — run '$0 up' first."
     exit 1
   fi
+
+  # Sweep up any name-collision orphans from a previous run with a
+  # different compose project (e.g. the directory-default `compose`
+  # before MONITORING_PROJECT was pinned, or stale containers left
+  # behind by a partial teardown).
+  cleanup_known_container_name_conflicts "$MONITORING_PROJECT" "${MONITORING_CONTAINER_NAMES[@]}"
 
   # Phase 1 — Boot Grafana without any Org-2 provisioning.
   grafana_strip_org2_provisioning "$LOCAL_ROOT"
@@ -133,7 +157,20 @@ main() {
       print_banner
       ;;
     down)
-      compose_down "$LOCAL_ROOT"
+      compose_down "$LOCAL_ROOT" "$MONITORING_PROJECT"
+      ;;
+    restart)
+      compose_down "$LOCAL_ROOT" "$MONITORING_PROJECT"
+      check_prerequisites python3
+      render_configs
+      load_env "$ENV_FILE"
+      compose_up
+      print_banner
+      ;;
+    render)
+      check_prerequisites python3
+      render_configs
+      log "Rendered configs are at $LOCAL_ROOT (no containers started)."
       ;;
     status)
       compose_status "$COMPOSE_DIR/docker-compose.yml"
@@ -142,7 +179,7 @@ main() {
       compose_logs "$COMPOSE_DIR/docker-compose.yml"
       ;;
     *)
-      echo "Usage: $0 {up|down|status|logs}"
+      echo "Usage: $0 {up|down|restart|render|status|logs}"
       exit 1
       ;;
   esac

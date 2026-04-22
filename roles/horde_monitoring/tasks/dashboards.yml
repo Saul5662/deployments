@@ -28,13 +28,7 @@
     group: "472"
     mode: "0755"
   become: true
-  loop:
-    - app
-    - app-public
-    - infra
-
-# ── git mode ─────────────────────────────────────────────────
-
+  loop: "{{ ['app', 'app-public'] + (['infra'] if horde_monitoring_grafana_provision_infra_dashboards | bool else []) }}"
 - name: Install git (needed for dashboard checkout)
   ansible.builtin.apt:
     name: git
@@ -47,7 +41,12 @@
     repo: "{{ horde_monitoring_grafana_dashboards_repo_url }}"
     dest: /tmp/horde-exporters-dashboards
     version: "{{ horde_monitoring_grafana_dashboards_repo_ref }}"
-    depth: 1
+    depth: >-
+      {{
+        1
+        if not (horde_monitoring_grafana_dashboards_repo_ref is regex('^[0-9a-f]{40}$'))
+        else omit
+      }}
     force: true
   become: true
   register: horde_monitoring__dashboards_clone
@@ -171,8 +170,8 @@
 
 - name: Set local-mode source paths
   ansible.builtin.set_fact:
-    horde_monitoring__dashboard_app_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/app"
-    horde_monitoring__dashboard_infra_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/infra"
+    horde_monitoring__dashboard_app_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/{{ horde_monitoring_grafana_dashboards_local_app_path }}"
+    horde_monitoring__dashboard_infra_src: "{{ horde_monitoring_grafana_dashboards_local_path }}/{{ horde_monitoring_grafana_dashboards_local_infra_path }}"
   when: horde_monitoring_grafana_dashboards_source == 'local'
 
 # ── common: verify source directories ────────────────────────
@@ -180,9 +179,11 @@
 - name: Verify expected dashboard source directories exist
   ansible.builtin.stat:
     path: "{{ item }}"
-  loop:
-    - "{{ horde_monitoring__dashboard_app_src }}"
-    - "{{ horde_monitoring__dashboard_infra_src }}"
+  loop: >-
+    {{
+      [horde_monitoring__dashboard_app_src]
+      + ([horde_monitoring__dashboard_infra_src] if horde_monitoring_grafana_provision_infra_dashboards | bool else [])
+    }}
   register: horde_monitoring__dashboard_dirs
   become: true
 
@@ -213,6 +214,12 @@
     recurse: true
   register: horde_monitoring__infra_dashboard_files
   become: true
+  when: horde_monitoring_grafana_provision_infra_dashboards | bool
+
+- name: Default empty infra dashboard list when provisioning is disabled
+  ansible.builtin.set_fact:
+    horde_monitoring__infra_dashboard_files: { files: [] }
+  when: not (horde_monitoring_grafana_provision_infra_dashboards | bool)
 
 # --- Copy dashboards into their target directories -----------------------
 
@@ -257,6 +264,7 @@
   loop: "{{ horde_monitoring__infra_dashboard_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
+  when: horde_monitoring_grafana_provision_infra_dashboards | bool
 
 # --- Patch datasource UIDs in each set of dashboards --------------------
 

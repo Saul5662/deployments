@@ -9,36 +9,27 @@
 - name: Flush pending handlers before starting services
   ansible.builtin.meta: flush_handlers
 
-- name: Enable and start monitoring stack
-  ansible.builtin.systemd:
-    name: mimir-monitoring
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
-  when: horde_monitoring_start_services | bool
-
-# The systemd unit is Type=oneshot + RemainAfterExit=yes.  After manual
-# "docker compose down", a host reboot that killed containers, or a
-# failed previous run, systemd still reports "active (exited)" while the
-# actual containers are gone.  "state: started" above is a no-op in that
-# situation.  Detect this and force a restart so health checks don't fail.
-- name: Check if Mimir container is actually running
-  ansible.builtin.command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' mimir
-  register: horde_monitoring__mimir_container_state
-  changed_when: false
-  failed_when: false
-  become: true
-  when: horde_monitoring_start_services | bool
-
-- name: Restart monitoring stack if containers are not running
-  ansible.builtin.systemd:
-    name: mimir-monitoring
-    state: restarted
+# Embedded Garage requires several CLI bootstrap steps (layout assign /
+# apply, key import, bucket create, bucket allow) that can only run once
+# the s3-store container is up.  If we bring up the FULL compose stack
+# first, tempo / pyroscope / mimir / loki will start before those steps
+# finish and crash-loop with "Bucket not found" / "No such key" /
+# "Operation not allowed for this key" until the bootstrap catches up.
+# To avoid that startup race, bring up only s3-store here when running
+# in embedded mode; the full stack is brought up further down (after
+# bucket bootstrap) by the mimir-monitoring systemd unit, whose
+# `docker compose up -d` is idempotent and will leave s3-store alone.
+- name: Pre-start s3-store before bucket bootstrap (embedded Garage)
+  ansible.builtin.command:
+    cmd: docker compose up -d s3-store
+    chdir: "{{ horde_monitoring_mimir_compose_dir }}"
+  register: horde_monitoring__garage_prestart
+  changed_when: "'Started' in (horde_monitoring__garage_prestart.stderr | default('')) or 'Created' in (horde_monitoring__garage_prestart.stderr | default(''))"
   become: true
   when:
     - horde_monitoring_start_services | bool
-    - horde_monitoring__mimir_container_state.stdout | default('false') != 'true'
+    - horde_monitoring_mimir_enable_s3 | bool
+    - horde_monitoring_s3_deployment_mode == 'embedded'
 
 # --- Embedded Garage cluster initialization via CLI ---
 # Uses docker exec to run the /garage CLI binary inside the running container.
@@ -231,6 +222,41 @@
     - horde_monitoring_start_services | bool
     - horde_monitoring_mimir_enable_s3 | bool
     - horde_monitoring_s3_deployment_mode == 'embedded'
+
+# Now that the embedded Garage cluster is fully bootstrapped (layout
+# applied, key imported, buckets created and granted), bring up the
+# rest of the compose stack.  In external-S3 mode, this is the first
+# `up` call and brings up everything including the s3-init sidecar.
+- name: Enable and start monitoring stack
+  ansible.builtin.systemd:
+    name: mimir-monitoring
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: horde_monitoring_start_services | bool
+
+# The systemd unit is Type=oneshot + RemainAfterExit=yes.  After manual
+# "docker compose down", a host reboot that killed containers, or a
+# failed previous run, systemd still reports "active (exited)" while the
+# actual containers are gone.  "state: started" above is a no-op in that
+# situation.  Detect this and force a restart so health checks don't fail.
+- name: Check if Mimir container is actually running
+  ansible.builtin.command: docker inspect --format '{{ '{{' }}.State.Running{{ '}}' }}' mimir
+  register: horde_monitoring__mimir_container_state
+  changed_when: false
+  failed_when: false
+  become: true
+  when: horde_monitoring_start_services | bool
+
+- name: Restart monitoring stack if containers are not running
+  ansible.builtin.systemd:
+    name: mimir-monitoring
+    state: restarted
+  become: true
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring__mimir_container_state.stdout | default('false') != 'true'
 
 - name: Wait for S3 storage health endpoint when enabled
   ansible.builtin.uri:

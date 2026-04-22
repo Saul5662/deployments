@@ -6,8 +6,10 @@ overrides:
     compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_application_retention }}
   {{ horde_monitoring_infrastructure_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_infrastructure_retention }}
+{% if horde_monitoring_pyroscope_telemetry_enabled | bool %}
   {{ horde_monitoring_telemetry_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_telemetry_retention }}
+{% endif %}
   {{ horde_monitoring_public_tenant_id }}:
     compactor_blocks_retention_period: {{ horde_monitoring_pyroscope_public_retention }}
 {% if horde_monitoring_pyroscope_extra_tenant_overrides %}

@@ -211,6 +211,13 @@ horde_monitoring_mimir_compaction_interval: "1h"
 horde_monitoring_mimir_compactor_deletion_delay: "12h"
 horde_monitoring_mimir_split_queries_interval: "24h"
 
+# Enable Prometheus native (exponential) histogram ingestion per tenant.
+# Required for OTLP exponential histograms (e.g. emitted by Pydantic Logfire,
+# which installs an ExponentialBucketHistogramAggregation View that overrides
+# the exporter's explicit-bucket preference). Without this, Mimir silently
+# drops exponential histograms during OTLP ingestion.
+horde_monitoring_mimir_native_histograms_enabled: true
+
 # TSDB early head compaction (experimental in Mimir 2.15).
 # When in-memory series reach this threshold the ingester compacts the TSDB
 # head, evicting stale series older than active_series_metrics_idle_timeout
@@ -273,10 +280,20 @@ horde_monitoring_grafana_dataproxy_timeout: 30
 horde_monitoring_grafana_dashboards_source: "release"
 horde_monitoring_grafana_provision_dashboards: true
 
+# Provision the infra dashboard subset (node_exporter, pm2, postgres) shipped
+# in horde-exporters/dashboards/.  These JSONs are Grafana v2beta1 exports
+# (apiVersion: dashboard.grafana.app/v2beta1) which retain server-managed
+# bookkeeping (metadata.managedFields, resourceVersion, …) the file-based
+# provisioner refuses to apply.  patch_dashboard_uid.py strips those fields
+# alongside the datasource UID rewrite so the classic provisioner accepts
+# them.  Set to false to disable infra dashboards entirely (no provider
+# entry will be rendered, no infra/ subdir created).
+horde_monitoring_grafana_provision_infra_dashboards: true
+
 # Pinned release tag for the horde-exporters project.
 # In release mode the role downloads the release manifest from this tag and
 # resolves the actual dashboard tarball filename and checksum automatically.
-horde_monitoring_grafana_dashboards_release_version: "v0.1.2"
+horde_monitoring_grafana_dashboards_release_version: "v0.1.5"
 
 # --- release mode settings ---
 # GitHub repository that hosts the releases.
@@ -291,15 +308,21 @@ horde_monitoring_grafana_dashboards_release_checksum: ""
 # --- git mode settings (legacy) ---
 horde_monitoring_grafana_dashboards_repo_url: "https://github.com/Haidra-Org/horde-exporters.git"
 # Pin to a full SHA for reproducible deployments.
-horde_monitoring_grafana_dashboards_repo_ref: "096c1fb8451b27e0a3dd0fc32092dda92e0e52e3"
+horde_monitoring_grafana_dashboards_repo_ref: "af550545a7b6421a1720b7cd03ef59abac0367c6"
 # Paths inside the cloned repo where dashboard JSON files live.
 # Override if the upstream repo restructures.
 horde_monitoring_grafana_dashboards_git_app_path: "packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards"
 horde_monitoring_grafana_dashboards_git_infra_path: "dashboards"
 
 # --- local mode settings ---
-# Filesystem path on the target host containing app/ and infra/ subdirectories.
+# Filesystem path on the target host that is the base for local dashboard sources.
 horde_monitoring_grafana_dashboards_local_path: ""
+# Sub-paths under local_path for app and infra dashboards.
+# Override when the local checkout does not use the default app/ / infra/ layout.
+# e.g. for a horde-exporters checkout set local_app_path to:
+#   packages/ai-horde-stats-exporter/src/ai_horde_stats_exporter/dashboards
+horde_monitoring_grafana_dashboards_local_app_path: "app"
+horde_monitoring_grafana_dashboards_local_infra_path: "infra"
 
 # Alertmanager datasource in Grafana
 # When set to a non-empty URL, provisions an Alertmanager datasource in Grafana
@@ -342,6 +365,15 @@ horde_monitoring_postgres_job_name: "postgres"
 # Application-level alerts (AI Horde API health via the stats exporter).
 # Requires the horde-exporter scrape target in Prometheus.
 horde_monitoring_install_app_alerts: true
+
+# OTLP-sourced application alerts (AI Horde API latency & webhook reliability,
+# via application-instrumented histograms/counters in the telemetry tenant).
+# Requires the ai-horde service to be running with OTEL_SDK_DISABLED="false"
+# and the Alloy OTLP-metrics forwarder enabled.
+horde_monitoring_install_otlp_app_alerts: true
+# Thresholds used by the OTLP app alerts (seconds, p95).
+horde_monitoring_otlp_generate_p95_threshold_seconds: 2.0
+horde_monitoring_otlp_pop_p95_threshold_seconds: 1.0
 
 # Prometheus self-monitoring alerts (remote write, rule evaluation, targets).
 horde_monitoring_install_prometheus_alerts: true
@@ -472,6 +504,12 @@ horde_monitoring_pyroscope_application_retention: "0"
 horde_monitoring_pyroscope_infrastructure_retention: "30d"
 horde_monitoring_pyroscope_telemetry_retention: "3d"
 horde_monitoring_pyroscope_public_retention: "90d"
+
+# The telemetry tenant is reserved for Tempo span metrics + OTLP-sourced
+# Mimir metrics; Pyroscope profiles do not currently flow there.  Leave the
+# override out by default to keep config aligned with what's actually used,
+# and flip this on when/if you start pushing profiles to that tenant.
+horde_monitoring_pyroscope_telemetry_enabled: false
 
 # Additional per-tenant override entries (dict). Merged into runtime-overrides.yaml.
 horde_monitoring_pyroscope_extra_tenant_overrides: {}

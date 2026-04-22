@@ -5,9 +5,13 @@
 - name: Fail fast if required variables are missing
   ansible.builtin.fail:
     msg: >-
-      You must define ai_horde_postgres_password and ai_horde_secret_key!
+      You must define ai_horde_postgres_password, ai_horde_secret_key,
+      and ai_horde_env_overrides.KUDOS_TRUST_THRESHOLD!
       See README.md for required variables.
-  when: not (ai_horde_postgres_password | default('') | length > 0) or not (ai_horde_secret_key | default('') | length > 0)
+  when:
+    - not (ai_horde_postgres_password | default('') | length > 0)
+      or not (ai_horde_secret_key | default('') | length > 0)
+      or not ((ai_horde_env_overrides | default({})).get('KUDOS_TRUST_THRESHOLD', '') | string | length > 0)
 
 - name: Deploy AI-Horde via Docker Compose
   ansible.builtin.include_tasks: docker.yml

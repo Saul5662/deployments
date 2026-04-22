@@ -94,9 +94,27 @@ load_env() {
 
 compose_down() {
   local root_dir="${1:?compose_down requires a directory}"
-  if type dc &>/dev/null; then
-    dc down -v --remove-orphans 2>/dev/null || true
+  local project="${2:-}"
+
+  # Prefer dc() if available AND the compose file still exists. Otherwise
+  # fall back to a project-name-only invocation so orphan containers can
+  # still be cleaned up after a partial / repeated teardown.
+  local dc_ran=false
+  if type dc &>/dev/null && [ -f "${COMPOSE_DIR:-}/docker-compose.yml" ]; then
+    if dc down -v --remove-orphans; then
+      dc_ran=true
+    else
+      warn "dc down reported an error; will attempt project-only fallback."
+    fi
   fi
+  if [ "$dc_ran" = false ] && [ -n "$project" ]; then
+    if docker compose --project-name "$project" ps --quiet 2>/dev/null | grep -q .; then
+      log "Tearing down compose project '$project' (compose file unavailable) ..."
+      docker compose --project-name "$project" down -v --remove-orphans \
+        || warn "docker compose down for project '$project' returned non-zero."
+    fi
+  fi
+
   if [ -d "$root_dir" ]; then
     log "Removing $root_dir ..."
     sudo rm -rf "$root_dir"
@@ -104,6 +122,52 @@ compose_down() {
     git -C "$REPO_ROOT" checkout -- "$root_dir" 2>/dev/null || true
   fi
   log "Local deployment cleaned up."
+}
+
+# ── Orphan-name conflict cleanup ────────────────────────────
+# Usage: cleanup_known_container_name_conflicts <project> <name1> [name2 ...]
+#
+# Some compose templates use fixed `container_name:` values (e.g. mimir,
+# grafana). When a previous run was associated with a *different* compose
+# project (e.g. `horde-monitoring` vs the directory-default `compose`),
+# `docker compose up` will fail with a name-collision error before the
+# stack starts. Detect such orphans (containers with one of the known
+# names whose compose-project label does NOT match <project>) and remove
+# them. Set HORDE_AUTO_CLEAN_ORPHANS=false to require manual intervention
+# instead.
+cleanup_known_container_name_conflicts() {
+  local project="${1:?project name required}"
+  shift
+  local auto_clean="${HORDE_AUTO_CLEAN_ORPHANS:-true}"
+  local -a conflicts=()
+  local name container_project
+
+  for name in "$@"; do
+    if docker ps -a --format '{{.Names}}' | grep -Fxq "$name"; then
+      container_project=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$name" 2>/dev/null || true)
+      if [ "$container_project" != "$project" ]; then
+        conflicts+=("$name")
+      fi
+    fi
+  done
+
+  if [ "${#conflicts[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  warn "Found containers with names that conflict with project '$project': ${conflicts[*]}"
+  if [ "$auto_clean" != "true" ]; then
+    err "Auto-clean disabled (HORDE_AUTO_CLEAN_ORPHANS=$auto_clean)."
+    err "Remove the conflicting containers manually, or rerun with HORDE_AUTO_CLEAN_ORPHANS=true."
+    return 1
+  fi
+
+  warn "Removing conflicting containers before startup ..."
+  if ! docker rm -f "${conflicts[@]}" >/dev/null 2>&1; then
+    err "Failed to remove one or more conflicting containers: ${conflicts[*]}"
+    return 1
+  fi
+  log "Removed conflicting containers: ${conflicts[*]}"
 }
 
 compose_status() {
@@ -125,6 +189,42 @@ compose_logs() {
 }
 
 # ── Source checkout ──────────────────────────────────────────
+# Usage: sync_local_source <local_src_dir> <dest_dir> <label>
+#
+# Mirrors a local working tree into <dest_dir> using rsync, replacing
+# any existing checkout there.  Excludes .git, virtualenvs, caches, and
+# common build artefacts so the build context stays small.  Used by the
+# full-stack local deploy when AI_HORDE_LOCAL_SRC / FRONTPAGE_LOCAL_SRC
+# (or --local-* flags) are set, allowing in-progress, unpushed local
+# changes to flow into the rebuilt container image.
+sync_local_source() {
+  local src="$1" dest="$2" label="$3"
+  if [ ! -d "$src" ]; then
+    err "$label local source path does not exist: $src"
+    exit 1
+  fi
+  if ! command -v rsync >/dev/null 2>&1; then
+    err "rsync is required for --local-* source overrides; please install it."
+    exit 1
+  fi
+  log "Syncing $label local source from $src -> $dest ..."
+  mkdir -p "$dest"
+  rsync -a --delete \
+    --exclude='.git/' \
+    --exclude='.venv/' \
+    --exclude='venv/' \
+    --exclude='__pycache__/' \
+    --exclude='*.pyc' \
+    --exclude='.pytest_cache/' \
+    --exclude='.mypy_cache/' \
+    --exclude='.ruff_cache/' \
+    --exclude='node_modules/' \
+    --exclude='dist/' \
+    --exclude='build/' \
+    --exclude='.tox/' \
+    "$src"/ "$dest"/
+}
+
 # Usage: clone_or_update_source <repo_url> <dest_dir> <ref>
 clone_or_update_source() {
   local repo_url="$1" dest_dir="$2" ref="$3"
@@ -332,6 +432,9 @@ bootstrap_embedded_garage() {
   fi
   if [[ -n "${GARAGE_S3_PYROSCOPE_BUCKET:-}" ]]; then
     garage_buckets+=("$GARAGE_S3_PYROSCOPE_BUCKET")
+  fi
+  if [[ -n "${GARAGE_S3_AIHORDE_BUCKET:-}" ]]; then
+    garage_buckets+=("$GARAGE_S3_AIHORDE_BUCKET")
   fi
 
   for bucket in "${garage_buckets[@]}"; do

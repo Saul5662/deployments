@@ -1,7 +1,16 @@
 # {{ ansible_managed }}
 services:
   aihorde:
+{% if ai_horde_build_context | default('') | length > 0 %}
     image: {{ ai_horde_image }}
+    build:
+      context: {{ ai_horde_build_context }}
+{% if ai_horde_build_dockerfile | default('') | length > 0 %}
+      dockerfile: {{ ai_horde_build_dockerfile }}
+{% endif %}
+{% else %}
+    image: {{ ai_horde_image }}
+{% endif %}
     restart: unless-stopped
     command:
       - python
@@ -21,6 +30,10 @@ services:
       - "{{ ai_horde_listen }}:{{ ai_horde_port }}-{{ ai_horde_port + (ai_horde_replicas | default(1) | int) - 1 }}:7001"
     env_file:
       - {{ ai_horde_base_dir }}/.env
+{% for extra in ai_horde_extra_env_files | default([]) %}
+      - path: {{ extra if extra.startswith('/') else (ai_horde_base_dir ~ '/' ~ extra) }}
+        required: false
+{% endfor %}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
