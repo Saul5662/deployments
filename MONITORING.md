@@ -21,20 +21,19 @@ and `remote_write` configuration.
 ## Architecture
 
 ```
-                              ┌──── Monitoring Host ──────────────────────────┐
-AI Horde APIs                 │                                               │
-     │                        │  Prometheus (native)                          │
-     ▼                        │    ├─ scrapes horde-exporter, node, mimir … │
-  horde-exporter (systemd)    │    └─ remote_write ──► Mimir (Docker)        │
-     │ /metrics               │                           │                   │
-    └────── scraped by ──────┘               S3 backend (embedded/external)  │
-                                                          │                   │
-                              │                       Grafana (Docker)        │
-                              │                           │ queries Mimir     │
-                              └───────────────────────────┘
-                                        ▲
-┌──── App Hosts ──────────┐             │
-│  Grafana Alloy           ├── logs/traces (and optional host metrics) ──┘
+                                    ┌──── Monitoring Host ──────────────────────────┐
+AI Horde APIs                       │                                               │
+     │                              │  Prometheus (native)                          │
+     ▼                              │    ├─ scrapes horde-exporter, node, mimir …   │
+  horde-exporter (systemd)          │    └─ remote_write ──► Mimir (Docker)         │
+     │ /metrics                     │                           │                   │
+     └────── scraped by ───────────>|              S3 backend (embedded/external)   │
+                                    │                            │                  │
+                                    │                       Grafana (Docker)        │
+                                    │                           │ queries Mimir     │
+                                    └───────────────────────────┘───────────────────┘
+┌──── App Hosts ───────────┐                                              ▲   
+│  Grafana Alloy           ├── logs/traces (and optional host metrics) ───┘
 └──────────────────────────┘
 ```
 
@@ -172,8 +171,8 @@ preserving diagnostic value:
 
 1. **App-side head sampler** (`OTEL_TRACES_SAMPLER=parentbased_traceidratio`,
    `OTEL_TRACES_SAMPLER_ARG=1.0` by default — i.e. no head sampling).
-   Available as a relief valve: lower it only if a single instance ever sustains
-   >1k rps and SDK overhead becomes measurable. Decisions are made *before*
+   Available as a relief valve: lower it if a single instance ever sustains
+   1k+ rps and SDK overhead becomes measurable. Decisions are made *before*
    span creation, so every fractional reduction proportionally erodes the
    tail sampler's view of errors. Use `parentbased_traceidratio` to keep
    trace coherence across services when lowering.
@@ -275,32 +274,6 @@ curl http://127.0.0.1:9009/api/v1/user_limits -H 'X-Scope-OrgID: ai-horde-app'
 docker logs grafana
 systemctl restart mimir-monitoring   # restarts entire Docker Compose stack
 ```
-
-#### Known harmless log noise
-
-Grafana 12.x emits the following entry once per externally-authored
-dashboard at every provisioning poll:
-
-```
-[SHOULD NOT HAPPEN] failed to update managedFields ... err="failed to convert
-new object (default/<name>; dashboard.grafana.app/v2beta1, Kind=Dashboard) to
-smd typed: errors: ... .spec.elements.panel-NN.kind: field not declared in
-schema, .spec.layout.kind: field not declared in schema, ..."
-```
-
-Cause: the file-based dashboard provisioner expects classic v1 JSON, but
-the dashboards we ship from `horde-exporters` are exported in the
-`dashboard.grafana.app/v2beta1` envelope (apiVersion/kind/metadata/spec).
-Grafana's apiserver attempts a server-managed-fields update and the v2beta1
-schema rejects panel/layout/variables `kind` markers that originated in
-externally-authored exports.
-
-Functionally these dashboards still load and render correctly (verify via
-the `/api/search` endpoint or the UI). The fix belongs upstream in
-`horde-exporters` (export as classic v1 JSON, drop the v2beta1 envelope).
-We deliberately do **not** reimplement Grafana's v2beta1→v1 converter in
-[`patch_dashboard_uid.py`](roles/horde_monitoring/files/patch_dashboard_uid.py)
-— that path is fragile and would rot every Grafana minor release.
 
 ### Configuration Drift
 
