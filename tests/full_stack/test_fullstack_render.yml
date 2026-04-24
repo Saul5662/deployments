@@ -254,4 +254,3 @@
       ansible.builtin.file:
         path: /tmp/fullstack-test
         state: absent
-
