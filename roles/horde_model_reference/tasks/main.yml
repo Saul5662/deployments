@@ -1,0 +1,56 @@
+---
+# horde_model_reference role entry point
+
+# ── Fail-fast guards ──────────────────────────────────────────────────────────
+
+- name: Validate replicate mode value
+  ansible.builtin.assert:
+    that:
+      - horde_model_reference_replicate_mode | upper in ['PRIMARY', 'REPLICA']
+    fail_msg: >-
+      horde_model_reference_replicate_mode must be PRIMARY or REPLICA.
+      Got '{{ horde_model_reference_replicate_mode }}'.
+
+- name: Validate worker count
+  ansible.builtin.assert:
+    that:
+      - (horde_model_reference_workers | int) >= 1
+    fail_msg: >-
+      horde_model_reference_workers must be >= 1.
+      Got '{{ horde_model_reference_workers }}'.
+
+- name: Fail if multi-worker PRIMARY configured without Redis
+  ansible.builtin.fail:
+    msg: >-
+      horde_model_reference_workers={{ horde_model_reference_workers }} > 1
+      requires horde_model_reference_redis_enabled: true.
+      Multi-worker PRIMARY deployments need Redis for distributed cache
+      invalidation across uvicorn worker processes.
+  when:
+    - horde_model_reference_replicate_mode | upper == 'PRIMARY'
+    - (horde_model_reference_workers | int) > 1
+    - not (horde_model_reference_redis_enabled | bool)
+
+# ── Docker Compose deployment ─────────────────────────────────────────────────
+
+- name: Deploy horde-model-reference via Docker Compose
+  ansible.builtin.include_tasks: docker.yml
+
+# ── HAProxy conf.d integration ────────────────────────────────────────────────
+
+- name: Configure HAProxy conf.d drop-in
+  when: horde_model_reference_haproxy_enabled | bool
+  block:
+    - name: Bootstrap HAProxy conf.d systemd override
+      ansible.builtin.include_role:
+        name: _haproxy_confd_bootstrap
+
+    - name: Template horde-model-reference HAProxy conf.d fragment
+      ansible.builtin.template:
+        src: haproxy-model-reference.cfg.j2
+        dest: /etc/haproxy/conf.d/horde-model-reference.cfg
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Restart HAProxy

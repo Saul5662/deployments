@@ -1,0 +1,178 @@
+---
+# Fast policy/contract checks for horde_model_reference role defaults.
+# Runs on CI without Docker — reads defaults and template files only.
+# Risk categories: reproducibility, security, operational
+
+- name: Validate horde_model_reference role contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _defaults_path: "{{ playbook_dir }}/../../roles/horde_model_reference/defaults/main.yml"
+    _docker_tasks_path: "{{ playbook_dir }}/../../roles/horde_model_reference/tasks/docker.yml"
+    _compose_template_path: "{{ playbook_dir }}/../../roles/horde_model_reference/templates/docker-compose.model-reference.yml.j2"
+    _env_template_path: "{{ playbook_dir }}/../../roles/horde_model_reference/templates/model-reference.env.j2"
+
+  tasks:
+    - name: Load role defaults (escape Jinja2 so from_yaml parses cleanly)
+      ansible.builtin.set_fact:
+        _defaults: >-
+          {{ lookup('ansible.builtin.file', _defaults_path)
+             | regex_replace('\{\{', '__LBRACE__')
+             | regex_replace('\}\}', '__RBRACE__')
+             | from_yaml }}
+
+    - name: Assert canonical_format default is v2 (not LEGACY)
+      ansible.builtin.assert:
+        that:
+          - _defaults.horde_model_reference_canonical_format == 'v2'
+        fail_msg: >-
+          horde_model_reference_canonical_format default must be 'v2', not 'LEGACY'.
+          LEGACY is a backwards-compat option, not the correct default for new deployments.
+
+    - name: Assert replicate_mode default is PRIMARY
+      ansible.builtin.assert:
+        that:
+          - _defaults.horde_model_reference_replicate_mode == 'PRIMARY'
+        fail_msg: "horde_model_reference_replicate_mode default must be PRIMARY"
+
+    - name: Assert port default is 19800
+      ansible.builtin.assert:
+        that:
+          - _defaults.horde_model_reference_port == 19800
+        fail_msg: "horde_model_reference_port default must be 19800 (service canonical port)"
+
+    - name: Assert listen address defaults to loopback (not 0.0.0.0)
+      ansible.builtin.assert:
+        that:
+          - _defaults.horde_model_reference_listen == '127.0.0.1'
+        fail_msg: >-
+          horde_model_reference_listen default must be 127.0.0.1.
+          Binding to 0.0.0.0 must be an explicit operator choice.
+
+    - name: Assert redis disabled by default
+      ansible.builtin.assert:
+        that:
+          - not (_defaults.horde_model_reference_redis_enabled | bool)
+        fail_msg: "horde_model_reference_redis_enabled must default to false"
+
+    - name: Assert github_seed disabled by default
+      ansible.builtin.assert:
+        that:
+          - not (_defaults.horde_model_reference_github_seed_enabled | bool)
+        fail_msg: >-
+          horde_model_reference_github_seed_enabled must default to false.
+          Seeding on every deploy would overwrite operator-managed model data.
+
+    - name: Assert OTel disabled by default
+      ansible.builtin.assert:
+        that:
+          - _defaults.horde_model_reference_otel_sdk_disabled == 'true'
+        fail_msg: "horde_model_reference_otel_sdk_disabled must default to 'true'"
+
+    - name: Assert haproxy_enabled defaults to false
+      ansible.builtin.assert:
+        that:
+          - not (_defaults.horde_model_reference_haproxy_enabled | bool)
+        fail_msg: "horde_model_reference_haproxy_enabled must default to false"
+
+    - name: Assert HAProxy hostname list includes both production domains
+      ansible.builtin.assert:
+        that:
+          - "'models.aihorde.net' in _defaults.horde_model_reference_haproxy_hostnames"
+          - "'models.stablehorde.net' in _defaults.horde_model_reference_haproxy_hostnames"
+        fail_msg: "Default HAProxy hostnames must include models.aihorde.net and models.stablehorde.net"
+
+    - name: Load docker tasks file
+      ansible.builtin.slurp:
+        path: "{{ _docker_tasks_path }}"
+      register: _docker_tasks_raw
+
+    - name: Assert readiness contract polls /api/heartbeat (not raw port)
+      ansible.builtin.assert:
+        that:
+          - "'api/heartbeat' in (_docker_tasks_raw.content | b64decode)"
+          - "'horde_model_reference_port' in (_docker_tasks_raw.content | b64decode)"
+          - (_docker_tasks_raw.content | b64decode) is not regex('(?ms)wait_for:.*port:')
+        fail_msg: >-
+          Docker readiness must use URI /api/heartbeat, not wait_for port check.
+
+    - name: Load compose template
+      ansible.builtin.slurp:
+        path: "{{ _compose_template_path }}"
+      register: _compose_tpl
+
+    - name: Assert compose template has healthcheck using /api/heartbeat
+      ansible.builtin.assert:
+        that:
+          - "'/api/heartbeat' in (_compose_tpl.content | b64decode)"
+          - "'healthcheck' in (_compose_tpl.content | b64decode)"
+        fail_msg: "Compose template must define Docker healthcheck using /api/heartbeat"
+
+    - name: Assert compose template mounts /data volume
+      ansible.builtin.assert:
+        that:
+          - "':/data' in (_compose_tpl.content | b64decode)"
+        fail_msg: "Compose template must mount data dir to /data"
+
+    - name: Assert compose template has horde labels
+      ansible.builtin.assert:
+        that:
+          - "'horde.logs' in (_compose_tpl.content | b64decode)"
+          - "'horde.app' in (_compose_tpl.content | b64decode)"
+        fail_msg: "Compose template must define horde.logs and horde.app labels"
+
+    - name: Assert compose template does not publish Redis port to host
+      ansible.builtin.assert:
+        that:
+          - "'6379:6379' not in (_compose_tpl.content | b64decode)"
+        fail_msg: "Redis port must not be published to the host"
+
+    - name: Assert Docker checks are gated by start_services
+      ansible.builtin.assert:
+        that:
+          - "'when: horde_model_reference_start_services | bool' in (_docker_tasks_raw.content | b64decode)"
+          - "'Verify Docker is available' in (_docker_tasks_raw.content | b64decode)"
+        fail_msg: "Docker checks must be gated behind horde_model_reference_start_services"
+
+    - name: Load env template
+      ansible.builtin.slurp:
+        path: "{{ _env_template_path }}"
+      register: _env_tpl
+
+    - name: Assert env template has ansible_managed header
+      ansible.builtin.assert:
+        that:
+          - "'ansible_managed' in (_env_tpl.content | b64decode)"
+        fail_msg: "Env template must begin with ansible_managed comment"
+
+    - name: Assert env template renders REPLICATE_MODE
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_REPLICATE_MODE' in (_env_tpl.content | b64decode)"
+        fail_msg: "Env template must render HORDE_MODEL_REFERENCE_REPLICATE_MODE"
+
+    - name: Assert env template uses nested pending_queue keys
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE__ENABLED' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE_ENABLED' not in (_env_tpl.content | b64decode)"
+        fail_msg: "Env template must use HORDE_MODEL_REFERENCE_PENDING_QUEUE__* nested keys"
+
+    - name: Assert env template renders exposed tuning keys
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_CACHE_TTL_SECONDS' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_TIMEOUT' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_HORDE_API_TIMEOUT' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_STATISTICS_CACHE_TTL' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_DELETION_RISK_CACHE_TTL' in (_env_tpl.content | b64decode)"
+        fail_msg: "Env template must render first-class tuning keys"
+
+    - name: Assert env template has mode-conditional sections
+      ansible.builtin.assert:
+        that:
+          - "'REPLICA' in (_env_tpl.content | b64decode)"
+          - "'PRIMARY' in (_env_tpl.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_URL' in (_env_tpl.content | b64decode)"
+        fail_msg: "Env template must have conditional REPLICA/PRIMARY sections"

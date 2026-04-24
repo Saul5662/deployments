@@ -1,0 +1,69 @@
+---
+# requires: docker-daemon
+# idempotency: skip
+# Test playbook: horde_model_reference role (integration, starts Docker services)
+#
+# Requires a Docker daemon.  Runs as part of the full integration test suite
+# (tests/run_tests.sh) — not suitable for pure config-render CI runs.
+#
+# PRIMARY mode single-worker — verify heartbeat + replicate_mode response
+
+- name: Test horde_model_reference integration (PRIMARY single-worker)
+  hosts: testhost
+  become: true
+  gather_facts: true
+  vars:
+    horde_model_reference_start_services: true
+    horde_model_reference_replicate_mode: "PRIMARY"
+    horde_model_reference_canonical_format: "v2"
+    # Enable GitHub seeding so the service has model data to serve.
+    # In real deployments this would only be set on first boot.
+    horde_model_reference_github_seed_enabled: true
+    horde_model_reference_make_folders: true
+    horde_model_reference_redis_enabled: false
+    horde_model_reference_workers: 1
+    horde_model_reference_port: 19800
+    horde_model_reference_listen: "127.0.0.1"
+    horde_model_reference_log_driver: "local"
+    horde_model_reference_otel_sdk_disabled: "true"
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Assert heartbeat endpoint returns 200
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:19800/api/heartbeat"
+        method: GET
+        status_code: 200
+      register: _heartbeat
+
+    - name: Assert heartbeat response has status ok
+      ansible.builtin.assert:
+        that:
+          - "_heartbeat.json.status == 'ok'"
+          - "'ai_horde' in _heartbeat.json"
+        fail_msg: >-
+          Heartbeat response must have status=ok and ai_horde field.
+          Got: {{ _heartbeat.json }}
+
+    - name: Assert replicate_mode endpoint returns PRIMARY + writable
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:19800/api/replicate_mode"
+        method: GET
+        status_code: 200
+      register: _mode
+
+    - name: Assert mode response shows PRIMARY and writable
+      ansible.builtin.assert:
+        that:
+          - "_mode.json.replicate_mode == 'PRIMARY'"
+          - "_mode.json.writable == true"
+        fail_msg: >-
+          replicate_mode endpoint must return replicate_mode=PRIMARY and writable=true.
+          Got: {{ _mode.json }}
+
+    - name: Tear down horde-model-reference stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ horde_model_reference_base_dir }}"
+        state: absent
+      become: true

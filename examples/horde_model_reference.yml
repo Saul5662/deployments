@@ -1,0 +1,97 @@
+---
+# Example: Deploy horde-model-reference FastAPI service.
+#
+# Usage:
+#   ansible-playbook examples/horde_model_reference.yml -i inventory.yml
+#
+# horde-model-reference serves AI Horde model metadata (image generation,
+# text generation, and other categories) via a FastAPI HTTP API.
+#
+# Mode overview:
+#   PRIMARY  — Authoritative source.  Reads and writes model JSON from the
+#              /data volume.  Enable github_seed_enabled on first boot to
+#              populate the volume from GitHub.
+#   REPLICA  — Read-only mirror.  If primary_api_url is set, fetches from
+#              PRIMARY and falls back to GitHub when unreachable.
+#              If primary_api_url is empty, runs in GitHub-only mode.
+#
+# Multi-worker setup (PRIMARY only; scale beyond a single uvicorn worker):
+#   Set workers > 1 AND redis_enabled: true.  The role enforces this as a
+#   fail-fast guard — multi-worker without Redis is a configuration error.
+#
+# HAProxy conf.d:
+#   Set haproxy_enabled: true to install HAProxy and drop a frontend/backend
+#   fragment into /etc/haproxy/conf.d/ that routes models.aihorde.net and
+#   models.stablehorde.net to the local service on port 19800.
+#
+# Eventual production hostnames:
+#   models.aihorde.net   — v2 API endpoint
+#   models.stablehorde.net — legacy-compatible endpoint (same service)
+
+# ── PRIMARY deployment (authoritative) ───────────────────────────────────────
+- name: Deploy horde-model-reference (PRIMARY)
+  hosts: horde_server
+  become: true
+
+  roles:
+    - role: horde_model_reference
+      vars:
+        # Recommend pinning to a digest for reproducible deployments:
+        # horde_model_reference_image: "ghcr.io/haidra-org/horde-model-reference@sha256:<digest>"
+        horde_model_reference_image: "ghcr.io/haidra-org/horde-model-reference:main"
+
+        horde_model_reference_replicate_mode: "PRIMARY"
+        horde_model_reference_canonical_format: "v2"
+        horde_model_reference_cache_ttl_seconds: 60
+        horde_model_reference_primary_api_timeout: 10
+
+        # Enable on first boot to seed the data volume from GitHub.
+        # Disable once /data is populated to avoid overwriting operator changes.
+        horde_model_reference_github_seed_enabled: false
+
+        horde_model_reference_port: 19800
+        horde_model_reference_listen: "127.0.0.1"
+
+        # Multi-worker example (uncomment + set redis_enabled to enable):
+        # horde_model_reference_workers: 4
+        # horde_model_reference_redis_enabled: true
+
+        # Pending queue allowlists (PRIMARY):
+        # horde_model_reference_pending_queue_requestor_ids:
+        #   - "12345"
+        # horde_model_reference_pending_queue_approver_ids:
+        #   - "12345"
+
+        # HAProxy conf.d routing (models.aihorde.net / models.stablehorde.net):
+        # horde_model_reference_haproxy_enabled: true
+        # horde_model_reference_haproxy_frontend_port: 80
+
+        # CORS (required if the API is called from browser-side JS):
+        # horde_model_reference_cors_allowed_origins:
+        #   - "https://aihorde.net"
+        #   - "https://stablehorde.net"
+
+        # OTel (enable when a collector is available):
+        # horde_model_reference_otel_sdk_disabled: "false"
+        # horde_model_reference_env_overrides:
+        #   OTEL_EXPORTER_OTLP_ENDPOINT: "http://alloy:4318"
+        #   OTEL_SERVICE_NAME: "horde-model-reference"
+
+# ── REPLICA deployment (read-only mirror) ────────────────────────────────────
+# Uncomment and adapt this play to deploy a REPLICA alongside the PRIMARY.
+#
+# - name: Deploy horde-model-reference (REPLICA)
+#   hosts: horde_replica_server
+#   become: true
+#
+#   roles:
+#     - role: horde_model_reference
+#       vars:
+#         horde_model_reference_image: "ghcr.io/haidra-org/horde-model-reference:main"
+#         horde_model_reference_replicate_mode: "REPLICA"
+#         # Optional: URL of the PRIMARY service API.
+#         # Leave empty for GitHub-only REPLICA mode.
+#         horde_model_reference_primary_api_url: "https://models.aihorde.net/api"
+#         horde_model_reference_enable_github_fallback: true
+#         horde_model_reference_port: 19800
+#         horde_model_reference_listen: "127.0.0.1"

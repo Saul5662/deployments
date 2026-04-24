@@ -139,6 +139,14 @@ dc_artbot() {
     "$@"
 }
 
+dc_model_reference() {
+  docker compose \
+    -f "$LOCAL_ROOT/model-reference/docker-compose.yml" \
+    -f "$STATIC_ROOT/model-reference/docker-compose.network-overlay.yml" \
+    --project-name horde-model-reference \
+    "$@"
+}
+
 
 # wire_aihorde_to_garage — write runtime/ai-horde/.env.garage with R2/AWS
 # vars pointing at the embedded Garage S3 endpoint, and recreate the
@@ -188,7 +196,7 @@ check_fullstack_prerequisites() {
   check_prerequisites git ss
 
   # Port conflict detection
-  local core_ports=(80 8006 8404)
+  local core_ports=(80 8006 8404 19800)
   for port in "${core_ports[@]}"; do
     if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
       err "Port $port is already in use."
@@ -656,6 +664,17 @@ cmd_up() {
   }
   echo ""
 
+  # Tier 2b: Model Reference (horde-model-reference)
+  log "═══ Tier 2b: horde-model-reference ═══"
+  log "Starting horde-model-reference ..."
+  dc_model_reference up -d
+  wait_for_url "http://127.0.0.1:19800/api/heartbeat" "horde-model-reference" 120 || {
+    err "horde-model-reference did not start. Dumping logs:"
+    dc_model_reference logs --tail=50
+    return 1
+  }
+  echo ""
+
   # Tier 3: Monitoring (optional)
   if [ "$WITH_MONITORING" = true ]; then
     log "═══ Tier 3: Monitoring Stack ═══"
@@ -782,6 +801,7 @@ cmd_down() {
   dc_artbot down --remove-orphans 2>/dev/null || true
   dc_haproxy down --remove-orphans 2>/dev/null || true
   dc_monitoring down --remove-orphans 2>/dev/null || true
+  dc_model_reference down --remove-orphans 2>/dev/null || true
   dc_frontpage down --remove-orphans 2>/dev/null || true
   dc_backend down --remove-orphans 2>/dev/null || true
 
@@ -799,6 +819,9 @@ cmd_status() {
   echo ""
   info "─── AiHordeFrontpage ───"
   dc_frontpage ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
+  echo ""
+  info "─── horde-model-reference ───"
+  dc_model_reference ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
   echo ""
   info "─── HAProxy ───"
   dc_haproxy ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
@@ -821,6 +844,9 @@ cmd_logs() {
     frontpage|frontend)
       dc_frontpage logs -f --tail=100
       ;;
+    model-reference|models)
+      dc_model_reference logs -f --tail=100
+      ;;
     haproxy)
       dc_haproxy logs -f --tail=100
       ;;
@@ -839,11 +865,13 @@ cmd_logs() {
       echo "---"
       dc_frontpage logs --tail=20 2>/dev/null || true
       echo "---"
+      dc_model_reference logs --tail=20 2>/dev/null || true
+      echo "---"
       dc_haproxy logs --tail=20 2>/dev/null || true
       ;;
     *)
       warn "Unknown service: $service"
-      echo "Usage: $0 logs [backend|frontpage|haproxy|monitoring|artbot]"
+      echo "Usage: $0 logs [backend|frontpage|model-reference|haproxy|monitoring|artbot]"
       exit 1
       ;;
   esac
@@ -863,6 +891,7 @@ print_banner() {
   else
     info "  API (direct):  http://localhost:7001/api/v2/status/heartbeat"
   fi
+  info "  Models API:    http://localhost:19800/api/heartbeat"
   info "  HAProxy stats: http://localhost:8404/stats"
   if [ "$WITH_MONITORING" = true ]; then
     info "  Grafana:       http://localhost:3000/"

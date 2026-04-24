@@ -1,0 +1,319 @@
+---
+# Test playbook: horde_model_reference role (config rendering only, no Docker)
+#
+# Play 1: Positive — PRIMARY mode with defaults; assert compose + env correctness
+# Play 2: Negative — PRIMARY workers > 1 without redis_enabled must fail-fast
+# Play 3: Positive — REPLICA mode without primary_api_url is allowed
+# Play 4: Positive — REPLICA mode with primary_api_url; assert env output
+
+- name: Test horde_model_reference render (PRIMARY defaults)
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "PRIMARY"
+    horde_model_reference_canonical_format: "v2"
+    horde_model_reference_github_seed_enabled: false
+    horde_model_reference_redis_enabled: false
+    horde_model_reference_workers: 1
+    horde_model_reference_port: 19800
+    horde_model_reference_listen: "127.0.0.1"
+    horde_model_reference_otel_sdk_disabled: "true"
+    horde_model_reference_env_overrides:
+      CUSTOM_VAR: "test_value"
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Stat docker-compose.yml
+      ansible.builtin.stat:
+        path: /opt/horde-model-reference/docker-compose.yml
+      register: _compose
+
+    - name: Assert docker-compose.yml exists with correct permissions
+      ansible.builtin.assert:
+        that:
+          - _compose.stat.exists
+          - _compose.stat.mode == "0600"
+          - _compose.stat.pw_name == "root"
+        fail_msg: "docker-compose.yml missing or wrong permissions"
+
+    - name: Read docker-compose.yml
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference/docker-compose.yml
+      register: _compose_content
+
+    - name: Assert compose has model-reference service
+      ansible.builtin.assert:
+        that:
+          - "'model-reference:' in (_compose_content.content | b64decode)"
+          - "'image: ghcr.io/haidra-org/horde-model-reference:main' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose missing model-reference service or image reference"
+
+    - name: Assert compose has correct port binding
+      ansible.builtin.assert:
+        that:
+          - "'127.0.0.1:19800:19800' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose port binding must be 127.0.0.1:19800:19800"
+
+    - name: Assert compose mounts data volume
+      ansible.builtin.assert:
+        that:
+          - "':/data' in (_compose_content.content | b64decode)"
+          - "'/var/lib/horde-model-reference:/data' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose must bind-mount horde_model_reference_data_dir to /data"
+
+    - name: Assert compose has horde logging labels
+      ansible.builtin.assert:
+        that:
+          - "'horde.logs' in (_compose_content.content | b64decode)"
+          - "'horde.app' in (_compose_content.content | b64decode)"
+          - "'horde.component' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose services must have horde.logs/horde.app/horde.component labels"
+
+    - name: Assert compose has heartbeat-based healthcheck
+      ansible.builtin.assert:
+        that:
+          - "'healthcheck' in (_compose_content.content | b64decode)"
+          - "'/api/heartbeat' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose healthcheck must use /api/heartbeat"
+
+    - name: Assert compose has host-gateway extra_host
+      ansible.builtin.assert:
+        that:
+          - "'host.docker.internal:host-gateway' in (_compose_content.content | b64decode)"
+        fail_msg: "Compose must set host.docker.internal:host-gateway"
+
+    - name: Assert compose uses journald log driver
+      ansible.builtin.assert:
+        that:
+          - "'journald' in (_compose_content.content | b64decode)"
+        fail_msg: "Log driver must be journald"
+
+    - name: Assert compose does NOT have multi-worker command override (workers=1)
+      ansible.builtin.assert:
+        that:
+          - "'uvicorn' not in (_compose_content.content | b64decode)"
+        fail_msg: "workers=1 must not add uvicorn command override — default CMD is fastapi run"
+
+    - name: Assert compose does NOT have redis service (redis_enabled=false)
+      ansible.builtin.assert:
+        that:
+          - "'redis:' not in (_compose_content.content | b64decode)"
+        fail_msg: "redis_enabled=false must not add Redis service to compose"
+
+    - name: Stat .env file
+      ansible.builtin.stat:
+        path: /opt/horde-model-reference/.env
+      register: _env
+
+    - name: Assert .env has secure permissions
+      ansible.builtin.assert:
+        that:
+          - _env.stat.exists
+          - _env.stat.mode == "0600"
+          - _env.stat.pw_name == "root"
+        fail_msg: ".env file missing or wrong permissions (must be 0600 root:root)"
+
+    - name: Read .env file
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference/.env
+      register: _env_content
+
+    - name: Assert .env renders PRIMARY mode variables
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_REPLICATE_MODE=PRIMARY' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_CANONICAL_FORMAT=v2' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_MAKE_FOLDERS=true' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_GITHUB_SEED_ENABLED=false' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE__ENABLED=true' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE_ENABLED=' not in (_env_content.content | b64decode)"
+        fail_msg: ".env missing required PRIMARY mode vars"
+
+    - name: Assert .env renders exposed tuning defaults
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_CACHE_TTL_SECONDS=60' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_TIMEOUT=10' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_HORDE_API_TIMEOUT=30' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_STATISTICS_CACHE_TTL=300' in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_DELETION_RISK_CACHE_TTL=300' in (_env_content.content | b64decode)"
+        fail_msg: ".env missing one or more exposed tuning defaults"
+
+    - name: Assert .env has OTel disabled
+      ansible.builtin.assert:
+        that:
+          - "'OTEL_SDK_DISABLED=true' in (_env_content.content | b64decode)"
+        fail_msg: ".env must set OTEL_SDK_DISABLED=true by default"
+
+    - name: Assert .env does NOT contain REPLICA vars in PRIMARY mode
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_URL' not in (_env_content.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_ENABLE_GITHUB_FALLBACK' not in (_env_content.content | b64decode)"
+        fail_msg: ".env must not include REPLICA vars when replicate_mode=PRIMARY"
+
+    - name: Assert .env renders env_overrides
+      ansible.builtin.assert:
+        that:
+          - "'CUSTOM_VAR=\"test_value\"' in (_env_content.content | b64decode)"
+        fail_msg: ".env must render horde_model_reference_env_overrides entries"
+
+
+- name: Test horde_model_reference fail-fast (workers > 1 without Redis)
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_workers: 4
+    # horde_model_reference_redis_enabled deliberately omitted (defaults false)
+  tasks:
+    - name: Expect role to fail on multi-worker without Redis
+      block:
+        - name: Apply role (should fail)
+          ansible.builtin.include_role:
+            name: horde_model_reference
+
+        - name: Fail if role did not error
+          ansible.builtin.fail:
+            msg: "Role should have failed: workers > 1 without redis_enabled"
+      rescue:
+        - name: Assert failure was about missing Redis for multi-worker
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is defined
+              - "'redis_enabled' in ansible_failed_result.msg or 'Redis' in ansible_failed_result.msg"
+            fail_msg: >-
+              Expected multi-worker Redis fail-fast, got:
+              {{ ansible_failed_result.msg | default('(no message)') }}
+
+        - name: Confirm fail-fast enforced
+          ansible.builtin.debug:
+            msg: "PASS — correctly rejected workers > 1 without redis_enabled"
+
+
+- name: Test horde_model_reference render (REPLICA without primary_api_url)
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "REPLICA"
+    horde_model_reference_base_dir: /opt/horde-model-reference-replica-noprimary-test
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Read REPLICA (no primary URL) .env file
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference-replica-noprimary-test/.env
+      register: _replica_noprimary_env
+
+    - name: Assert REPLICA mode is rendered without requiring primary_api_url
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_REPLICATE_MODE=REPLICA' in (_replica_noprimary_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_URL=' in (_replica_noprimary_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_ENABLE_GITHUB_FALLBACK=true' in (_replica_noprimary_env.content | b64decode)"
+        fail_msg: "REPLICA mode should be valid without primary_api_url"
+
+    - name: Cleanup REPLICA (no primary URL) test directory
+      ansible.builtin.file:
+        path: /opt/horde-model-reference-replica-noprimary-test
+        state: absent
+
+
+- name: Test horde_model_reference render (REPLICA mode)
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "REPLICA"
+    horde_model_reference_primary_api_url: "https://models.aihorde.net/api"
+    horde_model_reference_enable_github_fallback: true
+    horde_model_reference_redis_enabled: false
+    horde_model_reference_base_dir: /opt/horde-model-reference-replica-test
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Read REPLICA .env file
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference-replica-test/.env
+      register: _replica_env
+
+    - name: Assert .env renders REPLICA mode variables
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_REPLICATE_MODE=REPLICA' in (_replica_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PRIMARY_API_URL=https://models.aihorde.net/api' in (_replica_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_ENABLE_GITHUB_FALLBACK=true' in (_replica_env.content | b64decode)"
+        fail_msg: ".env missing required REPLICA mode vars"
+
+    - name: Assert .env does NOT contain PRIMARY vars in REPLICA mode
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_GITHUB_SEED_ENABLED' not in (_replica_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE__ENABLED' not in (_replica_env.content | b64decode)"
+        fail_msg: ".env must not include PRIMARY vars when replicate_mode=REPLICA"
+
+    - name: Cleanup REPLICA test directory
+      ansible.builtin.file:
+        path: /opt/horde-model-reference-replica-test
+        state: absent
+
+
+- name: Test horde_model_reference render (multi-worker PRIMARY + Redis)
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "PRIMARY"
+    horde_model_reference_workers: 2
+    horde_model_reference_redis_enabled: true
+    horde_model_reference_redis_url: "redis://redis:6379/0"
+    horde_model_reference_redis_use_pubsub: true
+    horde_model_reference_base_dir: /opt/horde-model-reference-redis-test
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Read multi-worker compose file
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference-redis-test/docker-compose.yml
+      register: _redis_compose
+
+    - name: Assert compose has uvicorn multi-worker command override
+      ansible.builtin.assert:
+        that:
+          - "'uvicorn' in (_redis_compose.content | b64decode)"
+          - "'--workers' in (_redis_compose.content | b64decode)"
+          - "\"- '2'\" in (_redis_compose.content | b64decode) or '- \"2\"' in (_redis_compose.content | b64decode)"
+        fail_msg: "Multi-worker compose must override CMD with uvicorn --workers"
+
+    - name: Assert compose has Redis service
+      ansible.builtin.assert:
+        that:
+          - "'redis:' in (_redis_compose.content | b64decode)"
+          - "'redis-cli' in (_redis_compose.content | b64decode)"
+          - "'service_healthy' in (_redis_compose.content | b64decode)"
+        fail_msg: "Multi-worker compose must include Redis service with health condition"
+
+    - name: Read multi-worker .env file
+      ansible.builtin.slurp:
+        src: /opt/horde-model-reference-redis-test/.env
+      register: _redis_env
+
+    - name: Assert .env renders Redis vars
+      ansible.builtin.assert:
+        that:
+          - "'HORDE_MODEL_REFERENCE_REDIS__USE_REDIS=true' in (_redis_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_REDIS__URL=redis://redis:6379/0' in (_redis_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_REDIS__POOL_SIZE=10' in (_redis_env.content | b64decode)"
+          - "'HORDE_MODEL_REFERENCE_REDIS__USE_PUBSUB=true' in (_redis_env.content | b64decode)"
+        fail_msg: ".env must render Redis connection vars when redis_enabled=true"
+
+    - name: Cleanup Redis test directory
+      ansible.builtin.file:
+        path: /opt/horde-model-reference-redis-test
+        state: absent

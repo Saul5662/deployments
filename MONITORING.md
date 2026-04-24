@@ -14,7 +14,7 @@ fit together.
 | [horde_alloy](roles/horde_alloy/)                   | Grafana Alloy telemetry collector on application hosts                     | [README](roles/horde_alloy/README.md)          |
 
 Prometheus and Alertmanager are deployed directly using the
-`prometheus.prometheus` community collection in your playbook — they are not
+`prometheus.prometheus` community collection in your playbook. They are not
 wrapped by these roles, giving you full control over TLS, scrape targets,
 and `remote_write` configuration.
 
@@ -164,6 +164,60 @@ from instrumented applications go to the telemetry tenant. See the
 [example playbook](examples/horde_monitoring_stack.yml) for the exact
 `write_relabel_configs`.
 
+## Trace Sampling Pyramid
+
+Production trace ingest is shaped by two cooperating samplers — **head** in
+the application SDK and **tail** in Alloy — to bound storage cost while
+preserving diagnostic value:
+
+1. **App-side head sampler** (`OTEL_TRACES_SAMPLER=parentbased_traceidratio`,
+   `OTEL_TRACES_SAMPLER_ARG=1.0` by default — i.e. no head sampling).
+   Available as a relief valve: lower it only if a single instance ever sustains
+   >1k rps and SDK overhead becomes measurable. Decisions are made *before*
+   span creation, so every fractional reduction proportionally erodes the
+   tail sampler's view of errors. Use `parentbased_traceidratio` to keep
+   trace coherence across services when lowering.
+2. **Alloy filter** (`otelcol.processor.filter`, enabled by default) drops
+   high-volume / low-signal spans (sub-2ms Redis hits, healthcheck/heartbeat
+   probes) regardless of head-sample status. Error spans are always exempt
+   (`status.code != STATUS_CODE_ERROR` guard on every expression).
+3. **Alloy tail sampler** (`otelcol.processor.tail_sampling`, enabled by
+   default) decides per-trace after `decision_wait` (5s):
+   - 100% of traces with a span in `STATUS_CODE_ERROR`
+   - 100% of traces whose root span exceeded
+     `horde_alloy_trace_sampling_latency_ms` (1000 ms default)
+   - `horde_alloy_trace_sampling_probability`% (1% default) of everything else
+
+**Effective ingest rates at defaults** (head=1.0, filter on, tail policies as above):
+
+| Trace class             | Head | Filter | Tail | Effective ingest |
+| ----------------------- | ---- | ------ | ---- | ---------------- |
+| Healthy + fast          | keep | keep   | 1%   | 1% of healthy traces |
+| Errors                  | keep | keep   | 100% | 100% of errors |
+| Slow (>1s)              | keep | keep   | 100% | 100% of slow traces |
+| Sub-2ms Redis hits      | keep | drop   | n/a  | 0% (dropped at filter) |
+| Healthcheck/heartbeat   | keep | drop   | n/a  | 0% (dropped at filter) |
+
+> **Why head=1.0 by default.** At fleet scale (~10k req/hr ≈ 0.1 rps/instance)
+> the SDK CPU cost of full sampling is negligible, and tail-only trimming
+> preserves 100% of operationally-meaningful traces. Head sampling is a
+> blunt instrument — it cannot distinguish errors from healthy traffic
+> because the decision happens before the request even runs. Reach for it
+> only if profiling shows OTel SDK in the hot path.
+
+Tunable knobs (in `roles/horde_alloy/defaults/main.yml` unless noted):
+
+- `horde_alloy_trace_tail_sampling_enabled` — master switch
+- `horde_alloy_trace_filter_enabled` — master switch for the noise filter
+- `horde_alloy_trace_filter_exclude_spans` — list of OTTL drop expressions
+- `horde_alloy_trace_sampling_decision_wait` — must exceed p99 trace duration
+- `horde_alloy_trace_sampling_num_traces` — buffer cap (memory bound)
+- `horde_alloy_trace_sampling_expected_new_per_sec` — sizing hint
+- `horde_alloy_trace_sampling_latency_ms` — slow-trace threshold
+- `horde_alloy_trace_sampling_probability` — baseline keep % (0-100)
+- `ai_horde_otel_traces_sampler_arg` (`roles/ai_horde/defaults/main.yml`) —
+  app-side head ratio
+
 ## Security
 
 - All services bind to `127.0.0.1` — not exposed without a reverse proxy
@@ -221,6 +275,32 @@ curl http://127.0.0.1:9009/api/v1/user_limits -H 'X-Scope-OrgID: ai-horde-app'
 docker logs grafana
 systemctl restart mimir-monitoring   # restarts entire Docker Compose stack
 ```
+
+#### Known harmless log noise
+
+Grafana 12.x emits the following entry once per externally-authored
+dashboard at every provisioning poll:
+
+```
+[SHOULD NOT HAPPEN] failed to update managedFields ... err="failed to convert
+new object (default/<name>; dashboard.grafana.app/v2beta1, Kind=Dashboard) to
+smd typed: errors: ... .spec.elements.panel-NN.kind: field not declared in
+schema, .spec.layout.kind: field not declared in schema, ..."
+```
+
+Cause: the file-based dashboard provisioner expects classic v1 JSON, but
+the dashboards we ship from `horde-exporters` are exported in the
+`dashboard.grafana.app/v2beta1` envelope (apiVersion/kind/metadata/spec).
+Grafana's apiserver attempts a server-managed-fields update and the v2beta1
+schema rejects panel/layout/variables `kind` markers that originated in
+externally-authored exports.
+
+Functionally these dashboards still load and render correctly (verify via
+the `/api/search` endpoint or the UI). The fix belongs upstream in
+`horde-exporters` (export as classic v1 JSON, drop the v2beta1 envelope).
+We deliberately do **not** reimplement Grafana's v2beta1→v1 converter in
+[`patch_dashboard_uid.py`](roles/horde_monitoring/files/patch_dashboard_uid.py)
+— that path is fragile and would rot every Grafana minor release.
 
 ### Configuration Drift
 

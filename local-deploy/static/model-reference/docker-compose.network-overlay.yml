@@ -1,0 +1,19 @@
+# Overlay: connects the horde-model-reference service to the shared horde-stack network.
+# Used with: docker compose -f docker-compose.yml -f docker-compose.network-overlay.yml
+#
+# The alias `model-reference` on horde-stack lets HAProxy resolve the service
+# by name (server model-reference model-reference:19800) via Docker's embedded
+# DNS without any external DNS dependency.
+services:
+  model-reference:
+    networks:
+      hmr_network: {}
+      horde-stack:
+        aliases:
+          - model-reference
+
+networks:
+  hmr_network:
+    driver: bridge
+  horde-stack:
+    external: true

@@ -67,9 +67,23 @@
     aihorde_frontpage_repo: "https://github.com/Haidra-Org/AiHordeFrontpage.git"
     aihorde_frontpage_repo_version: "master"
 
+    horde_model_reference_base_dir: "{{ playbook_dir }}/../../local-deploy/runtime/model-reference"
+    horde_model_reference_data_dir: "{{ playbook_dir }}/../../local-deploy/runtime/model-reference/data"
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "PRIMARY"
+    # One-time seed: enable when bootstrapping a fresh local stack.
+    # Set to false (or remove) once the data volume is populated.
+    horde_model_reference_github_seed_enabled: true
+    horde_model_reference_make_folders: true
+    horde_model_reference_canonical_format: "v2"
+    horde_model_reference_listen: "127.0.0.1"
+    horde_model_reference_port: 19800
+    horde_model_reference_log_driver: "local"
+
   roles:
     - ai_horde
     - aihorde_frontpage
+    - horde_model_reference
 
   post_tasks:
     - name: Ensure HAProxy config directory exists

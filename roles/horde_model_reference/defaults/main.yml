@@ -1,0 +1,158 @@
+---
+# horde_model_reference role defaults
+#
+# Override any of these in your playbook vars, group_vars, or inventory.
+# See roles/horde_model_reference/README.md for full variable reference.
+
+# ── Image / build ─────────────────────────────────────────────────────────────
+# Recommend pinning to a digest in production:
+#   horde_model_reference_image: "ghcr.io/haidra-org/horde-model-reference@sha256:<digest>"
+horde_model_reference_image: "ghcr.io/haidra-org/horde-model-reference:main"
+
+# Set horde_model_reference_build_context to a local path to build from source
+# instead of pulling a pre-built image.  Leave empty to use the registry image.
+horde_model_reference_build_context: ""
+horde_model_reference_build_dockerfile: ""
+
+# ── Network ────────────────────────────────────────────────────────────────────
+# Host-side bind address and port.  Keep 127.0.0.1 unless cross-host access
+# is required (e.g. a REPLICA pointing at a PRIMARY on another host).
+horde_model_reference_port: 19800
+horde_model_reference_listen: "127.0.0.1"
+
+# ── Directories ────────────────────────────────────────────────────────────────
+horde_model_reference_base_dir: "/opt/horde-model-reference"
+horde_model_reference_data_dir: "/var/lib/horde-model-reference"
+
+# ── Service mode ───────────────────────────────────────────────────────────────
+# PRIMARY: authoritative source — reads and writes model JSON from /data.
+# REPLICA: read-only mirror — fetches from horde_model_reference_primary_api_url
+#          (falls back to GitHub if the primary is unreachable and
+#           horde_model_reference_enable_github_fallback=true).
+horde_model_reference_replicate_mode: "PRIMARY"
+
+# Optional in REPLICA mode. URL of the PRIMARY service API,
+# e.g. "https://models.aihorde.net/api".
+# If empty, REPLICA falls back to GitHub-only reads.
+horde_model_reference_primary_api_url: ""
+
+# Canonical format for PRIMARY deployments.
+# v2     — the modern v2 API categories are writable (default).
+# LEGACY — the legacy file format is canonical; v2 is computed on read.
+horde_model_reference_canonical_format: "v2"
+
+# ── API/cache tuning ──────────────────────────────────────────────────────────
+# In-memory cache TTL for model-reference files.
+horde_model_reference_cache_ttl_seconds: 60
+
+# Retry policy for legacy reference downloads.
+horde_model_reference_legacy_download_retry_max_attempts: 3
+horde_model_reference_legacy_download_retry_backoff_seconds: 2
+
+# HTTP timeout for REPLICA fetches from PRIMARY API.
+horde_model_reference_primary_api_timeout: 10
+
+# Horde API integration timeouts/cache.
+horde_model_reference_horde_api_timeout: 30
+horde_model_reference_horde_api_cache_ttl: 60
+horde_model_reference_statistics_cache_ttl: 300
+horde_model_reference_deletion_risk_cache_ttl: 300
+horde_model_reference_enable_statistics_precompute: false
+
+# Preferred download hosts for deletion-risk analysis.
+horde_model_reference_preferred_file_hosts:
+  - huggingface.co
+horde_model_reference_low_usage_threshold_percentage: 0.0065
+horde_model_reference_text_gen_low_usage_threshold_percentage: 0.02
+horde_model_reference_text_gen_ignore_download_hosts: true
+horde_model_reference_text_gen_critical_usage_threshold: 10
+horde_model_reference_text_gen_critical_worker_threshold: 1
+
+# ── Multi-worker / Redis ────────────────────────────────────────────────────────
+# In PRIMARY mode, workers > 1 requires Redis for distributed cache
+# invalidation across uvicorn worker processes.
+horde_model_reference_workers: 1
+horde_model_reference_redis_enabled: false
+horde_model_reference_redis_image: "redis:7-alpine"
+horde_model_reference_redis_url: "redis://redis:6379/0"
+horde_model_reference_redis_use_pubsub: true
+horde_model_reference_redis_pool_size: 10
+horde_model_reference_redis_socket_timeout: 5
+horde_model_reference_redis_socket_connect_timeout: 5
+horde_model_reference_redis_retry_max_attempts: 3
+horde_model_reference_redis_retry_backoff_seconds: 0.5
+horde_model_reference_redis_key_prefix: "horde:model_ref"
+# Empty string means "unset" (service falls back to cache_ttl_seconds).
+horde_model_reference_redis_ttl_seconds: ""
+
+# ── Data initialisation (PRIMARY only) ─────────────────────────────────────────
+# Seed the /data volume from GitHub on first boot.  Only useful for a brand-new
+# PRIMARY deployment — disable once the volume is populated.
+horde_model_reference_github_seed_enabled: false
+
+# Create the /data directory hierarchy on startup if it does not exist.
+horde_model_reference_make_folders: true
+
+# ── REPLICA options ────────────────────────────────────────────────────────────
+# Fall back to GitHub model data when the PRIMARY URL is unreachable.
+horde_model_reference_enable_github_fallback: true
+
+# ── CORS ───────────────────────────────────────────────────────────────────────
+# List of allowed origins for CORS preflight responses.  Empty list disables
+# CORS (same-origin only).  Example: ["https://aihorde.net"]
+horde_model_reference_cors_allowed_origins: []
+
+# ── Pending queue (PRIMARY only) ───────────────────────────────────────────────
+# Enable the in-memory write-pending queue so that model updates from
+# concurrent writers are serialized and not dropped under load.
+horde_model_reference_pending_queue_enabled: true
+horde_model_reference_pending_queue_requestor_ids: []
+horde_model_reference_pending_queue_approver_ids: []
+horde_model_reference_pending_queue_relative_subdir: "pending_queue"
+horde_model_reference_pending_queue_root_path_override: ""
+horde_model_reference_pending_queue_max_segment_bytes: 5242880
+
+# ── Audit trail ────────────────────────────────────────────────────────────────
+horde_model_reference_audit_enabled: true
+horde_model_reference_audit_relative_subdir: "audit"
+horde_model_reference_audit_root_path_override: ""
+horde_model_reference_audit_max_segment_bytes: 5242880
+
+# ── Cache hydration ────────────────────────────────────────────────────────────
+horde_model_reference_cache_hydration_enabled: false
+horde_model_reference_cache_hydration_interval_seconds: 240
+horde_model_reference_cache_hydration_stale_ttl_seconds: 3600
+horde_model_reference_cache_hydration_startup_delay_seconds: 5
+
+# ── HAProxy conf.d integration ─────────────────────────────────────────────────
+# When true the role includes _haproxy_confd_bootstrap and drops a
+# frontend/backend fragment into /etc/haproxy/conf.d/.
+horde_model_reference_haproxy_enabled: false
+
+# Hostnames handled by the conf.d frontend stanza.  These ACLs route incoming
+# requests to the horde_model_reference backend.
+horde_model_reference_haproxy_hostnames:
+  - models.aihorde.net
+  - models.stablehorde.net
+
+# Port for the HAProxy conf.d frontend binding.  Default 80 (HTTP).
+# For TLS termination use 443 and manage certificates separately.
+horde_model_reference_haproxy_frontend_port: 80
+
+# ── Observability ──────────────────────────────────────────────────────────────
+# OTel SDK is disabled by default.  Enable and configure via env_overrides
+# (OTEL_EXPORTER_OTLP_ENDPOINT etc.) when a collector is available.
+horde_model_reference_otel_sdk_disabled: "true"
+
+# ── Docker / lifecycle ─────────────────────────────────────────────────────────
+horde_model_reference_log_driver: "journald"
+horde_model_reference_start_services: true
+
+# Extra .env files to load alongside the rendered .env.  Useful for injecting
+# credentials that should not be stored in Ansible vars (e.g. vault-encrypted
+# files dropped by a separate role).
+horde_model_reference_extra_env_files: []
+
+# Freeform key/value pairs appended to the rendered .env file last, allowing
+# any env var to be overridden without modifying the role template.
+horde_model_reference_env_overrides: {}

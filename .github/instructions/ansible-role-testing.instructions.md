@@ -32,6 +32,9 @@ applyTo: "tests/**/*.yml,tests/**/*.sh,roles/**/tasks/*.yml,roles/**/defaults/*.
 - `tests/monitoring/test_prometheus_only.yml`: Validates Mimir/Prometheus-focused deployment mode without full Grafana stack assumptions.
 - `tests/monitoring/test_runtime_services.yml`: Validates runtime service health and live metrics push behavior for monitoring components.
 - `tests/monitoring/test_stats_exporter_render.yml`: Validates horde_stats_exporter template rendering for config, systemd service unit, and logrotate.
+- `tests/model_reference/test_model_reference_render.yml`: Validates horde_model_reference Docker Compose and env template rendering, including PRIMARY/REPLICA/multi-worker variants and fail-fast guards.
+- `tests/model_reference/test_model_reference_policy_contracts.yml`: Enforces horde_model_reference policy contracts (defaults, port/bind safety, health-check semantics, secret hygiene, template markers).
+- `tests/model_reference/test_model_reference_integration.yml`: Validates live horde_model_reference PRIMARY deployment — heartbeat and replicate_mode HTTP assertions (requires docker-daemon).
 - `tests/regen_worker/test_regen_worker_render.yml`: Validates regen worker rendering contracts for bridge data and systemd unit output.
 
 # Related Non-Discovered Harness Files

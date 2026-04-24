@@ -1,0 +1,34 @@
+# horde-model-reference HAProxy conf.d fragment
+# Managed by the horde_model_reference Ansible role — do not edit by hand.
+#
+# Routing: hostname-based ACL → horde_model_reference backend.
+# Default hostnames: {{ horde_model_reference_haproxy_hostnames | join(', ') }}
+#
+# This fragment is loaded by the _haproxy_confd_bootstrap systemd override
+# alongside any other conf.d fragments.  It adds a dedicated frontend
+# binding on port {{ horde_model_reference_haproxy_frontend_port }} that routes all traffic destined for
+# the configured hostnames to the local horde-model-reference service.
+#
+# For shared-port TLS termination (port 443) managed by an upstream proxy,
+# remove the frontend stanza and add the backend routing ACL to your main
+# haproxy.cfg instead.
+
+frontend horde_model_reference_front
+    bind 0.0.0.0:{{ horde_model_reference_haproxy_frontend_port }}
+    mode http
+    maxconn 4096
+    option httplog
+
+    acl is_model_reference hdr(host) -i {% for h in horde_model_reference_haproxy_hostnames %}{{ h }}{% if not loop.last %} {% endif %}{% endfor %}
+
+    use_backend horde_model_reference if is_model_reference
+
+backend horde_model_reference
+    balance leastconn
+    timeout queue 60s
+    retries 3
+    option forwardfor if-none
+    option httpchk
+    http-check send meth GET uri /api/heartbeat hdr Host localhost
+    http-check expect status 200
+    server model-reference 127.0.0.1:{{ horde_model_reference_port }} check observe layer7

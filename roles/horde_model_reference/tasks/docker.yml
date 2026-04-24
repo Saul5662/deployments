@@ -1,0 +1,84 @@
+---
+# Core tasks to deploy horde-model-reference via Docker Compose
+
+- name: Ensure horde-model-reference base directory exists
+  ansible.builtin.file:
+    path: "{{ horde_model_reference_base_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Ensure horde-model-reference data directory exists
+  ansible.builtin.file:
+    path: "{{ horde_model_reference_data_dir }}"
+    state: directory
+    # Service runs as UID 1000 (non-root 'horde' user in the image)
+    owner: "1000"
+    group: "1000"
+    mode: "0750"
+  become: true
+
+- name: Template horde-model-reference environment file
+  ansible.builtin.template:
+    src: model-reference.env.j2
+    dest: "{{ horde_model_reference_base_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+
+- name: Template Docker Compose for horde-model-reference
+  ansible.builtin.template:
+    src: docker-compose.model-reference.yml.j2
+    dest: "{{ horde_model_reference_base_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: Start and verify horde-model-reference Docker stack
+  when: horde_model_reference_start_services | bool
+  block:
+    - name: Verify Docker is available
+      ansible.builtin.command: docker --version
+      register: _hmr__docker_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Fail if Docker is not installed
+      ansible.builtin.fail:
+        msg: "Docker is required but not installed. Please install Docker."
+      when: _hmr__docker_check.rc != 0
+
+    - name: Verify Docker Compose V2 is available
+      ansible.builtin.command: docker compose version
+      register: _hmr__compose_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Fail if Docker Compose V2 is not available
+      ansible.builtin.fail:
+        msg: "Docker Compose V2 is required. Please install docker-compose-plugin."
+      when: _hmr__compose_check.rc != 0
+
+    - name: Manage horde-model-reference Docker Compose stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ horde_model_reference_base_dir }}"
+        state: present
+        pull: always
+        build: never
+      become: true
+      notify: Restart horde-model-reference Docker stack
+
+    - name: Wait for horde-model-reference heartbeat
+      ansible.builtin.uri:
+        url: "http://{{ horde_model_reference_listen | default('127.0.0.1') }}:{{ horde_model_reference_port }}/api/heartbeat"
+        method: GET
+        status_code: 200
+      register: _hmr__heartbeat
+      until: _hmr__heartbeat.status == 200
+      retries: 10
+      delay: 3

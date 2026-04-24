@@ -32,6 +32,7 @@ find the right folder before making changes.
 | `roles/artbot/` | Artbot web frontend deployment |
 | `roles/artbot_revproxy/` | HAProxy reverse proxy for Artbot |
 | `roles/horde_regen_worker/` | AI Horde worker deployment |
+| `roles/horde_model_reference/` | horde-model-reference FastAPI service — model metadata API (PRIMARY authoritative or REPLICA mirror mode); optional Redis for multi-worker; optional HAProxy conf.d routing for models.aihorde.net / models.stablehorde.net |
 | `roles/amd_gpu_drivers/` | AMD GPU driver and ROCm setup |
 
 ### Monitoring and telemetry roles

@@ -1,0 +1,102 @@
+# {{ ansible_managed }}
+# horde-model-reference Docker Compose stack
+# Managed by the horde_model_reference Ansible role — do not edit by hand.
+services:
+  model-reference:
+{% if horde_model_reference_build_context | default('') | length > 0 %}
+    build:
+      context: {{ horde_model_reference_build_context }}
+{% if horde_model_reference_build_dockerfile | default('') | length > 0 %}
+      dockerfile: {{ horde_model_reference_build_dockerfile }}
+{% endif %}
+      args:
+        EXTRA_DEPS: redis
+{% endif %}
+    image: {{ horde_model_reference_image }}
+    restart: unless-stopped
+{% if (horde_model_reference_workers | int) > 1 %}
+    # Multi-worker mode: override default CMD (fastapi run) with uvicorn.
+    # Redis must be enabled (horde_model_reference_redis_enabled: true) for
+    # distributed cache invalidation across worker processes.
+    command:
+      - /app/.venv/bin/python
+      - -m
+      - uvicorn
+      - horde_model_reference.service.app:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "19800"
+      - --workers
+      - "{{ horde_model_reference_workers }}"
+{% endif %}
+    labels:
+      horde.logs: "true"
+      horde.app: "horde-model-reference"
+      horde.component: "api"
+    ports:
+      - "{{ horde_model_reference_listen }}:{{ horde_model_reference_port }}:19800"
+    env_file:
+      - {{ horde_model_reference_base_dir }}/.env
+{% if horde_model_reference_extra_env_files | length > 0 %}
+{% for extra_env in horde_model_reference_extra_env_files %}
+      - path: {{ horde_model_reference_base_dir }}/{{ extra_env }}
+        required: false
+{% endfor %}
+{% endif %}
+    volumes:
+      - {{ horde_model_reference_data_dir }}:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:19800/api/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - hmr_network
+{% if horde_model_reference_redis_enabled | bool %}
+    depends_on:
+      redis:
+        condition: service_healthy
+{% endif %}
+    logging:
+      driver: {{ horde_model_reference_log_driver }}
+{% if horde_model_reference_log_driver == 'journald' %}
+      options:
+        tag: "horde-model-reference"
+{% endif %}
+
+{% if horde_model_reference_redis_enabled | bool %}
+  redis:
+    image: {{ horde_model_reference_redis_image }}
+    restart: always
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    labels:
+      horde.logs: "true"
+      horde.app: "horde-model-reference"
+      horde.component: "redis"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hmr_network
+    logging:
+      driver: {{ horde_model_reference_log_driver }}
+{% if horde_model_reference_log_driver == 'journald' %}
+      options:
+        tag: "horde-model-reference-redis"
+{% endif %}
+
+{% endif %}
+networks:
+  hmr_network:
+    driver: bridge

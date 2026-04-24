@@ -22,6 +22,12 @@
     aihorde_frontpage_start_services: false
     aihorde_frontpage_build_config: local
 
+    horde_model_reference_base_dir: /tmp/fullstack-test/model-reference
+    horde_model_reference_data_dir: /tmp/fullstack-test/model-reference/data
+    horde_model_reference_start_services: false
+    horde_model_reference_replicate_mode: "PRIMARY"
+    horde_model_reference_github_seed_enabled: false
+
   tasks:
     - name: Create mock AI-Horde source directory
       ansible.builtin.file:
@@ -46,6 +52,12 @@
         name: aihorde_frontpage
       vars:
         aihorde_frontpage_start_services: false
+
+    - name: Run horde_model_reference role
+      ansible.builtin.include_role:
+        name: horde_model_reference
+      vars:
+        horde_model_reference_start_services: false
 
   post_tasks:
     - name: Assert AI-Horde compose exists
@@ -196,6 +208,45 @@
           - "'horde-stack' in (exporter_overlay_content.content | b64decode)"
           - "'external: true' in (exporter_overlay_content.content | b64decode)"
         fail_msg: "Exporter overlay missing horde-exporter service or horde-stack network"
+
+    - name: Assert model-reference compose exists
+      ansible.builtin.stat:
+        path: /tmp/fullstack-test/model-reference/docker-compose.yml
+      register: model_reference_compose
+    - name: Verify model-reference compose exists
+      ansible.builtin.assert:
+        that: model_reference_compose.stat.exists
+        fail_msg: "model-reference docker-compose.yml not rendered"
+
+    - name: Assert model-reference network overlay exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../local-deploy/static/model-reference/docker-compose.network-overlay.yml"
+      register: model_reference_overlay
+    - name: Verify model-reference network overlay exists
+      ansible.builtin.assert:
+        that: model_reference_overlay.stat.exists
+        fail_msg: "model-reference network overlay not found"
+
+    - name: Read model-reference network overlay
+      ansible.builtin.slurp:
+        path: "{{ playbook_dir }}/../../local-deploy/static/model-reference/docker-compose.network-overlay.yml"
+      register: model_reference_overlay_content
+
+    - name: Assert model-reference overlay connects to horde-stack
+      ansible.builtin.assert:
+        that:
+          - "'model-reference' in (model_reference_overlay_content.content | b64decode)"
+          - "'horde-stack' in (model_reference_overlay_content.content | b64decode)"
+          - "'external: true' in (model_reference_overlay_content.content | b64decode)"
+        fail_msg: "model-reference overlay missing model-reference service or horde-stack network"
+
+    - name: Assert HAProxy config has model-reference backend
+      ansible.builtin.assert:
+        that:
+          - "'horde_model_reference' in (haproxy_content.content | b64decode)"
+          - "'model-reference:19800' in (haproxy_content.content | b64decode)"
+          - "'use_backend horde_model_reference' in (haproxy_content.content | b64decode)"
+        fail_msg: "HAProxy config missing horde_model_reference backend or routing"
 
     - name: Clean up test directory
       ansible.builtin.file:

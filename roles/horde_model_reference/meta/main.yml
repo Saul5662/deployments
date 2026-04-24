@@ -1,0 +1,19 @@
+galaxy_info:
+  role_name: horde_model_reference
+  author: Haidra-Org
+  description: >
+    Deploy the horde-model-reference FastAPI service via Docker Compose.
+    Supports PRIMARY and REPLICA modes, multi-worker Redis-backed deployments,
+    and optional HAProxy conf.d frontend/backend routing.
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bookworm
+
+dependencies: []
