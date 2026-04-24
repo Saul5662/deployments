@@ -44,25 +44,25 @@
   block:
     - name: Verify Docker is available
       ansible.builtin.command: docker --version
-      register: _hmr__docker_check
+      register: horde_model_reference_docker_check
       changed_when: false
       ignore_errors: true
 
     - name: Fail if Docker is not installed
       ansible.builtin.fail:
         msg: "Docker is required but not installed. Please install Docker."
-      when: _hmr__docker_check.rc != 0
+      when: horde_model_reference_docker_check.rc != 0
 
     - name: Verify Docker Compose V2 is available
       ansible.builtin.command: docker compose version
-      register: _hmr__compose_check
+      register: horde_model_reference_compose_check
       changed_when: false
       ignore_errors: true
 
     - name: Fail if Docker Compose V2 is not available
       ansible.builtin.fail:
         msg: "Docker Compose V2 is required. Please install docker-compose-plugin."
-      when: _hmr__compose_check.rc != 0
+      when: horde_model_reference_compose_check.rc != 0
 
     - name: Manage horde-model-reference Docker Compose stack
       community.docker.docker_compose_v2:
@@ -78,7 +78,7 @@
         url: "http://{{ horde_model_reference_listen | default('127.0.0.1') }}:{{ horde_model_reference_port }}/api/heartbeat"
         method: GET
         status_code: 200
-      register: _hmr__heartbeat
-      until: _hmr__heartbeat.status == 200
+      register: horde_model_reference_heartbeat
+      until: horde_model_reference_heartbeat.status == 200
       retries: 10
       delay: 3
