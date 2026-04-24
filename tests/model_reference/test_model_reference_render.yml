@@ -217,11 +217,6 @@
           - "'HORDE_MODEL_REFERENCE_ENABLE_GITHUB_FALLBACK=true' in (_replica_noprimary_env.content | b64decode)"
         fail_msg: "REPLICA mode should be valid without primary_api_url"
 
-    - name: Cleanup REPLICA (no primary URL) test directory
-      ansible.builtin.file:
-        path: /opt/horde-model-reference-replica-noprimary-test
-        state: absent
-
 
 - name: Test horde_model_reference render (REPLICA mode)
   hosts: testhost
@@ -256,11 +251,6 @@
           - "'HORDE_MODEL_REFERENCE_GITHUB_SEED_ENABLED' not in (_replica_env.content | b64decode)"
           - "'HORDE_MODEL_REFERENCE_PENDING_QUEUE__ENABLED' not in (_replica_env.content | b64decode)"
         fail_msg: ".env must not include PRIMARY vars when replicate_mode=REPLICA"
-
-    - name: Cleanup REPLICA test directory
-      ansible.builtin.file:
-        path: /opt/horde-model-reference-replica-test
-        state: absent
 
 
 - name: Test horde_model_reference render (multi-worker PRIMARY + Redis)
@@ -312,8 +302,3 @@
           - "'HORDE_MODEL_REFERENCE_REDIS__POOL_SIZE=10' in (_redis_env.content | b64decode)"
           - "'HORDE_MODEL_REFERENCE_REDIS__USE_PUBSUB=true' in (_redis_env.content | b64decode)"
         fail_msg: ".env must render Redis connection vars when redis_enabled=true"
-
-    - name: Cleanup Redis test directory
-      ansible.builtin.file:
-        path: /opt/horde-model-reference-redis-test
-        state: absent

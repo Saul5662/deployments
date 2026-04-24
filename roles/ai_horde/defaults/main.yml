@@ -2,8 +2,7 @@
 # AI-Horde backend deployment defaults
 
 # Docker image for AI-Horde backend.
-# ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
-ai_horde_image: "ghcr.io/tazlin/ai-horde:main"
+ai_horde_image: "ghcr.io/haidra-org/ai-horde:main"
 
 # Optional: when set, render a `build:` directive so `docker compose build`
 # rebuilds the image from a local source checkout instead of using the
