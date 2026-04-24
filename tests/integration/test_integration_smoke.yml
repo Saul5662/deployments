@@ -13,6 +13,8 @@
     ai_horde_start_services: false
     ai_horde_postgres_password: "test-password"
     ai_horde_secret_key: "test-secret"
+    ai_horde_env_overrides:
+      KUDOS_TRUST_THRESHOLD: "100"
     ai_horde_port: 7001
     ai_horde_listen: "0.0.0.0"
     ai_horde_admins: ["test_user#1"]

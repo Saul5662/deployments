@@ -19,6 +19,18 @@
 # On idempotent re-runs where org 2 already exists, Phase 1 detects it,
 # includes the public section from the start, and Phase 2 is a no-op.
 
+- name: Ensure Grafana provisioning directories exist
+  ansible.builtin.file:
+    path: "{{ horde_monitoring_grafana_provisioning_dir }}/{{ item }}"
+    state: directory
+    owner: "472"
+    group: "472"
+    mode: "0755"
+  become: true
+  loop:
+    - datasources
+    - dashboards
+
 - name: Template Grafana datasource provisioning
   ansible.builtin.template:
     src: grafana-datasources.yml.j2

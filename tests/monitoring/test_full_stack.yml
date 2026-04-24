@@ -589,9 +589,9 @@
         that:
           - "'tempo:' in (compose_lt.content | b64decode)"
           - "'grafana/tempo:2.7.1' in (compose_lt.content | b64decode)"
-          - "'3200:3200' in (compose_lt.content | b64decode)"
-          - "'4317:4317' in (compose_lt.content | b64decode)"
-          - "'4318:4318' in (compose_lt.content | b64decode)"
+          - "'127.0.0.1:3200:3200' in (compose_lt.content | b64decode)"
+          - "'127.0.0.1:4317:4317' not in (compose_lt.content | b64decode)"
+          - "'127.0.0.1:4318:4318' not in (compose_lt.content | b64decode)"
           - "'tempo.yaml:/etc/tempo/tempo.yaml:ro' in (compose_lt.content | b64decode)"
         fail_msg: "Docker Compose must contain a Tempo service with pinned image tag and config mount"
 
@@ -744,10 +744,10 @@
         that:
           - "'pyroscope:' in (compose_lt.content | b64decode)"
           - "'grafana/pyroscope:1.19.0' in (compose_lt.content | b64decode)"
-          - "'4040:4040' in (compose_lt.content | b64decode)"
-          - "'pyroscope.yaml:/etc/pyroscope/pyroscope.yaml:ro' in (compose_lt.content | b64decode)"
-          - "'runtime-overrides.yaml:/etc/pyroscope/runtime-overrides.yaml:ro' in (compose_lt.content | b64decode)"
-        fail_msg: "Docker Compose must contain a Pyroscope service with pinned image tag and runtime overrides mount"
+          - "'127.0.0.1:4040:4040' in (compose_lt.content | b64decode)"
+          - "'/etc/pyroscope:ro' in (compose_lt.content | b64decode)"
+          - "'/var/lib/pyroscope:/data' in (compose_lt.content | b64decode)"
+        fail_msg: "Docker Compose must contain a Pyroscope service with pinned image tag and read-only config mount"
 
     - name: Stat Pyroscope config file
       ansible.builtin.stat:

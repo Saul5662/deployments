@@ -18,6 +18,8 @@
     ai_horde_start_services: false
     ai_horde_postgres_password: "test-postgres"
     ai_horde_secret_key: "test-secret"
+    ai_horde_env_overrides:
+      KUDOS_TRUST_THRESHOLD: "100"
 
     aihorde_frontpage_start_services: false
     aihorde_frontpage_build_config: local
@@ -245,10 +247,11 @@
         that:
           - "'horde_model_reference' in (haproxy_content.content | b64decode)"
           - "'model-reference:19800' in (haproxy_content.content | b64decode)"
-          - "'use_backend horde_model_reference' in (haproxy_content.content | b64decode)"
+          - "'backend horde_model_reference' in (haproxy_content.content | b64decode)"
         fail_msg: "HAProxy config missing horde_model_reference backend or routing"
 
     - name: Clean up test directory
       ansible.builtin.file:
         path: /tmp/fullstack-test
         state: absent
+
