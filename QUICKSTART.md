@@ -93,10 +93,8 @@ Heartbeat     →  http://localhost:7001/api/v2/status/heartbeat
 ### Verify
 
 ```bash
-for i in {1..2}; do
-  curl -sf http://localhost:7001/api/v2/status/heartbeat && break
-  sleep 2
-done
+curl -sf http://localhost:7001/api/v2/status/heartbeat && break
+
 # {"message": "OK", "version": "4.48.3", ...}
 ```
 
@@ -114,10 +112,7 @@ docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml build
 docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml up -d
 
 # Verify your change (service may take a few seconds to accept traffic)
-for i in {1..2}; do
-  curl -sf http://localhost:7001/api/v2/status/heartbeat && break
-  sleep 2
-done
+curl -sf http://localhost:7001/api/v2/status/heartbeat && break
 ```
 
 ### Stop the stack
@@ -156,6 +151,8 @@ local deploy source tree, then rebuild:
 # Copy your working tree (avoid symlinking to avoid unintentional edits during ansible cleanup)
 rm -rf local-deploy/runtime/ai-horde/src
 cp -a /path/to/your/AI-Horde local-deploy/runtime/ai-horde/src
+# or rsync if you want to preserve the local-deploy source as a base and overlay your changes:
+rsync -a --exclude='.git' /path/to/your/AI-Horde/ local-deploy/runtime/ai-horde/src/
 
 # Rebuild + restart
 docker compose -f local-deploy/runtime/ai-horde/docker-compose.yml build

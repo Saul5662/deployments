@@ -1,6 +1,6 @@
 # Haidra Deployments
 
-Ansible collection for deploying Haidra services — AI Horde workers, monitoring
+Ansible collection for deploying Haidra authored services, AI Horde workers, monitoring
 infrastructure, and supporting applications.
 
 > **New here?** Start with the [Quick Start guide](QUICKSTART.md) — test an
@@ -14,13 +14,15 @@ Ansible toolkit. It targets three audiences:
 
 1. The AI Horde team operating the stack.
 2. Developers contributing to AI Horde services.
-3. External groups adopting the AI Horde stack as a package.
+3. External groups adopting or vendoring the AI Horde stack and seeking reference deployment patterns.
 
 ### Non-goals
 
 - Generic, vendor-neutral deployment abstractions for arbitrary software.
 - Replacing mature community roles for broad infrastructure concerns.
 - Hiding stack assumptions required by AI Horde topology and workflows.
+
+In short, if you are looking for a general Ansible collection for deploying the software therein, this is not it. If you are looking for a reference deployment for the AI Horde stack, this is exactly it.
 
 ## Usage
 
@@ -53,6 +55,7 @@ corresponding example playbook — or build your own `site.yml`.
 | -------------------------------------------------------- | -------------------------------------------- |
 | [ai_horde](roles/ai_horde/README.md)                     | AI Horde backend (Flask + Postgres + Redis)  |
 | [aihorde_frontpage](roles/aihorde_frontpage/README.md)   | AiHordeFrontpage (Angular SSR website)       |
+| [horde_model_reference](roles/horde_model_reference/README.md) | FastAPI service for AI Horde model metadata   |
 | [artbot](roles/artbot/README.md)                         | Web frontend for AI Horde                    |
 | [artbot_revproxy](roles/artbot_revproxy/README.md)       | HAProxy reverse proxy for Artbot             |
 | [horde_regen_worker](roles/horde_regen_worker/README.md) | AI Horde worker (Dreamer, Scribe, Alchemist) |

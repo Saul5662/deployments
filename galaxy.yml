@@ -5,6 +5,7 @@ version: "0.4.0"
 readme: "README.md"
 authors:
   - Divided by Zer0 <mail@dbzer0.com>
+  - Tazlin <tazlin@haidra.net>
 dependencies:
   "prometheus.prometheus": ">=0.16.0,<1.0.0"
   "grafana.grafana": ">=6.0.0,<7.0.0"
