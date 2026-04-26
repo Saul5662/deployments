@@ -51,39 +51,39 @@ corresponding example playbook — or build your own `site.yml`.
 
 ### Application Roles
 
-| Role                                                     | Description                                  |
-| -------------------------------------------------------- | -------------------------------------------- |
-| [ai_horde](roles/ai_horde/README.md)                     | AI Horde backend (Flask + Postgres + Redis)  |
-| [aihorde_frontpage](roles/aihorde_frontpage/README.md)   | AiHordeFrontpage (Angular SSR website)       |
-| [horde_model_reference](roles/horde_model_reference/README.md) | FastAPI service for AI Horde model metadata   |
-| [artbot](roles/artbot/README.md)                         | Web frontend for AI Horde                    |
-| [artbot_revproxy](roles/artbot_revproxy/README.md)       | HAProxy reverse proxy for Artbot             |
-| [horde_regen_worker](roles/horde_regen_worker/README.md) | AI Horde worker (Dreamer, Scribe, Alchemist) |
-| [amd_gpu_drivers](roles/amd_gpu_drivers/README.md)       | AMD GPU driver and ROCm setup                |
+| Role                                                           | Description                                  |
+| -------------------------------------------------------------- | -------------------------------------------- |
+| [ai_horde](roles/ai_horde/README.md)                           | AI Horde backend (Flask + Postgres + Redis)  |
+| [aihorde_frontpage](roles/aihorde_frontpage/README.md)         | AiHordeFrontpage (Angular SSR website)       |
+| [horde_model_reference](roles/horde_model_reference/README.md) | FastAPI service for AI Horde model metadata  |
+| [artbot](roles/artbot/README.md)                               | Web frontend for AI Horde                    |
+| [artbot_revproxy](roles/artbot_revproxy/README.md)             | HAProxy reverse proxy for Artbot             |
+| [horde_regen_worker](roles/horde_regen_worker/README.md)       | AI Horde worker (Dreamer, Scribe, Alchemist) |
+| [amd_gpu_drivers](roles/amd_gpu_drivers/README.md)             | AMD GPU driver and ROCm setup                |
 
 ### Monitoring Roles
 
-| Role                                                         | Description                                               |
-| ------------------------------------------------------------ | --------------------------------------------------------- |
+| Role                                                         | Description                                                    |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
 | [horde_monitoring](roles/horde_monitoring/README.md)         | Mimir + Grafana + S3 storage monitoring stack (Docker Compose) |
-| [horde_stats_exporter](roles/horde_stats_exporter/README.md) | AI Horde API → Prometheus metrics exporter                |
-| [horde_alloy](roles/horde_alloy/README.md)                   | Grafana Alloy telemetry collector for app hosts           |
+| [horde_stats_exporter](roles/horde_stats_exporter/README.md) | AI Horde API → Prometheus metrics exporter                     |
+| [horde_alloy](roles/horde_alloy/README.md)                   | Grafana Alloy telemetry collector for app hosts                |
 
 See [MONITORING.md](MONITORING.md) for the architecture overview, quick start,
 and how the monitoring roles work together.
 
 ## Documentation
 
-| Document                                     | Contents                                          |
-| -------------------------------------------- | ------------------------------------------------- |
-| [Quick Start](QUICKSTART.md)                 | Get running in minutes — 4 tiers from code change to production |
-| [Contributing](CONTRIBUTING.md)              | Dev setup, test conventions, PR guidelines         |
-| [Monitoring Guide](MONITORING.md)            | Architecture, quick start, troubleshooting        |
-| [Observability Stack](docs/monitoring/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive                  |
-| [Backup & Restore](docs/monitoring/BACKUP.md)           | RPO/RTO, backup configuration, restore procedures |
-| [Credentials](docs/monitoring/CREDENTIALS.md)           | Credential management and rotation                |
-| [Upgrading](docs/monitoring/UPGRADING.md)               | Component version upgrade procedures              |
-| [Migration](docs/monitoring/MIGRATION.md)               | Host migration runbook (planned and forced)       |
+| Document                                                | Contents                                                        |
+| ------------------------------------------------------- | --------------------------------------------------------------- |
+| [Quick Start](QUICKSTART.md)                            | Get running in minutes — 4 tiers from code change to production |
+| [Contributing](CONTRIBUTING.md)                         | Dev setup, test conventions, PR guidelines                      |
+| [Monitoring Guide](MONITORING.md)                       | Architecture, quick start, troubleshooting                      |
+| [Observability Stack](docs/monitoring/OBSERVABILITY.md) | Loki, Tempo, and Alloy deep-dive                                |
+| [Backup & Restore](docs/monitoring/BACKUP.md)           | RPO/RTO, backup configuration, restore procedures               |
+| [Credentials](docs/monitoring/CREDENTIALS.md)           | Credential management and rotation                              |
+| [Upgrading](docs/monitoring/UPGRADING.md)               | Component version upgrade procedures                            |
+| [Migration](docs/monitoring/MIGRATION.md)               | Host migration runbook (planned and forced)                     |
 
 ## Testing
 

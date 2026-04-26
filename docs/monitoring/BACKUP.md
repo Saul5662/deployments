@@ -14,12 +14,12 @@ timer and `mc mirror`.
 
 ## RPO / RTO Characteristics
 
-| Scenario                   | RPO (data loss)      | RTO (recovery time)                        | Notes                                      |
-| -------------------------- | -------------------- | ------------------------------------------ | ------------------------------------------ |
-| Disk failure, daily backup | ≤ 24h of metrics     | Hours (depends on data volume + bandwidth) | Restore via `mc mirror` from remote        |
-| Disk failure, no backup    | **Total loss**       | N/A — data is gone                         | Only Prometheus's local WAL (~2h) survives |
+| Scenario                   | RPO (data loss)      | RTO (recovery time)                        | Notes                                         |
+| -------------------------- | -------------------- | ------------------------------------------ | --------------------------------------------- |
+| Disk failure, daily backup | ≤ 24h of metrics     | Hours (depends on data volume + bandwidth) | Restore via `mc mirror` from remote           |
+| Disk failure, no backup    | **Total loss**       | N/A — data is gone                         | Only Prometheus's local WAL (~2h) survives    |
 | Mimir WAL corruption       | ~2h of inflight data | Minutes (restart Mimir)                    | Blocks already flushed to S3 storage are safe |
-| Host failure               | Same as disk failure | Same + host provisioning time              | Full stack redeploy + data restore         |
+| Host failure               | Same as disk failure | Same + host provisioning time              | Full stack redeploy + data restore            |
 
 ## Backup Configuration
 
@@ -58,14 +58,19 @@ backup management is active for the current mode.
 
 ## What Gets Backed Up
 
-| Bucket                        | Contents                                         | Backed up? |
-| ----------------------------- | ------------------------------------------------ | ---------- |
-| `mimir-blocks`                | Compacted TSDB blocks (long-term metric storage) | ✔          |
-| `mimir-ruler`                 | Recording and alerting rules stored in Mimir     | ✔          |
-| `mimir-ruler/grafana-backup/` | Grafana SQLite database (`grafana.db`)           | ✔ (opt-in) |
+| Bucket                        | Contents                                         | Backed up?       | Condition                                        |
+| ----------------------------- | ------------------------------------------------ | ---------------- | ------------------------------------------------ |
+| `mimir-blocks`                | Compacted TSDB blocks (long-term metric storage) | ✔ always         |                                                  |
+| `mimir-ruler`                 | Recording and alerting rules stored in Mimir     | ✔ always         |                                                  |
+| `mimir-alertmanager`          | Alertmanager state (silences, notification log)  | ✔ always         |                                                  |
+| `mimir-ruler/grafana-backup/` | Grafana SQLite database (`grafana.db`)           | ✔ opt-in         | `horde_monitoring_mimir_backup_grafana_db: true` |
+| `loki-chunks`                 | Loki log chunks                                  | ✔ when Loki      | `horde_monitoring_install_loki: true`            |
+| `tempo-traces`                | Tempo trace data                                 | ✔ when Tempo     | `horde_monitoring_install_tempo: true`           |
+| `pyroscope-data`              | Pyroscope profile data                           | ✔ when Pyroscope | `horde_monitoring_install_pyroscope: true`       |
 
-The backup service mirrors both buckets to the remote target as
-`<target-bucket>-blocks` and `<target-bucket>-ruler` respectively.
+The backup service mirrors all active buckets to the remote target using the
+pattern `<target-bucket>-<bucket-suffix>` (e.g. `<target-bucket>-blocks`,
+`<target-bucket>-alertmanager`, `<target-bucket>-loki-chunks`, etc.).
 
 ### Grafana DB Backup
 
@@ -150,8 +155,8 @@ journalctl -u mimir-backup --since "24 hours ago" --no-pager
 The role defaults to **append-only** mode (`--overwrite` without `--remove`).
 This has important implications:
 
-| Strategy                  | Variable                                                              | Remote growth                                                      | Propagates deletions?                     |
-| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+| Strategy                  | Variable                                                                               | Remote growth                                                      | Propagates deletions?                     |
+| ------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
 | **Append-only** (default) | `horde_monitoring_mimir_backup_remove_deleted: false`                                  | Unbounded — remote retains blocks deleted locally by the compactor | No — safest option                        |
 | **Parity**                | `horde_monitoring_mimir_backup_remove_deleted: true`                                   | Matches local — compactor deletions propagate                      | Yes — accidental deletions also propagate |
 | **Versioned** (ideal)     | `horde_monitoring_mimir_backup_remove_deleted: false` + S3 versioning on remote target | Bounded by version policy                                          | Soft — versions retained                  |
@@ -183,7 +188,6 @@ expiry policy, and accidental deletions can be recovered.
    ```
 
 2. **Wait for S3 storage to be healthy/reachable:**
-
    - Embedded Garage default:
 
    ```bash
@@ -192,20 +196,34 @@ expiry policy, and accidental deletions can be recovered.
 
    - External mode: use your provider-specific health check, or verify connectivity with `mc alias set` against your external endpoint.
 
-3. **Restore blocks and ruler data from backup:**
+3. **Restore buckets from backup:**
 
    ```bash
    docker run --rm --network host minio/mc:RELEASE.2025-08-13T08-35-41Z /bin/sh -c "\
        mc alias set local <s3-endpoint> <s3-access-key> <s3-secret-key>; \
      mc alias set remote <backup-endpoint> <access-key> <secret-key>; \
-     mc mirror remote/<bucket>-blocks local/mimir-blocks; \
-     mc mirror remote/<bucket>-ruler local/mimir-ruler; \
+     mc mirror remote/<bucket>-blocks          local/mimir-blocks; \
+     mc mirror remote/<bucket>-ruler           local/mimir-ruler; \
+     mc mirror remote/<bucket>-alertmanager    local/mimir-alertmanager; \
    "
    ```
 
-    Replace `<s3-endpoint>`, `<s3-access-key>`, `<s3-secret-key>`, `<backup-endpoint>`,
+   If Loki, Tempo, or Pyroscope were enabled on the original host, restore
+   their buckets too (omit any that were not active):
+
+   ```bash
+   docker run --rm --network host minio/mc:RELEASE.2025-08-13T08-35-41Z /bin/sh -c "\
+       mc alias set local <s3-endpoint> <s3-access-key> <s3-secret-key>; \
+     mc alias set remote <backup-endpoint> <access-key> <secret-key>; \
+     mc mirror remote/<bucket>-loki-chunks     local/loki-chunks;     \
+     mc mirror remote/<bucket>-tempo-traces    local/tempo-traces;    \
+     mc mirror remote/<bucket>-pyroscope-data  local/pyroscope-data;  \
+   "
+   ```
+
+   Replace `<s3-endpoint>`, `<s3-access-key>`, `<s3-secret-key>`, `<backup-endpoint>`,
    `<access-key>`, `<secret-key>`, and `<bucket>` with your actual values.
-    In embedded mode, `<s3-endpoint>` is typically `http://127.0.0.1:3900`.
+   In embedded mode, `<s3-endpoint>` is typically `http://127.0.0.1:3900`.
 
 4. **Restart Mimir** to pick up restored blocks:
 

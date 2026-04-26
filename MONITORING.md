@@ -7,11 +7,11 @@ fit together.
 
 ## Roles
 
-| Role                                                | Purpose                                                                    | README                                         |
-| --------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------- |
+| Role                                                | Purpose                                                                         | README                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- |
 | [horde_monitoring](roles/horde_monitoring/)         | Mimir + Grafana + S3 storage + optional Loki/Tempo/Pyroscope via Docker Compose | [README](roles/horde_monitoring/README.md)     |
-| [horde_stats_exporter](roles/horde_stats_exporter/) | AI Horde API → Prometheus metrics exporter (systemd)                       | [README](roles/horde_stats_exporter/README.md) |
-| [horde_alloy](roles/horde_alloy/)                   | Grafana Alloy telemetry collector on application hosts                     | [README](roles/horde_alloy/README.md)          |
+| [horde_stats_exporter](roles/horde_stats_exporter/) | AI Horde API → Prometheus metrics exporter (systemd)                            | [README](roles/horde_stats_exporter/README.md) |
+| [horde_alloy](roles/horde_alloy/)                   | Grafana Alloy telemetry collector on application hosts                          | [README](roles/horde_alloy/README.md)          |
 
 Prometheus and Alertmanager are deployed directly using the
 `prometheus.prometheus` community collection in your playbook. They are not
@@ -32,7 +32,7 @@ AI Horde APIs                       │                                         
                                     │                       Grafana (Docker)        │
                                     │                           │ queries Mimir     │
                                     └───────────────────────────┘───────────────────┘
-┌──── App Hosts ───────────┐                                              ▲   
+┌──── App Hosts ───────────┐                                              ▲
 │  Grafana Alloy           ├── logs/traces (and optional host metrics) ───┘
 └──────────────────────────┘
 ```
@@ -81,7 +81,6 @@ When `horde_monitoring_install_host_disk_alerts: true`, ensure Prometheus
 ingests `node_filesystem_*` metrics and set
 `horde_monitoring_host_filesystem_metrics_available: true`.
 
-
 ### Node Exporter TLS Automation
 
 - `examples/horde_monitoring_stack.yml` defaults to
@@ -96,6 +95,7 @@ ingests `node_filesystem_*` metrics and set
 Prometheus trusts node_exporter certificates via `/etc/prometheus/ca.crt`.
 
 Node exporter scrape target wiring is automatic:
+
 - `site_monitoring.yml` and `examples/horde_monitoring_stack.yml` generate
   `/etc/prometheus/file_sd/node_exporter.yml` on the monitoring host from
   inventory hosts.
@@ -108,6 +108,7 @@ Node exporter scrape target wiring is automatic:
 - Prometheus `job_name: node` consumes these generated file_sd targets.
 
 For Alloy hosts:
+
 - If Alloy endpoints use this same internal CA, set
   `horde_alloy_tls_ca_cert: "tls/ca.crt"`.
 - If Alloy talks to HTTP endpoints or public-CA HTTPS endpoints, no additional
@@ -147,15 +148,15 @@ all:
 
 ## Data Retention
 
-| Layer                               | Default        | Purpose                                             |
-| ----------------------------------- | -------------- | --------------------------------------------------- |
-| Prometheus (local)                  | `48h`          | Buffer for `remote_write` — short-lived             |
-| Mimir `ai-horde-app` tenant         | Infinite (`0`) | AI Horde application metrics                        |
-| Mimir `infrastructure` tenant       | `30d`          | Host and infrastructure metrics                     |
-| Mimir `ai-horde-telemetry` tenant   | `3d`           | Tempo span metrics + OTLP-sourced app metrics       |
-| Mimir `ai-horde-public` tenant      | `90d`          | Public-facing dashboard metrics                     |
-| Loki (opt-in)                       | `90d`          | Log retention                                       |
-| Tempo (opt-in)                      | `7d`           | Trace retention                                     |
+| Layer                             | Default        | Purpose                                       |
+| --------------------------------- | -------------- | --------------------------------------------- |
+| Prometheus (local)                | `48h`          | Buffer for `remote_write` — short-lived       |
+| Mimir `ai-horde-app` tenant       | Infinite (`0`) | AI Horde application metrics                  |
+| Mimir `infrastructure` tenant     | `30d`          | Host and infrastructure metrics               |
+| Mimir `ai-horde-telemetry` tenant | `3d`           | Tempo span metrics + OTLP-sourced app metrics |
+| Mimir `ai-horde-public` tenant    | `90d`          | Public-facing dashboard metrics               |
+| Loki (opt-in)                     | `90d`          | Log retention                                 |
+| Tempo (opt-in)                    | `7d`           | Trace retention                               |
 
 Prometheus splits data by job: `horde-exporter` → app tenant, everything else
 → infrastructure tenant. Tempo-generated span metrics and OTLP-sourced metrics
@@ -172,7 +173,7 @@ preserving diagnostic value:
 1. **App-side head sampler** (`OTEL_TRACES_SAMPLER=parentbased_traceidratio`,
    `OTEL_TRACES_SAMPLER_ARG=1.0` by default — i.e. no head sampling).
    Available as a relief valve: lower it if a single instance ever sustains
-   1k+ rps and SDK overhead becomes measurable. Decisions are made *before*
+   1k+ rps and SDK overhead becomes measurable. Decisions are made _before_
    span creation, so every fractional reduction proportionally erodes the
    tail sampler's view of errors. Use `parentbased_traceidratio` to keep
    trace coherence across services when lowering.
@@ -189,13 +190,13 @@ preserving diagnostic value:
 
 **Effective ingest rates at defaults** (head=1.0, filter on, tail policies as above):
 
-| Trace class             | Head | Filter | Tail | Effective ingest |
-| ----------------------- | ---- | ------ | ---- | ---------------- |
-| Healthy + fast          | keep | keep   | 1%   | 1% of healthy traces |
-| Errors                  | keep | keep   | 100% | 100% of errors |
-| Slow (>1s)              | keep | keep   | 100% | 100% of slow traces |
-| Sub-2ms Redis hits      | keep | drop   | n/a  | 0% (dropped at filter) |
-| Healthcheck/heartbeat   | keep | drop   | n/a  | 0% (dropped at filter) |
+| Trace class           | Head | Filter | Tail | Effective ingest       |
+| --------------------- | ---- | ------ | ---- | ---------------------- |
+| Healthy + fast        | keep | keep   | 1%   | 1% of healthy traces   |
+| Errors                | keep | keep   | 100% | 100% of errors         |
+| Slow (>1s)            | keep | keep   | 100% | 100% of slow traces    |
+| Sub-2ms Redis hits    | keep | drop   | n/a  | 0% (dropped at filter) |
+| Healthcheck/heartbeat | keep | drop   | n/a  | 0% (dropped at filter) |
 
 > **Why head=1.0 by default.** At fleet scale (~10k req/hr ≈ 0.1 rps/instance)
 > the SDK CPU cost of full sampling is negligible, and tail-only trimming
@@ -237,6 +238,55 @@ patches datasource UIDs to match the provisioned Mimir datasources.
 
 To add custom dashboards, place JSON files in `grafana_dashboard_dir`
 (default: `/etc/grafana/dashboards`) on the target host.
+
+### Public-org dashboard convention
+
+Dashboards are routed between Org 1 (admin) and Org 2 (public/anonymous) using
+a filename suffix convention:
+
+| Filename pattern                                                        | Org 1 (`app/`) | Org 2 (`app-public/`) |
+| ----------------------------------------------------------------------- | :------------: | :-------------------: |
+| `<name>.json` (no `-public` sibling, not in `org1_only`)                |       ✓        |           ✓           |
+| `<name>.json` **and** `<name>-public.json` exists                       |       ✓        |           —           |
+| `<name>-public.json`                                                    |       —        |           ✓           |
+| basenames listed in `horde_monitoring_grafana_app_dashboards_org1_only` |       ✓        |           —           |
+
+`horde-operations-overview.json` is the canonical Org-1-only dashboard
+(it queries Alertmanager, mimir-telemetry, loki-app — none of which exist in
+Org 2). `horde-performance.json` ships with a `horde-performance-public.json`
+sibling that strips the alertlist + OTLP-only rows.
+
+### Operations Overview dashboard
+
+A new single-pane operator dashboard, `horde-operations-overview` (Org 1
+only), aggregates: Alertmanager firing/pending alerts → app health (API up,
+queue drain, generate/pop p95) → submit outcome rates and worker-drop ratios
+→ Postgres saturation/long-tx/deadlocks/pool timeouts → host top-N
+(CPU/memory/disk) → Loki critical/error log volume with deep-link to Explore.
+
+## Alerts
+
+Application alerts are templated in
+`roles/horde_monitoring/templates/alerting-rules.yml.j2` and pushed to the
+Mimir ruler API at deploy time. Log-derived alerts are templated in
+`templates/loki-rules.yml.j2` and pushed to the Loki ruler API.
+
+### Toggles (defaults/main.yml)
+
+| Variable                                               | Default | Effect                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `horde_monitoring_install_app_alerts`                  | `true`  | App health (HordeExporterDown, HordeAPI*, HordeNoActive*Workers, HordeImage\*, HordeMaintenanceMode, HordeRaidMode).                                                                                                                                                                                |
+| `horde_monitoring_install_otlp_app_alerts`             | `true`  | OTLP-derived (HordeGenerateLatencyHigh, HordePopLatencyHigh, HordeWebhookFailureBurst, HordeBackgroundJobFailures, HordeJobFailureBurstPerName, HordeSubmitFaultRate, HordeSubmitCensoredSpike, HordePopSkipDominant, HordeDBPoolTimeouts).                                                         |
+| `horde_monitoring_install_postgres_alerts`             | `false` | Postgres health. **The role probes Prometheus targets at deploy time and fails fast if no scrape job matches `horde_monitoring_postgres_job_name`.** Includes HordePostgresPoolNearMax (>90% of max_connections) and HordePostgresLongRunningTx (uses built-in `pg_stat_activity_max_tx_duration`). |
+| `horde_monitoring_require_postgres_tx_duration_metric` | `true`  | When postgres alerts are enabled, fail fast unless Prometheus has `pg_stat_activity_max_tx_duration{job="<postgres job>"}`.                                                                                                                                                                         |
+| `horde_monitoring_install_loki_app_log_alerts`         | `true`  | Loki ruler alerts on AI-Horde log patterns: maintenance entry, worker suspicion spike, Flask cache failing, Redis unreachable, Redis quorum change, Limiter cache failing.                                                                                                                          |
+
+### Tunables for new OTLP alerts
+
+| Variable                                        | Default | Used by                                             |
+| ----------------------------------------------- | ------- | --------------------------------------------------- |
+| `horde_monitoring_otlp_submit_fault_ratio`      | `0.05`  | HordeSubmitFaultRate (faulted/total threshold).     |
+| `horde_monitoring_otlp_submit_censored_per_sec` | `0.5`   | HordeSubmitCensoredSpike (absolute rate threshold). |
 
 ## Troubleshooting
 
@@ -285,8 +335,9 @@ Any `changed` tasks indicate drift from the Ansible-managed state.
 
 ## Operational Guides
 
-| Topic                                  | Document                                       |
-| -------------------------------------- | ---------------------------------------------- |
+| Topic                                  | Document                                                             |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| All monitoring docs (index)            | [docs/monitoring/README.md](docs/monitoring/README.md)               |
 | Logs, traces, and Alloy deep-dive      | [docs/monitoring/OBSERVABILITY.md](docs/monitoring/OBSERVABILITY.md) |
 | Backup & restore (RPO/RTO, procedures) | [docs/monitoring/BACKUP.md](docs/monitoring/BACKUP.md)               |
 | Credential management and rotation     | [docs/monitoring/CREDENTIALS.md](docs/monitoring/CREDENTIALS.md)     |
