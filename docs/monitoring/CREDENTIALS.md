@@ -4,11 +4,11 @@
 
 The monitoring stack uses three sets of credentials:
 
-| Credential               | Where it appears                                              | Purpose                                                  |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------- |
-| `horde_monitoring_s3_secret_key` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin secret key (S3 API for block storage) |
-| `horde_monitoring_grafana_admin_password` | `docker-compose.yml`                           | Grafana admin UI login |
-| `horde_monitoring_s3_access_key` | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin access key (username) |
+| Credential                                | Where it appears                                           | Purpose                                                |
+| ----------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
+| `horde_monitoring_s3_secret_key`          | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin secret key (S3 API for block storage) |
+| `horde_monitoring_grafana_admin_password` | `docker-compose.yml`                                       | Grafana admin UI login                                 |
+| `horde_monitoring_s3_access_key`          | `mimir.yaml`, `docker-compose.yml`, `mimir-backup.service` | S3 storage admin access key (username)                 |
 
 For production, the preferred deployment model is `horde_monitoring_s3_deployment_mode: external`
 with a managed S3-compatible backend. Embedded Garage mode remains supported
@@ -74,13 +74,14 @@ The `horde_monitoring_s3_secret_key` appears in:
 1. Update `horde_monitoring_s3_secret_key` in your vault/inventory
 2. Run the playbook — Ansible re-renders all affected templates
 3. In embedded Garage mode, rotate to a new key ID + secret pair if needed
-  (for example, update both `horde_monitoring_s3_access_key` and
-  `horde_monitoring_s3_secret_key` together), then rerun the playbook
+   (for example, update both `horde_monitoring_s3_access_key` and
+   `horde_monitoring_s3_secret_key` together), then rerun the playbook
 4. The `restart monitoring stack` handler fires, pulling images and
-  restarting containers with the updated client credentials
-4. Verify S3 health:
-  - external mode: use your provider-specific health/availability checks
-  - embedded Garage mode:
+   restarting containers with the updated client credentials
+5. Verify S3 health:
+
+- external mode: use your provider-specific health/availability checks
+- embedded Garage mode:
 
 ```bash
 curl http://127.0.0.1:3903/health

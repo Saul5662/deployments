@@ -10,12 +10,12 @@ Not sure where to start? Pick the scenario that matches your goal:
 
 ## Fast Paths (TL;DR)
 
-| If you are trying to... | Do this | Monitoring needed? |
-| --- | --- | --- |
-| Quickly test an AI-Horde backend change (external contributor flow) | [`Test an AI-Horde code change`](#test-an-ai-horde-code-change) | No |
-| Validate user-facing behavior (backend + frontpage + edge routing) | [`Run the full stack locally`](#run-the-full-stack-locally) | Optional |
-| Validate observability (Grafana/Prometheus/Mimir/Loki/Tempo) | [`Run the full stack locally`](#run-the-full-stack-locally) with `--with-monitoring` from a stopped stack | Yes |
-| Roll AI-Horde forward/backward to a specific ref | [`Update AI-Horde`](#update-ai-horde) | No |
+| If you are trying to...                                             | Do this                                                                                                   | Monitoring needed? |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------ |
+| Quickly test an AI-Horde backend change (external contributor flow) | [`Test an AI-Horde code change`](#test-an-ai-horde-code-change)                                           | No                 |
+| Validate user-facing behavior (backend + frontpage + edge routing)  | [`Run the full stack locally`](#run-the-full-stack-locally)                                               | Optional           |
+| Validate observability (Grafana/Prometheus/Mimir/Loki/Tempo)        | [`Run the full stack locally`](#run-the-full-stack-locally) with `--with-monitoring` from a stopped stack | Yes                |
+| Roll AI-Horde forward/backward to a specific ref                    | [`Update AI-Horde`](#update-ai-horde)                                                                     | No                 |
 
 ---
 
@@ -47,7 +47,7 @@ source .venv/bin/activate
 > **Troubleshooting — Docker credential helper**
 >
 > If `docker build` fails with `fork/exec docker-credential-desktop.exe:
-> exec format error`, your Docker config references a credential helper
+exec format error`, your Docker config references a credential helper
 > that doesn't exist on this machine. Fix it:
 >
 > ```bash
@@ -71,7 +71,7 @@ rm -rf local-deploy/runtime
 
 ## Test an AI-Horde code change
 
-The minimal local stack — AI-Horde (Flask API), PostgreSQL, and Redis — is
+The minimal local stack requires only AI-Horde (Flask API), PostgreSQL, and Redis, and is
 enough to verify most backend changes. You do not need frontpage, HAProxy, or
 monitoring for this workflow.
 
@@ -86,8 +86,8 @@ This clones the latest AI-Horde source, builds the Docker image, and starts
 the three-container stack. When you see the banner, it's ready:
 
 ```
-AI-Horde API  →  http://localhost:7001
-Heartbeat     →  http://localhost:7001/api/v2/status/heartbeat
+AI-Horde API    →  http://localhost:7001/api/
+Heartbeat       →  http://localhost:7001/api/v2/status/heartbeat
 ```
 
 ### Verify
@@ -212,8 +212,8 @@ curl http://<your-host-or-ingress>/api/v2/status/heartbeat
 
 ## Run the full stack locally
 
-Brings up the complete business stack — Backend (API + Postgres + Redis),
-AiHordeFrontpage, and HAProxy as the edge router — matching production topology.
+Brings up the complete local development stack — Backend (API + Postgres + Redis),
+AiHordeFrontpage, and HAProxy as the edge router — matching the local development topology.
 Monitoring is optional and can be enabled as an extra tier.
 
 ### Start the stack
@@ -224,13 +224,13 @@ Monitoring is optional and can be enabled as an extra tier.
 
 ### Port assignments
 
-| Service | URL | Notes |
-| ------- | --- | ----- |
-| HAProxy (edge) | http://localhost/ | Routes to frontpage or API by path |
-| AI-Horde API | http://localhost/api/v2/status/heartbeat | Via HAProxy |
-| AI-Horde API (direct) | http://localhost:7001 | Bypasses HAProxy |
-| AiHordeFrontpage | http://localhost:8006 | Also served via HAProxy at `/` |
-| HAProxy stats | http://localhost:8404/stats | HAProxy dashboard |
+| Service               | URL                                      | Notes                              |
+| --------------------- | ---------------------------------------- | ---------------------------------- |
+| HAProxy (edge)        | http://localhost/                        | Routes to frontpage or API by path |
+| AI-Horde API          | http://localhost/api/v2/status/heartbeat | Via HAProxy                        |
+| AI-Horde API (direct) | http://localhost:7001                    | Bypasses HAProxy                   |
+| AiHordeFrontpage      | http://localhost:8006                    | Also served via HAProxy at `/`     |
+| HAProxy stats         | http://localhost:8404/stats              | HAProxy dashboard                  |
 
 ### Verify
 
@@ -308,8 +308,8 @@ are started.
 ### Run tests for a role
 
 ```bash
-./tests/run_tests.sh ai_horde        # ~3 min
-./tests/run_tests.sh monitoring      # ~4 min
+./tests/run_tests.sh ai_horde
+./tests/run_tests.sh monitoring
 ./tests/run_tests.sh frontpage
 ./tests/run_tests.sh artbot
 ./tests/run_tests.sh regen_worker
@@ -406,15 +406,15 @@ runs on a separate host:
 
 ## Reference
 
-| I want to... | Start here |
-| ------------ | ---------- |
-| Test an AI-Horde code change | [Test a code change](#test-an-ai-horde-code-change) |
-| Run the full stack locally | [Full stack](#run-the-full-stack-locally) |
-| Validate Ansible role changes | [Test suite](#run-the-ansible-test-suite) |
-| Deploy to a real server | [Deploy to a host](#deploy-to-a-real-host) |
-| Set up monitoring | [MONITORING.md](MONITORING.md) |
-| Understand the project structure | [README.md](README.md) |
-| Contribute to this repo | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Upgrade a deployed component | [docs/UPGRADING.md](docs/monitoring/UPGRADING.md) |
-| Back up / restore monitoring data | [docs/monitoring/BACKUP.md](docs/monitoring/BACKUP.md) |
-| Manage credentials and rotation | [docs/monitoring/CREDENTIALS.md](docs/monitoring/CREDENTIALS.md) |
+| I want to...                      | Start here                                                       |
+| --------------------------------- | ---------------------------------------------------------------- |
+| Test an AI-Horde code change      | [Test a code change](#test-an-ai-horde-code-change)              |
+| Run the full stack locally        | [Full stack](#run-the-full-stack-locally)                        |
+| Validate Ansible role changes     | [Test suite](#run-the-ansible-test-suite)                        |
+| Deploy to a real server           | [Deploy to a host](#deploy-to-a-real-host)                       |
+| Set up monitoring                 | [MONITORING.md](MONITORING.md)                                   |
+| Understand the project structure  | [README.md](README.md)                                           |
+| Contribute to this repo           | [CONTRIBUTING.md](CONTRIBUTING.md)                               |
+| Upgrade a deployed component      | [docs/UPGRADING.md](docs/monitoring/UPGRADING.md)                |
+| Back up / restore monitoring data | [docs/monitoring/BACKUP.md](docs/monitoring/BACKUP.md)           |
+| Manage credentials and rotation   | [docs/monitoring/CREDENTIALS.md](docs/monitoring/CREDENTIALS.md) |

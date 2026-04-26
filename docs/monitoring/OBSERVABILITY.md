@@ -38,31 +38,31 @@ For deployment order and baseline setup, see [MONITORING.md](../../MONITORING.md
              │   + optional Loki / Tempo / Pyroscope              │
              │                                                    │
              │ Tenant model:                                      │
-             │   ai-horde-app, infrastructure,                     │
-             │   ai-horde-telemetry, ai-horde-public               │
+             │   ai-horde-app, infrastructure,                    │
+             │   ai-horde-telemetry, ai-horde-public              │
              └────────────────────────────────────────────────────┘
 ```
 
 ## Role Ownership
 
-| Role | What it owns |
-| --- | --- |
-| `horde_monitoring` | Mimir, S3-compatible storage, Memcached, Grafana, Loki by default, optional Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
-| `horde_stats_exporter` | `horde-exporter` systemd service and optional downsampling timer |
-| `horde_alloy` | App-host telemetry collection and forwarding (metrics/logs/traces) |
-| `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager (not managed by `horde_monitoring`; configured at the playbook level) |
+| Role                                 | What it owns                                                                                                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `horde_monitoring`                   | Mimir, S3-compatible storage, Memcached, Grafana, Loki by default, optional Tempo/Pyroscope, Grafana datasource provisioning, monitoring alert rules, optional HAProxy backend insertion |
+| `horde_stats_exporter`               | `horde-exporter` systemd service and optional downsampling timer                                                                                                                         |
+| `horde_alloy`                        | App-host telemetry collection and forwarding (metrics/logs/traces)                                                                                                                       |
+| `prometheus.prometheus.*` (playbook) | Prometheus, Alertmanager (not managed by `horde_monitoring`; configured at the playbook level)                                                                                           |
 
 ## Full Stack Components
 
-| Component | Default | Toggle/Variable |
-| --- | --- | --- |
-| Mimir | enabled | `horde_monitoring_install_mimir: true` |
-| Grafana | enabled | `horde_monitoring_install_grafana: true` |
-| S3-compatible storage (Mimir object storage) | enabled | `horde_monitoring_mimir_enable_s3: true` |
-| Memcached (Mimir cache) | enabled | `horde_monitoring_mimir_enable_memcached: true` |
-| Loki | enabled | `horde_monitoring_install_loki: true` |
-| Tempo | disabled | `horde_monitoring_install_tempo: false` |
-| Pyroscope | disabled | `horde_monitoring_install_pyroscope: false` |
+| Component                                    | Default | Toggle/Variable                                 |
+| -------------------------------------------- | ------- | ----------------------------------------------- |
+| Mimir                                        | enabled | `horde_monitoring_install_mimir: true`          |
+| Grafana                                      | enabled | `horde_monitoring_install_grafana: true`        |
+| S3-compatible storage (Mimir object storage) | enabled | `horde_monitoring_mimir_enable_s3: true`        |
+| Memcached (Mimir cache)                      | enabled | `horde_monitoring_mimir_enable_memcached: true` |
+| Loki                                         | enabled | `horde_monitoring_install_loki: true`           |
+| Tempo                                        | enabled | `horde_monitoring_install_tempo: true`          |
+| Pyroscope                                    | enabled | `horde_monitoring_install_pyroscope: true`      |
 
 When S3 storage is enabled, the compose init step creates buckets for enabled
 components automatically (`mimir-blocks`, `mimir-ruler`, plus Loki by default
@@ -80,45 +80,45 @@ horde_monitoring_install_pyroscope: true
 
 ### Loki (logs)
 
-| Variable | Default |
-| --- | --- |
-| `horde_monitoring_install_loki` | `true` |
-| `horde_monitoring_loki_image` | `grafana/loki:3.4.2` |
-| `horde_monitoring_loki_port` | `3100` |
-| `horde_monitoring_loki_retention_period` | `2160h` |
-| `horde_monitoring_loki_retention_enabled` | `true` |
-| `horde_monitoring_loki_auth_enabled` | `true` |
-| `horde_monitoring_loki_chunks_bucket` | `loki-chunks` |
+| Variable                                  | Default              |
+| ----------------------------------------- | -------------------- |
+| `horde_monitoring_install_loki`           | `true`               |
+| `horde_monitoring_loki_image`             | `grafana/loki:3.4.2` |
+| `horde_monitoring_loki_port`              | `3100`               |
+| `horde_monitoring_loki_retention_period`  | `2160h`              |
+| `horde_monitoring_loki_retention_enabled` | `true`               |
+| `horde_monitoring_loki_auth_enabled`      | `true`               |
+| `horde_monitoring_loki_chunks_bucket`     | `loki-chunks`        |
 
 ### Tempo (traces)
 
-| Variable | Default |
-| --- | --- |
-| `horde_monitoring_tempo_image` | `grafana/tempo:2.7.1` |
-| `horde_monitoring_tempo_http_port` | `3200` |
-| `horde_monitoring_tempo_otlp_grpc_port` | `4317` |
-| `horde_monitoring_tempo_otlp_http_port` | `4318` |
-| `horde_monitoring_tempo_trace_retention` | `168h` |
-| `horde_monitoring_tempo_metrics_generator_enabled` | `true` |
-| `horde_monitoring_tempo_metrics_generator_tenant_id` | `ai-horde-telemetry` |
-| `horde_monitoring_tempo_traces_bucket` | `tempo-traces` |
+| Variable                                             | Default               |
+| ---------------------------------------------------- | --------------------- |
+| `horde_monitoring_tempo_image`                       | `grafana/tempo:2.7.1` |
+| `horde_monitoring_tempo_http_port`                   | `3200`                |
+| `horde_monitoring_tempo_otlp_grpc_port`              | `4317`                |
+| `horde_monitoring_tempo_otlp_http_port`              | `4318`                |
+| `horde_monitoring_tempo_trace_retention`             | `168h`                |
+| `horde_monitoring_tempo_metrics_generator_enabled`   | `true`                |
+| `horde_monitoring_tempo_metrics_generator_tenant_id` | `ai-horde-telemetry`  |
+| `horde_monitoring_tempo_traces_bucket`               | `tempo-traces`        |
 
 Tempo metrics-generator output is remote-written to Mimir and powers Grafana
 service-map/span-metrics views.
 
 ### Pyroscope (profiles)
 
-| Variable | Default |
-| --- | --- |
-| `horde_monitoring_pyroscope_image` | `grafana/pyroscope:1.19.0` |
-| `horde_monitoring_pyroscope_port` | `4040` |
-| `horde_monitoring_pyroscope_auth_enabled` | `true` |
-| `horde_monitoring_pyroscope_blocks_bucket` | `pyroscope-data` |
-| `horde_monitoring_pyroscope_retention_period` | `0s` |
-| `horde_monitoring_pyroscope_application_retention` | `0` |
-| `horde_monitoring_pyroscope_infrastructure_retention` | `30d` |
-| `horde_monitoring_pyroscope_telemetry_retention` | `3d` |
-| `horde_monitoring_pyroscope_public_retention` | `90d` |
+| Variable                                              | Default                    |
+| ----------------------------------------------------- | -------------------------- |
+| `horde_monitoring_pyroscope_image`                    | `grafana/pyroscope:1.19.0` |
+| `horde_monitoring_pyroscope_port`                     | `4040`                     |
+| `horde_monitoring_pyroscope_auth_enabled`             | `true`                     |
+| `horde_monitoring_pyroscope_blocks_bucket`            | `pyroscope-data`           |
+| `horde_monitoring_pyroscope_retention_period`         | `0s`                       |
+| `horde_monitoring_pyroscope_application_retention`    | `0`                        |
+| `horde_monitoring_pyroscope_infrastructure_retention` | `30d`                      |
+| `horde_monitoring_pyroscope_telemetry_retention`      | `3d`                       |
+| `horde_monitoring_pyroscope_public_retention`         | `90d`                      |
 
 Pyroscope per-tenant retention is rendered into runtime overrides, matching
 the same tenant IDs used by Mimir datasources.
@@ -128,22 +128,22 @@ the same tenant IDs used by Mimir datasources.
 Default tenants:
 
 - `horde_monitoring_application_tenant_id: ai-horde-app`
-    - For core AI-Horde application metrics, currently indefinately retained
+  - For core AI-Horde application metrics, currently indefinately retained
 - `horde_monitoring_infrastructure_tenant_id: infrastructure`
-    - For host and infrastructure metrics, retained for 30 days by default
+  - For host and infrastructure metrics, retained for 30 days by default
 - `horde_monitoring_telemetry_tenant_id: ai-horde-telemetry`
-    - High-volume derived metrics (Tempo span metrics, OTLP metrics), retained for 3 days
+  - High-volume derived metrics (Tempo span metrics, OTLP metrics), retained for 3 days
 - `horde_monitoring_public_tenant_id: ai-horde-public`
-    - Downsampled and restricted metrics suitable for public dashboards.
+  - Downsampled and restricted metrics suitable for public dashboards.
 
 Grafana datasource provisioning is automatic:
 
 - Org 1: Mimir app, infrastructure, and telemetry datasources
-    - Optional Org 1 datasources when enabled: Loki, Tempo, Pyroscope
+  - Optional Org 1 datasources when enabled: Loki, Tempo, Pyroscope
 - Org 2 (public, anonymous) datasource set when
   `horde_monitoring_grafana_anonymous_enabled: true`
-    - Note that public dashboards should use the `ai-horde-public` tenant datasource, which has downsampled
-      and restricted metrics to limit performance impact.
+  - Note that public dashboards should use the `ai-horde-public` tenant datasource, which has downsampled
+    and restricted metrics to limit performance impact.
 
 Cross-signal features auto-configure when components are enabled:
 
@@ -155,15 +155,17 @@ Cross-signal features auto-configure when components are enabled:
 When `horde_monitoring_install_alerting_rules: true`, the role renders
 Prometheus rules for stack self-monitoring. Coverage includes:
 
-- Core: `Watchdog`, `MimirDown`, `MimirRequestErrors`, `MimirIngestionStalled`
-- S3 storage: `S3StorageDown` (disk capacity covered by host-level alerts)
-- Application health: `HordeExporterDown`, `HordeNoActiveImageWorkers`, `HordeNoActiveTextWorkers`, `HordeImageWorkerCountDrop`, `HordeImageQueueBacklog`, `HordeMaintenanceMode`, `HordeRaidMode`
-- Prometheus self-monitoring: `PrometheusTargetsMissing`, `PrometheusRemoteWriteErrors`, `PrometheusRuleEvaluationFailures`, `PrometheusNotConnectedToAlertmanager`, `PrometheusTSDBCompactionsFailing`
-- PostgreSQL (opt-in via `horde_monitoring_install_postgres_alerts`): `PostgresExporterDown`, `PostgresDown`, `PostgresTooManyConnections`, `PostgresDeadlocks`, `PostgresSlowQueries`, `PostgresReplicationLag`
+- Core: `Watchdog`, `MimirDown`, `MimirRequestErrors`, `MimirIngestionStalled`, `MimirCompactorFailed`, `MimirCompactorNotRunning`
+- S3 storage: `S3MetricsScrapeDown` (scrape target missing), `S3StorageBackendFailing` (bucket operation errors)
+- Application health: `HordeExporterDown`, `HordeAPIDown`, `HordeExporterScrapeFailing`, `HordeExporterRateLimitExhausted`, `HordeNoActiveImageWorkers`, `HordeNoActiveTextWorkers`, `HordeImageWorkerCountDrop`, `HordeImageQueueBacklog`, `HordeMaintenanceMode`, `HordeRaidMode`
+- Application latency/reliability: `HordeGenerateLatencyHigh`, `HordePopLatencyHigh`, `HordeWebhookFailureBurst`, `HordeBackgroundJobFailures`, `HordeJobFailureBurstPerName`, `HordeSubmitFaultRate`, `HordeSubmitCensoredSpike`, `HordePopSkipDominant`
+- Database (always-on Horde DB pool): `HordeDBPoolTimeouts`
+- Prometheus self-monitoring: `PrometheusTargetsMissing`, `PrometheusRemoteWriteErrors`, `PrometheusRuleEvaluationFailures`, `PrometheusNotConnectedToAlertmanager`, `PrometheusTSDBCompactionsFailing`, `PrometheusConfigReloadFailure`, `PrometheusNotificationsBacklog`, `AlertmanagerNotificationFailing`
+- PostgreSQL (opt-in via `horde_monitoring_install_postgres_alerts`): `PostgresExporterDown`, `PostgresDown`, `PostgresTooManyConnections`, `PostgresDeadlocks`, `PostgresSlowQueries`, `PostgresReplicationLag`, `HordePostgresPoolNearMax`, `HordePostgresLongRunningTx`
 - Optional Loki: `LokiDown`, `LokiRequestErrors`, `LokiIngestionStalled`
 - Optional Tempo: `TempoDown`, `TempoRequestErrors`, `TempoIngestionStalled`
 - Optional Pyroscope: `PyroscopeDown`, `PyroscopeRequestErrors`, `PyroscopeIngestionStalled`
-- Host resource: `HostHighCpuLoad`, `HostHighMemoryUsage`, `HostOomKillDetected`, `HostSystemdServiceFailed`, `HostClockSkew`
+- Host resource: `HostHighCpuLoad`, `HostHighMemoryUsage`, `HostOomKillDetected`, `HostSystemdServiceFailed`, `HostClockSkew`, `HostSwapFillingUp`, `HostCpuStealHigh`, `HostOutOfInodes`, `HostDiskWillFillIn24h`
 - Host disk alerts (require `node_filesystem_*` metrics and
   `horde_monitoring_host_filesystem_metrics_available: true`):
   `HostDiskUsageCritical`, `HostDiskUsageHigh`
@@ -212,12 +214,12 @@ example supports per-host selection via `horde_host_metrics_source`:
 
 ### Alloy Pipeline Toggles
 
-| Signal | Main toggle | Supporting toggles |
-| --- | --- | --- |
-| Metrics | `horde_alloy_collect_metrics` | `horde_alloy_extra_scrape_targets`, `horde_alloy_external_labels` |
-| Logs | `horde_alloy_collect_logs` | `horde_alloy_collect_journal`, `horde_alloy_collect_log_files`, `horde_alloy_collect_docker_logs`, `horde_alloy_log_labels` |
-| Traces | `horde_alloy_collect_traces` | `horde_alloy_otlp_listen_address`, `horde_alloy_otlp_grpc_port`, `horde_alloy_otlp_http_port` |
-| OTLP metrics forwarding | `horde_alloy_forward_otlp_metrics` | `horde_alloy_otlp_metrics_tenant_id` |
+| Signal                  | Main toggle                        | Supporting toggles                                                                                                          |
+| ----------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Metrics                 | `horde_alloy_collect_metrics`      | `horde_alloy_extra_scrape_targets`, `horde_alloy_external_labels`                                                           |
+| Logs                    | `horde_alloy_collect_logs`         | `horde_alloy_collect_journal`, `horde_alloy_collect_log_files`, `horde_alloy_collect_docker_logs`, `horde_alloy_log_labels` |
+| Traces                  | `horde_alloy_collect_traces`       | `horde_alloy_otlp_listen_address`, `horde_alloy_otlp_grpc_port`, `horde_alloy_otlp_http_port`                               |
+| OTLP metrics forwarding | `horde_alloy_forward_otlp_metrics` | `horde_alloy_otlp_metrics_tenant_id`                                                                                        |
 
 Role validation fails fast if enabled pipelines do not have endpoints, or if
 `horde_alloy_basic_auth_password` is left at `changeme-alloy`.
@@ -229,25 +231,25 @@ Role validation fails fast if enabled pipelines do not have endpoints, or if
 - Logs: Alloy journal/file/docker sources → Loki push API (`infrastructure` tenant)
 - Traces: app OTLP → Alloy OTLP receiver → Tempo OTLP HTTP exporter
 - Trace-derived metrics: Tempo metrics generator → Mimir remote_write (`ai-horde-telemetry` tenant, 3d retention)
-- OTLP metrics from apps: Alloy `otelcol.exporter.prometheus` → Mimir remote_write (`ai-horde-telemetry` tenant, 3d retention)
+- OTLP metrics from apps: Alloy `otelcol.receiver.otlp` → `otelcol.processor.deltatocumulative` → `otelcol.exporter.otlphttp` → Mimir OTLP endpoint (`ai-horde-telemetry` tenant, 3d retention)
 - Profiles: app profiler SDK/agent → Pyroscope HTTP ingest endpoint (`ai-horde-app` tenant)
 
 ## Retention Defaults
 
-| Signal | Storage backend | Default retention | Variable |
-| --- | --- | --- | --- |
-| Mimir application tenant | Mimir | infinite (`0`) | `horde_monitoring_application_retention` |
-| Mimir infrastructure tenant | Mimir | `30d` | `horde_monitoring_infrastructure_retention` |
-| Mimir telemetry tenant | Mimir | `3d` | `horde_monitoring_telemetry_retention` |
-| Mimir public tenant | Mimir | `90d` | `horde_monitoring_public_retention` |
-| Logs | Loki | `2160h` (90 days) | `horde_monitoring_loki_retention_period` |
-| Traces | Tempo | `168h` (7 days) | `horde_monitoring_tempo_trace_retention` |
-| Profiles (global default) | Pyroscope | `0s` (infinite) | `horde_monitoring_pyroscope_retention_period` |
-| Profiles (application tenant) | Pyroscope | `0` | `horde_monitoring_pyroscope_application_retention` |
-| Profiles (infrastructure tenant) | Pyroscope | `30d` | `horde_monitoring_pyroscope_infrastructure_retention` |
-| Profiles (telemetry tenant) | Pyroscope | `3d` | `horde_monitoring_pyroscope_telemetry_retention` |
-| Profiles (public tenant) | Pyroscope | `90d` | `horde_monitoring_pyroscope_public_retention` |
-| Prometheus local TSDB | Prometheus | `48h` in example playbook | `prometheus_storage_retention` |
+| Signal                           | Storage backend | Default retention         | Variable                                              |
+| -------------------------------- | --------------- | ------------------------- | ----------------------------------------------------- |
+| Mimir application tenant         | Mimir           | infinite (`0`)            | `horde_monitoring_application_retention`              |
+| Mimir infrastructure tenant      | Mimir           | `30d`                     | `horde_monitoring_infrastructure_retention`           |
+| Mimir telemetry tenant           | Mimir           | `3d`                      | `horde_monitoring_telemetry_retention`                |
+| Mimir public tenant              | Mimir           | `90d`                     | `horde_monitoring_public_retention`                   |
+| Logs                             | Loki            | `2160h` (90 days)         | `horde_monitoring_loki_retention_period`              |
+| Traces                           | Tempo           | `168h` (7 days)           | `horde_monitoring_tempo_trace_retention`              |
+| Profiles (global default)        | Pyroscope       | `0s` (infinite)           | `horde_monitoring_pyroscope_retention_period`         |
+| Profiles (application tenant)    | Pyroscope       | `0`                       | `horde_monitoring_pyroscope_application_retention`    |
+| Profiles (infrastructure tenant) | Pyroscope       | `30d`                     | `horde_monitoring_pyroscope_infrastructure_retention` |
+| Profiles (telemetry tenant)      | Pyroscope       | `3d`                      | `horde_monitoring_pyroscope_telemetry_retention`      |
+| Profiles (public tenant)         | Pyroscope       | `90d`                     | `horde_monitoring_pyroscope_public_retention`         |
+| Prometheus local TSDB            | Prometheus      | `48h` in example playbook | `prometheus_storage_retention`                        |
 
 ## HAProxy Integration Notes
 
@@ -257,9 +259,8 @@ When `horde_monitoring_configure_haproxy: true`, the role inserts backends for:
 - Mimir
 - Loki (when enabled)
 - Tempo OTLP HTTP ingest (`horde_monitoring_tempo_otlp_http_port`) when enabled
-
-Pyroscope backend/frontends are not auto-inserted by the role; add those in
-your HAProxy config if you need proxied profile ingest/query access.
+- Pyroscope (when `horde_monitoring_install_pyroscope: true`)
+- Alertmanager (when configured via `horde_monitoring_configure_haproxy: true`)
 
 ## Health Checks
 
@@ -277,8 +278,10 @@ curl -sf http://127.0.0.1:4040/ready             # Pyroscope
 # App host
 curl -sf http://127.0.0.1:12345/-/healthy        # Alloy
 ```
+
 ## Related Documents
 
+- [Monitoring docs index](README.md)
 - [MONITORING.md](../../MONITORING.md)
 - [BACKUP.md](BACKUP.md)
 - [CREDENTIALS.md](CREDENTIALS.md)

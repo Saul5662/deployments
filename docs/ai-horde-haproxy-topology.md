@@ -50,9 +50,9 @@ traffic to AI-Horde on `:8080`.
 
 ## Operator Decision Matrix
 
-| Topology | HAProxy setup | Baseline ingress port | Notes |
-| ---- | ---- | ---- | ---- |
-| Single-host lab | `install_haproxy: true` | `8080` | Lowest-conflict local baseline; easy to place another proxy in front later. |
-| Shared host with existing HAProxy | `install_haproxy: true` | `8080` | conf.d fragment coexists with other service configs. |
-| Dedicated ingress host | `install_haproxy: true` | `80` (and/or `443` via external TLS strategy) | Full config ownership is acceptable when no other stack owns HAProxy. |
-| Managed reverse proxy upstream | `install_haproxy: false` | Upstream-owned | Keep AI-Horde behind upstream ingress; avoid duplicate proxy ownership. |
+| Topology                          | HAProxy setup            | Baseline ingress port                         | Notes                                                                       |
+| --------------------------------- | ------------------------ | --------------------------------------------- | --------------------------------------------------------------------------- |
+| Single-host lab                   | `install_haproxy: true`  | `8080`                                        | Lowest-conflict local baseline; easy to place another proxy in front later. |
+| Shared host with existing HAProxy | `install_haproxy: true`  | `8080`                                        | conf.d fragment coexists with other service configs.                        |
+| Dedicated ingress host            | `install_haproxy: true`  | `80` (and/or `443` via external TLS strategy) | Full config ownership is acceptable when no other stack owns HAProxy.       |
+| Managed reverse proxy upstream    | `install_haproxy: false` | Upstream-owned                                | Keep AI-Horde behind upstream ingress; avoid duplicate proxy ownership.     |

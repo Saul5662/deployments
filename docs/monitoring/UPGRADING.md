@@ -53,6 +53,7 @@ monitoring stack deployed by the `horde_monitoring` Ansible role.
 **Variables:** `horde_monitoring_s3_image`, `horde_monitoring_s3_mc_image`
 
 **References:**
+
 - [Garage documentation](https://garagehq.deuxfleurs.fr/documentation/)
 - Your managed/external S3 provider's upgrade notes (when `horde_monitoring_s3_deployment_mode: external`)
 
@@ -222,7 +223,7 @@ The role depends on:
 
 ## Grafana Alloy
 
-**Variable:** `alloy_version` (default: `1.8.1`)
+**Variable:** `horde_alloy_version` (default: `1.8.1`)
 
 **Release notes:**
 [Grafana Alloy releases](https://github.com/grafana/alloy/releases)
