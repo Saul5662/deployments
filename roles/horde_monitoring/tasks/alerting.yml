@@ -50,7 +50,8 @@
 - name: Probe Prometheus for postgres transaction-age metric
   ansible.builtin.uri:
     url: >-
-      http://127.0.0.1:{{ horde_monitoring_prometheus_port | default(9090) }}/api/v1/query?query=pg_stat_activity_max_tx_duration%7Bjob%3D%22{{ horde_monitoring_postgres_job_name }}%22%7D
+      http://127.0.0.1:{{ horde_monitoring_prometheus_port | default(9090) }}
+      /api/v1/query?query=pg_stat_activity_max_tx_duration%7Bjob%3D%22{{ horde_monitoring_postgres_job_name }}%22%7D
     return_content: true
   register: horde_monitoring__postgres_tx_duration_metric
   failed_when: false
