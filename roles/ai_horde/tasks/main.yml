@@ -21,7 +21,7 @@
       Setting ai_horde_data_dir to /var/lib/postgresql or /var/lib/pgsql risks
       overwriting or corrupting a host-managed PostgreSQL installation.
       Choose a dedicated path such as /var/lib/ai-horde (the default).
-  when: ai_horde_data_dir | regex_search('^(/var/lib/postgresql|/var/lib/pgsql)(/|$)')
+  when: ai_horde_data_dir is match('(/var/lib/postgresql|/var/lib/pgsql)(/.*)?$')
 
 - name: Guard - embedded datastores must not be used in production without explicit override
   ansible.builtin.fail:
