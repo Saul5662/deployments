@@ -11,6 +11,9 @@
   vars:
     # AI-Horde role vars
     ai_horde_start_services: false
+    ai_horde_deployment_environment: "local-deploy"
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
     ai_horde_postgres_password: "test-password"
     ai_horde_secret_key: "test-secret"
     ai_horde_env_overrides:
