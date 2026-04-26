@@ -48,6 +48,10 @@
     ai_horde_repo_version: "main"
     ai_horde_pyroscope_enabled: "true"
     ai_horde_pyroscope_tenant_id: "ai-horde-app"
+    # Embedded datastores enabled for local-deploy stack
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
+    ai_horde_deployment_environment: "local-deploy"
 
     # In local-deploy, alloy + pyroscope run as sibling containers and are
     # attached to the shared `horde-stack` network by local_deploy.sh.  We

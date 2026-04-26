@@ -8,6 +8,13 @@
 #   ai_horde_postgres_password  — PostgreSQL password (no default, fail-fast)
 #   ai_horde_secret_key         — Flask secret key (no default, fail-fast)
 #
+# PRODUCTION NOTE:
+#   For production deployments, set ai_horde_embedded_postgres_enabled and
+#   ai_horde_embedded_redis_enabled to false, then configure
+#   ai_horde_postgres_host and ai_horde_redis_host to point at your
+#   independently managed PostgreSQL and Redis instances.
+#   See roles/ai_horde/README.md#production-deployments for full guidance.
+#
 # Notes:
 # - This role is Docker-only and does not manage HAProxy/Nginx.
 # - For single-host/dev usage keep `ai_horde_listen: "127.0.0.1"`.
@@ -31,3 +38,12 @@
         ai_horde_replicas: 1
         ai_horde_admins: ["admin_user#1"]
         ai_horde_otel_service_name: "ai-horde"
+        # -----------------------------------------------------------------
+        # PRODUCTION: disable embedded datastores and point at external
+        # PostgreSQL and Redis.  These defaults (true) are for single-host
+        # dev/local-deploy convenience only.
+        # ai_horde_embedded_postgres_enabled: false
+        # ai_horde_embedded_redis_enabled: false
+        # ai_horde_postgres_host: "db.internal.example.com"
+        # ai_horde_redis_host: "redis.internal.example.com"
+        # -----------------------------------------------------------------

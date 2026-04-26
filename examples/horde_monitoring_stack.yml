@@ -178,7 +178,7 @@
         #   horde_monitoring_external_s3_host
         #   horde_monitoring_external_s3_metrics_port  (default 3910)
         #   horde_monitoring_external_s3_metrics_username / _password
-        # See ops/group_vars/mimir/vars.yml for a production wiring example.
+        # Set these from your inventory/group_vars for the external S3 host.
         metrics_path: /metrics
         static_configs:
           - targets:
@@ -218,7 +218,14 @@
     # Prometheus self-monitoring alerts.
     horde_monitoring_install_prometheus_alerts: true
     # PostgreSQL alerts — enable when postgres_exporter is deployed.
+    # The role will probe Prometheus targets at deploy-time and fail fast
+    # if no scrape job matching horde_monitoring_postgres_job_name (default
+    # "postgres") is found.
     # horde_monitoring_install_postgres_alerts: true
+    # HordePostgresLongRunningTx uses built-in
+    # pg_stat_activity_max_tx_duration from postgres_exporter
+    # (filtered to horde.* + active/idle-in-transaction states).
+    # No extend.query-path custom query wiring is required.
 
     # -- Stats exporter --
     horde_stats_exporter_port: 9150

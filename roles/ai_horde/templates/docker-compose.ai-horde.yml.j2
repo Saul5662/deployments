@@ -39,10 +39,14 @@ services:
     networks:
       - aihorde_network
     depends_on:
+{% if ai_horde_embedded_postgres_enabled %}
       postgres:
         condition: service_healthy
+{% endif %}
+{% if ai_horde_embedded_redis_enabled %}
       redis:
         condition: service_healthy
+{% endif %}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7001/api/v2/status/heartbeat')"]
       interval: 15s
@@ -56,6 +60,7 @@ services:
         tag: "ai-horde"
 {% endif %}
 
+{% if ai_horde_embedded_postgres_enabled %}
   postgres:
     image: {{ ai_horde_postgres_image }}
     container_name: aihorde-postgres
@@ -85,7 +90,9 @@ services:
       options:
         tag: "ai-horde-postgres"
 {% endif %}
+{% endif %}
 
+{% if ai_horde_embedded_redis_enabled %}
   redis:
     image: {{ ai_horde_redis_image }}
     container_name: aihorde-redis
@@ -106,6 +113,7 @@ services:
 {% if ai_horde_log_driver == 'journald' %}
       options:
         tag: "ai-horde-redis"
+{% endif %}
 {% endif %}
 
 networks:

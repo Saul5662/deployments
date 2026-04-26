@@ -20,6 +20,10 @@
       KUDOS_TRUST_THRESHOLD: "100"
     ai_horde_otel_service_name: "test-horde-svc"
     ai_horde_pyroscope_enabled: "false"
+    # Integration test uses embedded datastores — mark as non-production
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
+    ai_horde_deployment_environment: "local-deploy"
   roles:
     - ai_horde
   post_tasks:

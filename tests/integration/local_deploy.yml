@@ -25,6 +25,9 @@
     ai_horde_admins: ["test_user#1"]
     ai_horde_repo: "https://github.com/Haidra-Org/AI-Horde.git"
     ai_horde_repo_version: "main"
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
+    ai_horde_deployment_environment: "local-deploy"
     ai_horde_env_overrides:
       KUDOS_TRUST_THRESHOLD: "100"
 

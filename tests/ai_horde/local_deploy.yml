@@ -30,6 +30,8 @@
     # Production default is 0.10 (see roles/ai_horde/defaults/main.yml).
     ai_horde_otel_traces_sampler_arg: "1.0"
     ai_horde_deployment_environment: "local-deploy"
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
     ai_horde_env_overrides:
       KUDOS_TRUST_THRESHOLD: "100"
 

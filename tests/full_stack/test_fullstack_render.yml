@@ -20,6 +20,10 @@
     ai_horde_secret_key: "test-secret"
     ai_horde_env_overrides:
       KUDOS_TRUST_THRESHOLD: "100"
+    # Embedded datastores for render test (non-production environment)
+    ai_horde_embedded_postgres_enabled: true
+    ai_horde_embedded_redis_enabled: true
+    ai_horde_deployment_environment: "local-deploy"
 
     aihorde_frontpage_start_services: false
     aihorde_frontpage_build_config: local

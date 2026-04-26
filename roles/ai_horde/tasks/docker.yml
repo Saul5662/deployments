@@ -41,8 +41,17 @@
     mode: "0750"
   loop:
     - "{{ ai_horde_data_dir }}"
-    - "{{ ai_horde_data_dir }}/postgres"
   become: true
+
+- name: Create embedded PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ ai_horde_data_dir }}/postgres"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  when: ai_horde_embedded_postgres_enabled | bool
 
 - name: Template AI-Horde environment file
   ansible.builtin.template:

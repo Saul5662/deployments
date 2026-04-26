@@ -13,5 +13,60 @@
       or not (ai_horde_secret_key | default('') | length > 0)
       or not ((ai_horde_env_overrides | default({})).get('KUDOS_TRUST_THRESHOLD', '') | string | length > 0)
 
+- name: Guard - block well-known PostgreSQL system data directories
+  ansible.builtin.fail:
+    msg: >-
+      ai_horde_data_dir is set to '{{ ai_horde_data_dir }}', which is a
+      well-known PostgreSQL system data directory (or a subdirectory of one).
+      Setting ai_horde_data_dir to /var/lib/postgresql or /var/lib/pgsql risks
+      overwriting or corrupting a host-managed PostgreSQL installation.
+      Choose a dedicated path such as /var/lib/ai-horde (the default).
+  when: ai_horde_data_dir | regex_search('^(/var/lib/postgresql|/var/lib/pgsql)(/|$)')
+
+- name: Guard - embedded datastores must not be used in production without explicit override
+  ansible.builtin.fail:
+    msg: >-
+      ai_horde_deployment_environment is '{{ ai_horde_deployment_environment }}'
+      but one or more embedded datastores are enabled
+      (ai_horde_embedded_postgres_enabled={{ ai_horde_embedded_postgres_enabled }},
+      ai_horde_embedded_redis_enabled={{ ai_horde_embedded_redis_enabled }}).
+      Bundled PostgreSQL and Redis are a single-host convenience for local
+      development only.  In production, deploy datastores independently and
+      set ai_horde_embedded_postgres_enabled/ai_horde_embedded_redis_enabled
+      to false, pointing ai_horde_postgres_host/ai_horde_redis_host at your
+      external instances.
+      If you have deliberately chosen to run embedded datastores on this
+      production-tagged host (e.g. a single-node homelab), set
+      ai_horde_allow_embedded_datastores_in_production: true to acknowledge
+      the risk and suppress this error.
+  when:
+    - ai_horde_deployment_environment == "production"
+    - (ai_horde_embedded_postgres_enabled | bool) or (ai_horde_embedded_redis_enabled | bool)
+    - not (ai_horde_allow_embedded_datastores_in_production | bool)
+
+- name: Warn - embedded postgres disabled but postgres_host still points at compose service name
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: ai_horde_embedded_postgres_enabled is false but
+      ai_horde_postgres_host is still '{{ ai_horde_postgres_host }}'
+      (the default embedded container name).  The AI-Horde container will
+      not be able to reach PostgreSQL.  Set ai_horde_postgres_host to your
+      external PostgreSQL hostname or IP address.
+  when:
+    - not (ai_horde_embedded_postgres_enabled | bool)
+    - ai_horde_postgres_host == "postgres"
+
+- name: Warn - embedded redis disabled but redis_host still points at compose service name
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: ai_horde_embedded_redis_enabled is false but
+      ai_horde_redis_host is still '{{ ai_horde_redis_host }}'
+      (the default embedded container name).  The AI-Horde container will
+      not be able to reach Redis.  Set ai_horde_redis_host to your
+      external Redis hostname or IP address.
+  when:
+    - not (ai_horde_embedded_redis_enabled | bool)
+    - ai_horde_redis_host == "redis"
+
 - name: Deploy AI-Horde via Docker Compose
   ansible.builtin.include_tasks: docker.yml

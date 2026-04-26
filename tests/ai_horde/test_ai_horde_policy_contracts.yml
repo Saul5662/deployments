@@ -10,6 +10,7 @@
   vars:
     _defaults_path: "{{ playbook_dir }}/../../roles/ai_horde/defaults/main.yml"
     _docker_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/docker.yml"
+    _main_tasks_path: "{{ playbook_dir }}/../../roles/ai_horde/tasks/main.yml"
     _examples_requirements_path: "{{ playbook_dir }}/../../examples/requirements.yml"
     _full_stack_example_path: "{{ playbook_dir }}/../../examples/full_horde_stack.yml"
     _ai_horde_example_path: "{{ playbook_dir }}/../../examples/ai_horde.yml"
@@ -31,6 +32,17 @@
         fail_msg: >-
           Critical reproducibility defaults regressed (floating images).
 
+    - name: Assert embedded datastore flags exist with correct safe defaults
+      ansible.builtin.assert:
+        that:
+          - _defaults.ai_horde_embedded_postgres_enabled is defined
+          - _defaults.ai_horde_embedded_redis_enabled is defined
+          - _defaults.ai_horde_allow_embedded_datastores_in_production is defined
+          - not (_defaults.ai_horde_allow_embedded_datastores_in_production | bool)
+        fail_msg: >-
+          Embedded datastore defaults are missing or misconfigured.
+          ai_horde_allow_embedded_datastores_in_production must default to false.
+
     - name: Load docker task file content
       ansible.builtin.slurp:
         path: "{{ _docker_tasks_path }}"
@@ -46,6 +58,32 @@
         fail_msg: >-
           Docker readiness contract regression: role should wait for heartbeat,
           not host-local PostgreSQL/Redis ports.
+
+    - name: Load main task file content
+      ansible.builtin.slurp:
+        path: "{{ _main_tasks_path }}"
+      register: _main_tasks_raw
+
+    - name: Assert production+embedded guard is present in main.yml
+      ansible.builtin.assert:
+        that:
+          - "'ai_horde_embedded_postgres_enabled' in (_main_tasks_raw.content | b64decode)"
+          - "'ai_horde_embedded_redis_enabled' in (_main_tasks_raw.content | b64decode)"
+          - "'ai_horde_allow_embedded_datastores_in_production' in (_main_tasks_raw.content | b64decode)"
+          - "'production' in (_main_tasks_raw.content | b64decode)"
+        fail_msg: >-
+          Production+embedded datastore guard is missing from tasks/main.yml.
+          The role must fail fast when embedded datastores are used in production.
+
+    - name: Assert data_dir safety guard is present in main.yml
+      ansible.builtin.assert:
+        that:
+          - "'/var/lib/postgresql' in (_main_tasks_raw.content | b64decode)"
+          - "'/var/lib/pgsql' in (_main_tasks_raw.content | b64decode)"
+          - "'ai_horde_data_dir' in (_main_tasks_raw.content | b64decode)"
+        fail_msg: >-
+          Data directory safety guard is missing from tasks/main.yml.
+          The role must block well-known PostgreSQL system paths.
 
     - name: Load examples requirements manifest
       ansible.builtin.slurp:

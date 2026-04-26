@@ -37,11 +37,40 @@ ai_horde_data_dir: "/var/lib/ai-horde"
 # ai_horde_postgres_password:
 # ai_horde_secret_key:
 
+# ---------------------------------------------------------------------------
+# Embedded datastore mode
+#
+# When true, this role renders a postgres or redis container directly in the
+# compose file and manages their data directories on the local host.  This is
+# a convenience for single-host local-development and CI environments ONLY.
+#
+# For production deployments use externally managed PostgreSQL and Redis
+# (managed RDS, ElastiCache, or independently deployed Ansible roles).
+# Set these to false and configure ai_horde_postgres_host / ai_horde_redis_host
+# to point at your external instances.
+#
+# NOTE: Both default to true for backward compatibility.  New production
+# deployments should explicitly set both to false.
+ai_horde_embedded_postgres_enabled: true
+ai_horde_embedded_redis_enabled: true
+
+# Override gate for operators who deliberately choose to run embedded datastores
+# in a production-tagged deployment (e.g. a single-node homelab that has
+# ai_horde_deployment_environment: "production").  Leave false in all other cases.
+ai_horde_allow_embedded_datastores_in_production: false
+# ---------------------------------------------------------------------------
+
+# When embedded_postgres_enabled is true this should remain "postgres"
+# (the compose service name).  When false, set this to the hostname or IP
+# of your external PostgreSQL instance.
 ai_horde_postgres_host: "postgres"
 ai_horde_postgres_port: 5432
 ai_horde_postgres_user: "aihorde"
 ai_horde_postgres_db: "aihorde"
 
+# When embedded_redis_enabled is true this should remain "redis"
+# (the compose service name).  When false, set this to the hostname or IP
+# of your external Redis instance.
 ai_horde_redis_host: "redis"
 ai_horde_redis_port: 6379
 
@@ -56,7 +85,8 @@ ai_horde_log_driver: "journald"
 # false = render-only mode (CI/test).
 ai_horde_start_services: true
 
-# Replicas for AI-Horde backend (uses Docker Compose deploy: replicas)
+# Replicas for AI-Horde backend. Applied via the `scale` parameter of the
+# community.docker.docker_compose_v2 module — not via deploy.replicas.
 ai_horde_replicas: 1
 ai_horde_waitress_threads: 45
 ai_horde_waitress_connection_limit: 1024

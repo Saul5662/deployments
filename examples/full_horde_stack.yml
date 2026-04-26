@@ -48,6 +48,16 @@
         ai_horde_secret_key: "{{ vault_ai_horde_secret_key }}"
         ai_horde_admins: ["admin_user#1"]
         ai_horde_otel_service_name: "ai-horde"
+        # -----------------------------------------------------------------
+        # PRODUCTION: disable embedded datastores and point at external
+        # PostgreSQL and Redis.  These defaults (true) are for single-host
+        # dev/local-deploy convenience only.  ai_horde_replicas > 1 requires
+        # an external shared PostgreSQL endpoint.
+        # ai_horde_embedded_postgres_enabled: false
+        # ai_horde_embedded_redis_enabled: false
+        # ai_horde_postgres_host: "db.internal.example.com"
+        # ai_horde_redis_host: "redis.internal.example.com"
+        # -----------------------------------------------------------------
       tags: [horde]
 
 # ---------------------------------------------------------------------------
