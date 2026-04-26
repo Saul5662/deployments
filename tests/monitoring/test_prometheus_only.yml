@@ -70,6 +70,7 @@
           - "'multitenancy_enabled: true' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'app-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
           - "'infra-metrics:' in (horde_monitoring_mimir_runtime_overrides.content | b64decode)"
+          - "'alertmanager_url: http://127.0.0.1:9009/alertmanager' in (horde_monitoring_mimir_config.content | b64decode)"
           - not horde_monitoring_grafana_datasource_file.stat.exists
 
     - name: Assert S3 object storage config

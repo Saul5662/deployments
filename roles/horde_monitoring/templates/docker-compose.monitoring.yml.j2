@@ -4,6 +4,12 @@
 services:
 
 {% set horde_monitoring__embedded_s3 = (horde_monitoring_mimir_enable_s3 | bool) and (horde_monitoring_s3_deployment_mode == 'embedded') %}
+{% set horde_monitoring__ruler_alertmanager_url = (
+  horde_monitoring_ruler_alertmanager_url
+  | default(horde_monitoring_alertmanager_url, true)
+  | default('http://127.0.0.1:9009/alertmanager', true)
+) %}
+{% set horde_monitoring__ruler_uses_host_gateway = 'host.docker.internal' in horde_monitoring__ruler_alertmanager_url %}
 
 {% if horde_monitoring__embedded_s3 %}
   s3-store:
@@ -111,6 +117,10 @@ services:
       - {{ horde_monitoring_mimir_config_dir }}/mimir.yaml:/etc/mimir/mimir.yaml:ro
       - {{ horde_monitoring_mimir_config_dir }}/runtime-overrides.yaml:/etc/mimir/runtime-overrides.yaml:ro
       - {{ horde_monitoring_mimir_data_dir }}:/mimir
+{% if horde_monitoring__ruler_uses_host_gateway %}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+{% endif %}
     restart: unless-stopped
     deploy:
       resources:

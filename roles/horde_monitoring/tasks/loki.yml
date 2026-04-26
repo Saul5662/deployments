@@ -55,3 +55,55 @@
     backup: true
   become: true
   notify: Restart monitoring stack
+
+# Loki ruler rules — log-derived alerts on the AI-Horde stream.
+# Templated locally for reproducibility, then pushed via the Loki ruler API
+# (mirrors the Mimir ruler upload pattern in tasks/alerting.yml). The local
+# copy is also useful for `promtool`-style validation.
+- name: Template Loki ruler rules for AI-Horde log alerts
+  ansible.builtin.template:
+    src: loki-rules.yml.j2
+    dest: "{{ horde_monitoring_loki_config_dir }}/loki-rules.yml"
+    owner: root
+    group: "10001"
+    mode: "0640"
+  become: true
+  when: horde_monitoring_install_loki_app_log_alerts | default(true) | bool
+
+- name: Read rendered Loki rules for ruler API push
+  ansible.builtin.slurp:
+    path: "{{ horde_monitoring_loki_config_dir }}/loki-rules.yml"
+  register: horde_monitoring__loki_rules_payload
+  become: true
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_loki_app_log_alerts | default(true) | bool
+
+- name: Parse Loki rule groups for ruler API push
+  ansible.builtin.set_fact:
+    horde_monitoring__loki_rule_groups: >-
+      {{
+        ((horde_monitoring__loki_rules_payload.content | b64decode | from_yaml).groups | default([]))
+      }}
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_loki_app_log_alerts | default(true) | bool
+
+- name: Publish Loki rule groups to ruler API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_loki_port }}/loki/api/v1/rules/{{ horde_monitoring_application_tenant_id }}"
+    method: POST
+    headers:
+      X-Scope-OrgID: "{{ horde_monitoring_application_tenant_id }}"
+      Content-Type: application/yaml
+    body_format: raw
+    body: "{{ item | to_nice_yaml(indent=2) }}"
+    status_code: [202, 200]
+    return_content: true
+  loop: "{{ horde_monitoring__loki_rule_groups | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed-loki-group') }}"
+  become: true
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_loki_app_log_alerts | default(true) | bool

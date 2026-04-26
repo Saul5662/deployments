@@ -118,9 +118,15 @@ ruler_storage:
     dir: /mimir/data/rules
 {% endif %}
 
+{% set horde_monitoring__ruler_alertmanager_url = (
+  horde_monitoring_ruler_alertmanager_url
+  | default(horde_monitoring_alertmanager_url, true)
+  | default('http://127.0.0.1:9009/alertmanager', true)
+) %}
+
 ruler:
   rule_path: /mimir/data/ruler
-  alertmanager_url: http://127.0.0.1:9009/alertmanager
+  alertmanager_url: {{ horde_monitoring__ruler_alertmanager_url }}
   tenant_federation:
     enabled: true
   ring:

@@ -591,6 +591,92 @@ groups:
             The PrimaryTimedFunction {{ '{{' }} $labels.horde_job_name {{ '}}' }} has
             raised at least one exception per evaluation window for 15 minutes.
             Check the process journal for tracebacks.
+
+      - alert: HordeJobFailureBurstPerName
+        # Stronger than HordeBackgroundJobFailures: catches a single job_name
+        # failing repeatedly rather than any-failure. Surfaces a chronically
+        # broken job vs. an occasional one-off.
+        expr: >-
+          sum by (horde_job_name) (rate(horde_job_failures_total[5m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Horde background job {{ '{{' }} $labels.horde_job_name {{ '}}' }} failing > 0.05/s"
+          description: >-
+            Sustained failure rate on a single PrimaryTimedFunction. Inspect tracebacks
+            in the application journal.
+
+      - alert: HordeSubmitFaultRate
+        # Sustained worker-faulted submissions indicate worker-quality or
+        # model-failure regressions. Tunable via horde_monitoring_otlp_submit_fault_ratio.
+        expr: >-
+          (
+            sum(rate(horde_submit_outcomes_total{horde_outcome="faulted"}[10m]))
+          /
+            clamp_min(sum(rate(horde_submit_outcomes_total[10m])), 1)
+          ) > {{ horde_monitoring_otlp_submit_fault_ratio | default(0.05) }}
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Submit fault ratio > {{ horde_monitoring_otlp_submit_fault_ratio | default(0.05) }} for 15m"
+          description: >-
+            Workers are returning faulted submissions at a sustained rate.
+            See horde-performance "Generation Outcomes" or
+            horde-operations-overview "Submit Outcome Rate".
+
+      - alert: HordeSubmitCensoredSpike
+        # Sustained censored-output rate. Cross-check raid mode and recent
+        # abuse log lines. Tunable via horde_monitoring_otlp_submit_censored_per_sec.
+        expr: >-
+          sum(rate(horde_submit_outcomes_total{horde_outcome="censored"}[5m]))
+            > {{ horde_monitoring_otlp_submit_censored_per_sec | default(0.5) }}
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Censored generation rate elevated (> {{ horde_monitoring_otlp_submit_censored_per_sec | default(0.5) }}/s)"
+          description: >-
+            Sustained censored-output rate for 10 minutes. Often correlates with
+            raid mode or abuse pile-ons.
+
+      - alert: HordePopSkipDominant
+        # When >80% of pop skips share a single reason, the worker pool is
+        # structurally mismatched to demand (wrong models, missing flags,
+        # or content filters too tight).
+        expr: >-
+          (
+            topk(1, sum by (horde_skip_reason) (rate(horde_pop_skipped_total[10m])))
+          /
+            clamp_min(sum(rate(horde_pop_skipped_total[10m])), 1)
+          ) > 0.8
+            and
+          sum(rate(horde_pop_skipped_total[10m])) > 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "One pop-skip reason dominates (>80% for 30m): {{ '{{' }} $labels.horde_skip_reason {{ '}}' }}"
+          description: >-
+            See horde-performance "Pop Diagnostics" row for top skip reasons.
+
+      - alert: HordeDBPoolTimeouts
+        # Direct measure of user-visible failures (request couldn't acquire a
+        # DB connection). Better signal than pg_stat_activity_count saturation,
+        # which lags. Requires AI-Horde to emit horde.db.pool.timeout (added
+        # via the SQLAlchemy QueuePool subclass in horde/flask.py).
+        expr: sum(rate(horde_db_pool_timeout_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI-Horde DB connection-pool timeouts > 0.1/s"
+          description: >-
+            SQLAlchemy QueuePool returned TimeoutError for new connection requests
+            for 5 minutes. Check pool sizing (SQLALCHEMY_POOL_SIZE/MAX_OVERFLOW),
+            slow-running transactions (Oldest Open Transaction panel), and torch/redis
+            calls holding connections across non-DB work.
 {% endif %}
 {% endif %}
 
@@ -802,6 +888,46 @@ groups:
           description: >-
             The replication lag on {{ '{{' }} $labels.instance {{ '}}' }} has exceeded
             30 seconds for 5 minutes. Replica data may be stale.
+
+      - alert: HordePostgresPoolNearMax
+        # Warning at 80% (PostgresTooManyConnections) is too late if the
+        # AI-Horde process count grows. 90% is a hard ceiling that signals
+        # imminent connection refusals.
+        expr: >-
+          sum(pg_stat_activity_count{job="{{ horde_monitoring_postgres_job_name }}", datname=~"horde.*"})
+          >
+          sum(pg_settings_max_connections{job="{{ horde_monitoring_postgres_job_name }}"}) * 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL connections > 90% of max for 5m"
+          description: >-
+            AI-Horde databases are using more than 90% of max_connections.
+            New connections will be refused soon, causing request failures
+            and likely DB pool timeouts (see HordeDBPoolTimeouts).
+
+      - alert: HordePostgresLongRunningTx
+        # Uses built-in pg_stat_activity_max_tx_duration from postgres_exporter.
+        # Filter to active + idle-in-tx states in AI-Horde databases and alert
+        # when the oldest transaction exceeds 10 minutes.
+        expr: >-
+          max by (instance) (
+            pg_stat_activity_max_tx_duration{
+              job="{{ horde_monitoring_postgres_job_name }}",
+              datname=~"horde.*",
+              state=~"active|idle in transaction.*"
+            }
+          ) > 600
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL has a transaction open > 10 minutes"
+          description: >-
+            The oldest open transaction has been alive for more than 10 minutes.
+            Investigate with pg_stat_activity and check for stuck workers,
+            held connections, or unfinished torch/redis calls inside a tx.
 {% endif %}
 
 {% if horde_monitoring_install_host_disk_alerts | default(true) | bool %}

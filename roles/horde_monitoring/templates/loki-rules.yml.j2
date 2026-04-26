@@ -1,0 +1,91 @@
+{# Loki ruler rules — log-derived alerts on the AI-Horde application stream.
+
+Pushed via the Loki ruler API to tenant `{{ horde_monitoring_application_tenant_id }}`.
+Labels are kept minimal (severity only) to avoid blowing up Alertmanager
+cardinality on log-content fields.
+
+Patterns mirror the high-signal log lines documented in
+docs/MONITORING.md and trace back to specific source lines in AI-Horde:
+  - "entered maintenance mode"   → horde/apis/v2/base.py
+  - "suspicion increased"        → horde/classes/base/worker.py
+  - "Flask Cache Failed"         → horde/flask.py
+  - "appears unreachable"        → horde/redis_ctrl.py (any Redis cluster member)
+  - "Quorum changed to port"     → horde/threads.py (background-job leader change)
+  - "Failed to connect to Limiter Cache" → horde/limiter.py
+#}
+groups:
+  - name: ai-horde-log-alerts
+    interval: 1m
+    rules:
+      - alert: HordeMaintenanceModeEntryLog
+        expr: |
+          sum(rate({app="ai-horde"} |~ "entered maintenance mode" [5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI Horde logged 'entered maintenance mode'"
+          description: >-
+            An admin toggled maintenance mode in the past 5 minutes.
+            Cross-check with horde_mode_maintenance metric and operator intent.
+
+      - alert: HordeWorkerSuspicionSpike
+        expr: |
+          sum(rate({app="ai-horde"} |~ "suspicion increased" [10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sustained worker-suspicion log rate > 0.1/s"
+          description: >-
+            AI-Horde is auto-flagging workers as suspicious at a sustained rate.
+            Investigate via horde-{image,text}-workers-overview "Recent Worker
+            Suspicion Lines" panel.
+
+      - alert: HordeFlaskCacheFailing
+        expr: |
+          sum(rate({app="ai-horde"} |~ "Flask Cache Failed" [5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-Horde Flask cache initialization failing"
+          description: >-
+            Redis-backed Flask cache is falling back to SimpleCache. Performance
+            will degrade and per-process state will diverge.
+
+      - alert: HordeRedisUnreachableLog
+        expr: |
+          sum(rate({app="ai-horde"} |~ "appears unreachable" [10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Repeated 'redis server appears unreachable' log lines"
+          description: >-
+            One or more Redis cluster members appear unreachable. Cache
+            inconsistency risk increases until membership stabilizes.
+
+      - alert: HordeRedisQuorumChanged
+        expr: |
+          sum(rate({app="ai-horde"} |~ "Quorum changed to port" [5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI-Horde background-job quorum leader changed"
+          description: >-
+            A different node acquired the background-job quorum. If this is
+            unexpected, the prior leader likely crashed or lost network reach.
+
+      - alert: HordeLimiterCacheFailing
+        expr: |
+          sum(rate({app="ai-horde"} |~ "Failed to connect to Limiter Cache" [5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI-Horde rate-limiter cache unreachable"
+          description: >-
+            Flask-Limiter cannot reach its Redis backing store; rate limiting
+            may be disabled or running in degraded mode.

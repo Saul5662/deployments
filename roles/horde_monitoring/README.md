@@ -228,14 +228,28 @@ Prometheus health rules. PostgreSQL alerts are opt-in.
 | -------- | ------- | ----------- |
 | `horde_monitoring_install_alerting_rules` | `true` | Render monitoring stack alerting rules |
 | `horde_monitoring_install_app_alerts` | `true` | Enable AI Horde application health alerts from `horde-exporter` metrics |
+| `horde_monitoring_install_otlp_app_alerts` | `true` | Enable OTLP-derived AI-Horde alerts (latency, submit outcomes, pop diagnostics, DB pool timeouts). Requires app instrumentation to be live and routed to `mimir-telemetry`. |
 | `horde_monitoring_install_prometheus_alerts` | `true` | Enable Prometheus self-monitoring alerts |
-| `horde_monitoring_install_postgres_alerts` | `false` | Enable PostgreSQL alerts when `postgres_exporter` is deployed and scraped |
+| `horde_monitoring_install_postgres_alerts` | `false` | Enable PostgreSQL alerts when `postgres_exporter` is deployed and scraped. The role probes Prometheus targets at deploy time and fails fast if no job matches `horde_monitoring_postgres_job_name`. |
+| `horde_monitoring_require_postgres_tx_duration_metric` | `true` | When PostgreSQL alerts are enabled, fail fast unless Prometheus has `pg_stat_activity_max_tx_duration{job="<postgres job>"}`. |
+| `horde_monitoring_install_loki_app_log_alerts` | `true` | Render and push Loki ruler rules for log-derived AI-Horde alerts (maintenance entry, worker suspicion spike, Redis cluster health, Limiter cache failures). Requires Loki to be ingesting AI-Horde logs. |
 | `horde_monitoring_horde_exporter_job_name` | `horde-exporter` | Prometheus job name used by application health alerts |
 | `horde_monitoring_prometheus_job_name` | `prometheus` | Prometheus self-scrape job name used by self-monitoring alerts |
 | `horde_monitoring_postgres_job_name` | `postgres` | Prometheus job name used by PostgreSQL alerts |
+| `horde_monitoring_otlp_submit_fault_ratio` | `0.05` | Threshold (0..1) for `HordeSubmitFaultRate` (faulted/total) |
+| `horde_monitoring_otlp_submit_censored_per_sec` | `0.5` | Threshold for `HordeSubmitCensoredSpike` (absolute rate) |
+| `horde_monitoring_grafana_app_dashboards_org1_only` | `[horde-operations-overview.json]` | Basenames excluded from the public org. The default keeps the operations-overview dashboard internal. |
 
 Job-name variables must match `job_name` values in your Prometheus
 `scrape_configs`.
+
+`HordePostgresLongRunningTx` uses the built-in
+`pg_stat_activity_max_tx_duration` metric from postgres_exporter, filtered to
+AI-Horde databases and active/idle-in-transaction states. No
+`extend.query-path` custom query wiring is required.
+
+The audience filename convention for app dashboards is documented in
+[../../MONITORING.md#public-org-dashboard-convention](../../MONITORING.md#public-org-dashboard-convention).
 
 ### Loki (Enabled By Default)
 

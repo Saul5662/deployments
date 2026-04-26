@@ -20,6 +20,7 @@
     horde_monitoring_public_retention: "90d"
     horde_monitoring_grafana_anonymous_enabled: true
     horde_monitoring_grafana_provision_dashboards: false
+    horde_monitoring_alertmanager_url: "http://host.docker.internal:9093"
     horde_monitoring_start_services: false
     horde_monitoring_mimir_backup_enabled: false
 
@@ -87,8 +88,11 @@
           - "'Infrastructure' in (horde_monitoring_grafana_datasources.content | b64decode)"
           - "'orgId: 1' in (horde_monitoring_grafana_datasources.content | b64decode)"
           - "'mimir-public' in (horde_monitoring_grafana_datasources.content | b64decode)"
+          - "'url: http://host.docker.internal:9093' in (horde_monitoring_grafana_datasources.content | b64decode)"
+          - "'alertmanager_url: http://host.docker.internal:9093' in (horde_monitoring_mimir_config.content | b64decode)"
           - "'ANONYMOUS_ENABLED=true' in (compose_config.content | b64decode)"
           - "'ANONYMOUS_ORG_NAME' in (compose_config.content | b64decode)"
+          - "'host.docker.internal:host-gateway' in (compose_config.content | b64decode)"
 
     - name: Assert S3 object storage config
       ansible.builtin.assert:

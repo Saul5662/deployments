@@ -43,7 +43,7 @@ backend horde_monitoring_pyroscope_backend
     http-check expect ! rstatus ^5
 {% endif %}
 
-{% if horde_monitoring_configure_alertmanager_backend | bool %}
+{% if horde_monitoring_configure_alertmanager_backend | bool or horde_monitoring_configure_service_alerts_egress_frontend | default(false) | bool %}
 backend horde_monitoring_alertmanager_backend
     balance leastconn
     option httpchk
@@ -81,4 +81,23 @@ frontend tempo_ingestion_front
     acl authenticated http_auth(tempo_ingestion_auth)
     http-request auth realm tempo unless authenticated
     default_backend horde_monitoring_tempo_otlp_backend
+{% endif %}
+
+{% if horde_monitoring_configure_service_alerts_egress_frontend | default(false) | bool %}
+# Service-alerts egress frontend — exposes Alertmanager + Mimir to a remote
+# ai-horde-service-alerts middleman behind HAProxy basic auth. Implicitly
+# enables the Alertmanager backend; Mimir backend is always present.
+userlist service_alerts_egress_auth
+    user {{ horde_monitoring_service_alerts_egress_auth_user }} insecure-password {{ horde_monitoring_service_alerts_egress_auth_password }}
+
+frontend service_alerts_egress_front
+    bind {{ horde_monitoring_service_alerts_egress_listen }}:{{ horde_monitoring_service_alerts_egress_port }}
+    mode http
+    acl authenticated http_auth(service_alerts_egress_auth)
+    http-request auth realm service-alerts unless authenticated
+    acl path_mimir path_beg /prometheus/
+    acl path_alertmanager path_beg /api/v2/ /-/
+    use_backend horde_monitoring_mimir_backend if path_mimir
+    use_backend horde_monitoring_alertmanager_backend if path_alertmanager
+    http-request deny deny_status 404 unless path_mimir or path_alertmanager
 {% endif %}

@@ -83,6 +83,13 @@ compactor:
 
 ruler:
   enable_api: true
+{% if horde_monitoring_alertmanager_url | default('') | length > 0 %}
+  alertmanager_url: {{ horde_monitoring_alertmanager_url }}
+  enable_alertmanager_v2: true
+{% endif %}
+  rule_path: /loki/rule-cache
+  evaluation_interval: 1m
+  poll_interval: 1m
 {% if horde_monitoring_mimir_enable_s3 | bool %}
   storage:
     type: s3

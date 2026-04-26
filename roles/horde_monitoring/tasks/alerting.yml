@@ -18,6 +18,65 @@
     - horde_monitoring_install_host_disk_alerts | default(true) | bool
     - not (horde_monitoring_host_filesystem_metrics_available | default(false) | bool)
 
+- name: Probe Prometheus targets for postgres job (when postgres alerts enabled)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_prometheus_port | default(9090) }}/api/v1/targets?state=active"
+    return_content: true
+  register: horde_monitoring__prometheus_targets
+  failed_when: false
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_postgres_alerts | default(false) | bool
+
+- name: Fail when postgres alerts are enabled without a postgres scrape job
+  ansible.builtin.fail:
+    msg: >-
+      horde_monitoring_install_postgres_alerts=true but Prometheus has no
+      active scrape target for job="{{ horde_monitoring_postgres_job_name }}".
+      Either deploy postgres_exporter and add a scrape job with that name,
+      or set horde_monitoring_install_postgres_alerts=false.
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_postgres_alerts | default(false) | bool
+    - horde_monitoring__prometheus_targets.status | default(0) == 200
+    - >-
+      (horde_monitoring__prometheus_targets.json
+       | default({'data': {'activeTargets': []}})
+      ).data.activeTargets
+      | selectattr('labels.job', 'equalto', horde_monitoring_postgres_job_name)
+      | list
+      | length == 0
+
+- name: Probe Prometheus for postgres transaction-age metric
+  ansible.builtin.uri:
+    url: >-
+      http://127.0.0.1:{{ horde_monitoring_prometheus_port | default(9090) }}/api/v1/query?query=pg_stat_activity_max_tx_duration%7Bjob%3D%22{{ horde_monitoring_postgres_job_name }}%22%7D
+    return_content: true
+  register: horde_monitoring__postgres_tx_duration_metric
+  failed_when: false
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_postgres_alerts | default(false) | bool
+    - horde_monitoring_require_postgres_tx_duration_metric | default(horde_monitoring_require_postgres_custom_metrics | default(true)) | bool
+
+- name: Fail when postgres transaction-age metric is missing
+  ansible.builtin.fail:
+    msg: >-
+      PostgreSQL alerts include HordePostgresLongRunningTx, but Prometheus has no
+      series for pg_stat_activity_max_tx_duration{job="{{ horde_monitoring_postgres_job_name }}"}.
+      HordePostgresLongRunningTx relies on this built-in postgres_exporter metric.
+      Ensure your exporter version still exposes pg_stat_activity_* metrics or set
+      horde_monitoring_require_postgres_tx_duration_metric=false to bypass this check.
+  when:
+    - horde_monitoring_start_services | bool
+    - horde_monitoring_install_postgres_alerts | default(false) | bool
+    - horde_monitoring_require_postgres_tx_duration_metric | default(horde_monitoring_require_postgres_custom_metrics | default(true)) | bool
+    - horde_monitoring__postgres_tx_duration_metric.status | default(0) == 200
+    - >-
+      ((horde_monitoring__postgres_tx_duration_metric.json
+       | default({'data': {'result': []}})
+      ).data.result | length) == 0
+
 - name: Ensure Mimir rules templating directory exists
   ansible.builtin.file:
     path: "{{ horde_monitoring_alerting_rules_dir }}"
@@ -56,25 +115,91 @@
   notify: Restart monitoring stack
   when: not (horde_monitoring_install_recording_rules | default(true) | bool)
 
-- name: Publish alerting rules to Mimir Ruler API
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
-    method: POST
-    headers:
-      X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
-    src: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_alerting_rules_file }}"
-    status_code: [202, 200]
+- name: Read rendered alerting rules for Mimir Ruler API
+  ansible.builtin.slurp:
+    path: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_alerting_rules_file }}"
+  register: horde_monitoring_alerting_rules_payload
   become: true
   when: horde_monitoring_start_services | bool
 
-- name: Publish recording rules to Mimir Ruler API
+- name: Parse alerting rule groups for Mimir Ruler API
+  ansible.builtin.set_fact:
+    horde_monitoring_alerting_rule_groups: >-
+      {{
+        ((horde_monitoring_alerting_rules_payload.content | b64decode | from_yaml).groups | default([]))
+      }}
+  when: horde_monitoring_start_services | bool
+
+- name: Ensure alerting rules include at least one rule group
+  ansible.builtin.assert:
+    that:
+      - horde_monitoring_alerting_rule_groups | length > 0
+    fail_msg: >-
+      Rendered alerting rules must include at least one rule group under the top-level
+      'groups' key for Mimir Ruler API publishing.
+  when: horde_monitoring_start_services | bool
+
+- name: Publish alerting rule groups to Mimir Ruler API
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/prometheus/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
     method: POST
     headers:
       X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
-    src: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_recording_rules_file }}"
+      Content-Type: application/yaml
+    body_format: raw
+    body: "{{ item | to_nice_yaml(indent=2) }}"
     status_code: [202, 200]
+    return_content: true
+  loop: "{{ horde_monitoring_alerting_rule_groups }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed-alerting-group') }}"
+  become: true
+  when: horde_monitoring_start_services | bool
+
+- name: Read rendered recording rules for Mimir Ruler API
+  ansible.builtin.slurp:
+    path: "{{ horde_monitoring_alerting_rules_dir }}/{{ horde_monitoring_recording_rules_file }}"
+  register: horde_monitoring_recording_rules_payload
+  become: true
+  when:
+    - horde_monitoring_install_recording_rules | default(true) | bool
+    - horde_monitoring_start_services | bool
+
+- name: Parse recording rule groups for Mimir Ruler API
+  ansible.builtin.set_fact:
+    horde_monitoring_recording_rule_groups: >-
+      {{
+        ((horde_monitoring_recording_rules_payload.content | b64decode | from_yaml).groups | default([]))
+      }}
+  when:
+    - horde_monitoring_install_recording_rules | default(true) | bool
+    - horde_monitoring_start_services | bool
+
+- name: Ensure recording rules include at least one rule group
+  ansible.builtin.assert:
+    that:
+      - horde_monitoring_recording_rule_groups | length > 0
+    fail_msg: >-
+      Rendered recording rules must include at least one rule group under the top-level
+      'groups' key for Mimir Ruler API publishing.
+  when:
+    - horde_monitoring_install_recording_rules | default(true) | bool
+    - horde_monitoring_start_services | bool
+
+- name: Publish recording rule groups to Mimir Ruler API
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ horde_monitoring_mimir_port }}/prometheus/config/v1/rules/{{ horde_monitoring_infrastructure_tenant_id }}"
+    method: POST
+    headers:
+      X-Scope-OrgID: "{{ horde_monitoring_infrastructure_tenant_id }}"
+      Content-Type: application/yaml
+    body_format: raw
+    body: "{{ item | to_nice_yaml(indent=2) }}"
+    status_code: [202, 200]
+    return_content: true
+  loop: "{{ horde_monitoring_recording_rule_groups }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed-recording-group') }}"
   become: true
   when:
     - horde_monitoring_install_recording_rules | default(true) | bool

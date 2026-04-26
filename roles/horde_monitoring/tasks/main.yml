@@ -138,7 +138,15 @@
     - horde_monitoring_install_grafana | bool
 
 - name: Provision Grafana dashboards from horde-exporters
-  ansible.builtin.include_tasks: dashboards.yml
+  ansible.builtin.include_tasks:
+    file: dashboards.yml
+    apply:
+      tags:
+        - dashboards
+        - monitoring_dashboards
+  tags:
+    - dashboards
+    - monitoring_dashboards
   when:
     - horde_monitoring_install_grafana | bool
     - horde_monitoring_grafana_provision_dashboards | bool
