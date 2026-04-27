@@ -1,13 +1,5 @@
 # Quick Start
 
-Not sure where to start? Pick the scenario that matches your goal:
-
-- [Test an AI-Horde code change](#test-an-ai-horde-code-change) — ~4 min
-- [Update AI-Horde](#update-ai-horde) — ~2-5 min
-- [Run the full stack locally](#run-the-full-stack-locally) — ~6 min
-- [Run the Ansible test suite](#run-the-ansible-test-suite) — ~3 min per suite
-- [Deploy to a real host](#deploy-to-a-real-host) — varies
-
 ## Fast Paths (TL;DR)
 
 | If you are trying to...                                             | Do this                                                                                                   | Monitoring needed? |
@@ -23,10 +15,10 @@ Not sure where to start? Pick the scenario that matches your goal:
 
 All local workflows require:
 
-- **Docker** with **Compose V2** — `docker compose version` should print `v2.x+`
-- **git** — `git --version`
+- **Docker** with **Compose V2**: `docker compose version` should print `v2.x+`
+- **git**
 
-Local workflows also need **Ansible**, which ships in the repo's virtual environment:
+Local workflows also need **Ansible**, which we suggest installing in a Python virtual environment to avoid polluting your system Python:
 
 ```bash
 git clone https://github.com/Haidra-Org/deployments.git
@@ -44,7 +36,7 @@ If the `.venv` already exists, just activate it:
 source .venv/bin/activate
 ```
 
-> **Troubleshooting — Docker credential helper**
+> **Troubleshooting Windows Docker credential helper**
 >
 > If `docker build` fails with `fork/exec docker-credential-desktop.exe:
 exec format error`, your Docker config references a credential helper
@@ -58,7 +50,7 @@ exec format error`, your Docker config references a credential helper
 
 ## Local Deploy Layout
 
-- `local-deploy/static/` contains committed infrastructure files used by local deploy scripts.
+- `local-deploy/static/` contains git-tracked committed files used by local deploy scripts.
 - `local-deploy/runtime/` contains generated configs, cloned sources, and runtime data.
 
 To reset local state safely:
@@ -137,7 +129,7 @@ not set, `--latest` follows `main`.
 To test your own repository fork:
 
 ```bash
-AI_HORDE_REPO=https://github.com/<you>/AI-Horde.git \
+AI_HORDE_REPO=https://github.com/<your-username>/AI-Horde.git \
 AI_HORDE_REF=<branch-or-tag-or-sha> \
 ./tests/ai_horde/local_deploy.sh up --latest
 ```
@@ -182,7 +174,7 @@ AI_HORDE_REF=<branch-or-tag-or-sha> ./tests/ai_horde/local_deploy.sh up
 ### Local update from a fork/source override
 
 ```bash
-AI_HORDE_REPO=https://github.com/<you>/AI-Horde.git \
+AI_HORDE_REPO=https://github.com/<your-username>/AI-Horde.git \
 AI_HORDE_REF=<branch-or-tag-or-sha> \
 ./tests/ai_horde/local_deploy.sh up --latest
 ```
@@ -198,7 +190,7 @@ To deploy from your fork on a real host:
 
 ```bash
 ansible-playbook -i my_inventory.yml examples/ai_horde.yml \
-  -e ai_horde_repo=https://github.com/<you>/AI-Horde.git \
+  -e ai_horde_repo=https://github.com/<your-username>/AI-Horde.git \
   -e ai_horde_repo_version=<branch-or-tag-or-sha>
 ```
 

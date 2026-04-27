@@ -63,5 +63,5 @@ See [`README.md`](README.md) for the full role map and documentation index.
 ## Pull requests
 
 - Run the relevant test suite(s) before opening a PR.
-- Keep changes focused — one role or concern per PR when possible.
+- Keep changes focused (one role or concern per PR when possible).
 - Include a brief description of what changed and why.

@@ -7,6 +7,24 @@ infrastructure, and supporting applications.
 > AI-Horde code change in ~4 minutes or run the full stack locally in ~6.
 > **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+- [Haidra Deployments](#haidra-deployments)
+    - [Scope and Audience](#scope-and-audience)
+        - [Non-goals](#non-goals)
+    - [Usage](#usage)
+    - [Included Roles](#included-roles)
+        - [Application Roles](#application-roles)
+        - [Monitoring Roles](#monitoring-roles)
+    - [Documentation](#documentation)
+    - [Role Testing](#role-testing)
+        - [Render tests (fast, no services started)](#render-tests-fast-no-services-started)
+            - [Test output and logs](#test-output-and-logs)
+            - [Playbook markers](#playbook-markers)
+        - [Integration tests (requires Docker)](#integration-tests-requires-docker)
+        - [Test coverage by role](#test-coverage-by-role)
+    - [Full-stack local deploy](#full-stack-local-deploy)
+
+
+
 ## Scope and Audience
 
 This collection is intentionally opinionated and is not a general-purpose
@@ -85,11 +103,11 @@ and how the monitoring roles work together.
 | [Upgrading](docs/monitoring/UPGRADING.md)               | Component version upgrade procedures                            |
 | [Migration](docs/monitoring/MIGRATION.md)               | Host migration runbook (planned and forced)                     |
 
-## Testing
+## Role Testing
 
 The collection ships a two-tier test suite under `tests/`.
 
-### Tier 1 — Render tests (fast, no services started)
+### Render tests (fast, no services started)
 
 Validate Ansible template rendering, variable defaults, and negative
 (expected-failure) cases. Run entirely in check mode — no Docker daemon
@@ -164,7 +182,7 @@ Test playbooks support YAML comment markers near the top of the file
 Multi-play tests that intentionally overwrite the same files with different
 variable sets (e.g. `test_alloy_role.yml`) should declare `# idempotency: skip`.
 
-### Tier 2 — Integration tests (requires Docker)
+### Integration tests (requires Docker)
 
 Exercise cross-role coherence and optionally spin up live services.
 
@@ -180,7 +198,22 @@ Exercise cross-role coherence and optionally spin up live services.
 ./tests/integration/local_deploy.sh up --with-worker
 ```
 
-### Tier 3 — Full-stack local deploy (requires Docker)
+### Test coverage by role
+
+| Role                 | Render | Negative | Integration | Full-stack |
+| -------------------- | :----: | :------: | :---------: | :--------: |
+| horde_monitoring     |   ✅   |    ✅    |      —      |     ✅     |
+| ai_horde             |   ✅   |    ✅    |     ✅      |     ✅     |
+| aihorde_frontpage    |   ✅   |    —     |      —      |     ✅     |
+| horde_regen_worker   |   ✅   |    —     |     ✅      |     —      |
+| artbot / revproxy    |   ✅   |    —     |      —      |     —      |
+| horde_stats_exporter |   —    |    —     |      —      |     ✅     |
+| horde_alloy          |   —    |    —     |      —      |     —      |
+
+
+## Full-stack local deploy
+
+> See also the [Quick Start](QUICKSTART.md#full-stack-local-deploy) for a use-case driven introduction.
 
 Spins up the complete Horde business stack on one machine: Backend (AI-Horde +
 Postgres + Redis), Frontend (AiHordeFrontpage), Stats Exporter, and HAProxy as
@@ -240,14 +273,3 @@ rm -rf local-deploy/runtime
 | Prometheus       | 9090 | Metrics collection                   |
 | Artbot HAProxy   | 8080 | Artbot site (`--with-artbot`)        |
 
-### Test coverage by role
-
-| Role                 | Render | Negative | Integration | Full-stack |
-| -------------------- | :----: | :------: | :---------: | :--------: |
-| horde_monitoring     |   ✅   |    ✅    |      —      |     ✅     |
-| ai_horde             |   ✅   |    ✅    |     ✅      |     ✅     |
-| aihorde_frontpage    |   ✅   |    —     |      —      |     ✅     |
-| horde_regen_worker   |   ✅   |    —     |     ✅      |     —      |
-| artbot / revproxy    |   ✅   |    —     |      —      |     —      |
-| horde_stats_exporter |   —    |    —     |      —      |     ✅     |
-| horde_alloy          |   —    |    —     |      —      |     —      |

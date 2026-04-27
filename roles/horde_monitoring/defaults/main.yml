@@ -289,15 +289,6 @@ horde_monitoring_grafana_provision_dashboards: true
 # entry will be rendered, no infra/ subdir created).
 horde_monitoring_grafana_provision_infra_dashboards: true
 
-# Audience filename convention for app dashboards (Org 1 admin vs Org 2 public).
-# A bare-name dashboard (e.g. horde-image-workers-overview.json) goes to BOTH
-# orgs unless it has a `<name>-public.json` sibling (in which case Org 2 gets
-# the public variant) OR its basename is listed below as Org-1-only.
-# horde-operations-overview.json ships in this list because it queries
-# Alertmanager / mimir-telemetry / loki-app, which are Org-1 datasources only.
-horde_monitoring_grafana_app_dashboards_org1_only:
-  - horde-operations-overview.json
-
 # Pinned release tag for the horde-exporters project.
 # In release mode the role downloads the release manifest from this tag and
 # resolves the actual dashboard tarball filename and checksum automatically.

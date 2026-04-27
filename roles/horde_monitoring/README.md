@@ -238,7 +238,6 @@ Prometheus health rules. PostgreSQL alerts are opt-in.
 | `horde_monitoring_postgres_job_name` | `postgres` | Prometheus job name used by PostgreSQL alerts |
 | `horde_monitoring_otlp_submit_fault_ratio` | `0.05` | Threshold (0..1) for `HordeSubmitFaultRate` (faulted/total) |
 | `horde_monitoring_otlp_submit_censored_per_sec` | `0.5` | Threshold for `HordeSubmitCensoredSpike` (absolute rate) |
-| `horde_monitoring_grafana_app_dashboards_org1_only` | `[horde-operations-overview.json]` | Basenames excluded from the public org. The default keeps the operations-overview dashboard internal. |
 
 Job-name variables must match `job_name` values in your Prometheus
 `scrape_configs`.
