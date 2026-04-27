@@ -23,7 +23,7 @@ source "$REPO_ROOT/tests/lib.sh"
 export ANSIBLE_ROLES_PATH="$REPO_ROOT/roles"
 export ANSIBLE_HOST_KEY_CHECKING=False
 USE_LATEST_REF=false
-FRONTPAGE_REF="${FRONTPAGE_REF:-17e5052ad5d7da01037c3c8e8770e1471c4b481a}"
+FRONTPAGE_REF="${FRONTPAGE_REF:-1e2b1bac7e0a410e54e560895dd13b437e9940aa}"
 
 # Override these to change the host port/listen address Docker binds to.
 FRONTPAGE_PORT="${FRONTPAGE_PORT:-8006}"

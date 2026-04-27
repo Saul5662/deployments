@@ -48,7 +48,7 @@ else
 fi
 
 AI_HORDE_REF_DEFAULT="f40ae696acd0f23f6484db7f3d2408884185e960"
-FRONTPAGE_REF_DEFAULT="17e5052ad5d7da01037c3c8e8770e1471c4b481a"
+FRONTPAGE_REF_DEFAULT="1e2b1bac7e0a410e54e560895dd13b437e9940aa"
 ARTBOT_REF_DEFAULT="main"
 
 if [ -z "${AI_HORDE_REF+x}" ]; then
@@ -147,6 +147,14 @@ dc_model_reference() {
     "$@"
 }
 
+dc_service_alerts() {
+  docker compose \
+    -f "$LOCAL_ROOT/service-alerts/docker-compose.yml" \
+    -f "$STATIC_ROOT/service-alerts/docker-compose.network-overlay.yml" \
+    --project-name horde-service-alerts \
+    "$@"
+}
+
 
 # wire_aihorde_to_garage — write runtime/ai-horde/.env.garage with R2/AWS
 # vars pointing at the embedded Garage S3 endpoint, and recreate the
@@ -196,7 +204,7 @@ check_fullstack_prerequisites() {
   check_prerequisites git ss
 
   # Port conflict detection
-  local core_ports=(80 8006 8404 19800)
+  local core_ports=(80 8006 8088 8404 19800)
   for port in "${core_ports[@]}"; do
     if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
       err "Port $port is already in use."
@@ -675,6 +683,17 @@ cmd_up() {
   }
   echo ""
 
+  # Tier 2c: Service Alerts (ai-horde-service-alerts)
+  log "═══ Tier 2c: ai-horde-service-alerts ═══"
+  log "Starting ai-horde-service-alerts ..."
+  dc_service_alerts up -d
+  wait_for_url "http://127.0.0.1:8088/healthz" "ai-horde-service-alerts" 60 || {
+    err "ai-horde-service-alerts did not start. Dumping logs:"
+    dc_service_alerts logs --tail=50
+    return 1
+  }
+  echo ""
+
   # Tier 3: Monitoring (optional)
   if [ "$WITH_MONITORING" = true ]; then
     log "═══ Tier 3: Monitoring Stack ═══"
@@ -802,6 +821,7 @@ cmd_down() {
   dc_haproxy down --remove-orphans 2>/dev/null || true
   dc_monitoring down --remove-orphans 2>/dev/null || true
   dc_model_reference down --remove-orphans 2>/dev/null || true
+  dc_service_alerts down --remove-orphans 2>/dev/null || true
   dc_frontpage down --remove-orphans 2>/dev/null || true
   dc_backend down --remove-orphans 2>/dev/null || true
 
@@ -822,6 +842,9 @@ cmd_status() {
   echo ""
   info "─── horde-model-reference ───"
   dc_model_reference ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
+  echo ""
+  info "─── ai-horde-service-alerts ───"
+  dc_service_alerts ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
   echo ""
   info "─── HAProxy ───"
   dc_haproxy ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (not running)"
@@ -847,6 +870,9 @@ cmd_logs() {
     model-reference|models)
       dc_model_reference logs -f --tail=100
       ;;
+    service-alerts|alerts)
+      dc_service_alerts logs -f --tail=100
+      ;;
     haproxy)
       dc_haproxy logs -f --tail=100
       ;;
@@ -867,11 +893,13 @@ cmd_logs() {
       echo "---"
       dc_model_reference logs --tail=20 2>/dev/null || true
       echo "---"
+      dc_service_alerts logs --tail=20 2>/dev/null || true
+      echo "---"
       dc_haproxy logs --tail=20 2>/dev/null || true
       ;;
     *)
       warn "Unknown service: $service"
-      echo "Usage: $0 logs [backend|frontpage|model-reference|haproxy|monitoring|artbot]"
+      echo "Usage: $0 logs [backend|frontpage|model-reference|service-alerts|haproxy|monitoring|artbot]"
       exit 1
       ;;
   esac
