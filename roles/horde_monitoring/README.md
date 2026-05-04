@@ -186,6 +186,8 @@ Garage and managed external S3 a variable-only change.
 | `horde_monitoring_grafana_root_url`             | `""`                     | External URL (set when behind a reverse proxy)      |
 | `horde_monitoring_grafana_anonymous_enabled`    | `true`                   | Enable anonymous access to public org               |
 | `horde_monitoring_grafana_provision_dashboards` | `true`                   | Auto-provision dashboards from horde-exporters repo |
+| `horde_monitoring_grafana_dashboard_dedupe_enabled` | `true`                | Rewrite app dashboard PromQL to dedupe source-label drift (`environment`/`instance`/`job`) |
+| `horde_monitoring_grafana_dashboard_dedupe_labels` | `['environment','instance','job']` | Labels removed by dedupe rewrite in app/app-public dashboards |
 | `horde_monitoring_grafana_dashboards_repo_ref`  | `096c1fb8451b27e0a3dd0fc32092dda92e0e52e3` | Git ref for dashboard source                        |
 
 ### Offsite Backup

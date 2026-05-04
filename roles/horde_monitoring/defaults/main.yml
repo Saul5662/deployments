@@ -279,6 +279,16 @@ horde_monitoring_grafana_dataproxy_timeout: 30
 horde_monitoring_grafana_dashboards_source: "release"
 horde_monitoring_grafana_provision_dashboards: true
 
+# Collapse exporter source-label drift in app dashboards by rewriting PromQL
+# selectors to dedupe across these labels. This smooths migration windows where
+# historical blocks may have mismatched instance/environment labels.
+# Applied only to app/app-public dashboards; infra dashboards are untouched.
+horde_monitoring_grafana_dashboard_dedupe_enabled: true
+horde_monitoring_grafana_dashboard_dedupe_labels:
+  - "environment"
+  - "instance"
+  - "job"
+
 # Provision the infra dashboard subset (node_exporter, pm2, postgres) shipped
 # in horde-exporters/dashboards/.  These JSONs are Grafana v2beta1 exports
 # (apiVersion: dashboard.grafana.app/v2beta1) which retain server-managed

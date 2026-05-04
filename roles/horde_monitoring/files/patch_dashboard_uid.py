@@ -17,9 +17,12 @@ Supported rewrites:
   ``current.value`` = uid)
 - Query variables are bound to the target Prometheus datasource UID when
     their datasource is missing/placeholder.
+- Optional PromQL dedupe rewrite for app dashboards: wraps all ``horde_*``
+    metric selectors with ``max without(...)`` to collapse legacy label drift
+    (for example ``environment``/``instance`` mismatches across migrations).
 
 Usage:
-    patch_dashboard_uid.py <dashboard.json> <target-uid> [target-datasource-name]
+        patch_dashboard_uid.py <dashboard.json> <target-uid> [target-datasource-name] [collapse-labels-csv]
 
 The file is modified in-place.
 """
@@ -29,6 +32,7 @@ import sys
 from pathlib import Path
 
 _DS_VAR_RE = re.compile(r'^\$\{(?:DS_|ds_)[^}]*\}$')
+_HORDE_METRIC_RE = re.compile(r'\b(horde_[a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^{}]*\})?')
 
 
 def _is_ds_var(value):
@@ -39,9 +43,36 @@ def _is_ds_variable_name(value):
     return isinstance(value, str) and value.lower().startswith("ds_")
 
 
-def patch(obj, uid, datasource_name=None):
+def _collapse_metric_labels(expr, collapse_labels):
+    if not collapse_labels:
+        return expr
+
+    labels_csv = ",".join(collapse_labels)
+    marker = f"without({labels_csv})"
+
+    if marker in expr:
+        return expr
+
+    def _wrap_metric(match):
+        metric = match.group(1)
+        selector = match.group(2) or ""
+        return f"max without({labels_csv}) ({metric}{selector})"
+
+    return _HORDE_METRIC_RE.sub(_wrap_metric, expr)
+
+
+def patch(obj, uid, datasource_name=None, collapse_labels=None):
     """Recursively replace datasource references in legacy and v2 dashboards."""
+    if collapse_labels is None:
+        collapse_labels = []
+
     if isinstance(obj, dict):
+        # Query targets in classic dashboards use `expr`; patching here keeps
+        # datasource rewrites and label dedupe in a single recursive pass.
+        expr = obj.get("expr")
+        if isinstance(expr, str):
+            obj["expr"] = _collapse_metric_labels(expr, collapse_labels)
+
         # Datasource ref shape: {"type": "prometheus", ...}. The only objects
         # in Grafana dashboard JSON that carry `type: "prometheus"` are
         # datasource references (panel/target/variable level). Always pin the
@@ -123,10 +154,10 @@ def patch(obj, uid, datasource_name=None):
                     var_ds["uid"] = uid
 
         for v in obj.values():
-            patch(v, uid, datasource_name)
+            patch(v, uid, datasource_name, collapse_labels)
     elif isinstance(obj, list):
         for v in obj:
-            patch(v, uid, datasource_name)
+            patch(v, uid, datasource_name, collapse_labels)
 
 
 def _strip_v2beta1_server_fields(obj):
@@ -166,20 +197,23 @@ def _strip_v2beta1_server_fields(obj):
 
 
 def main():
-    if len(sys.argv) not in (3, 4):
+    if len(sys.argv) not in (3, 4, 5):
         print(
-            f"Usage: {sys.argv[0]} <dashboard.json> <target-uid> [target-datasource-name]",
+            f"Usage: {sys.argv[0]} <dashboard.json> <target-uid> [target-datasource-name] [collapse-labels-csv]",
             file=sys.stderr,
         )
         sys.exit(1)
 
     path = Path(sys.argv[1])
     uid = sys.argv[2]
-    datasource_name = sys.argv[3] if len(sys.argv) == 4 else None
+    datasource_name = sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] else None
+    collapse_labels = []
+    if len(sys.argv) == 5 and sys.argv[4]:
+        collapse_labels = [label.strip() for label in sys.argv[4].split(",") if label.strip()]
 
     data = json.loads(path.read_text())
     _strip_v2beta1_server_fields(data)
-    patch(data, uid, datasource_name)
+    patch(data, uid, datasource_name, collapse_labels)
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
