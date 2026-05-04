@@ -1,6 +1,7 @@
 ---
 # idempotency: skip
 # Test playbook: Full stack (Mimir + Grafana + HAProxy)
+# risk-category: deploy-safety, operational
 - name: Test horde_monitoring - Full stack
   hosts: testhost
   become: true
@@ -337,6 +338,23 @@
           - "'horde_monitoring_mimir_backend' in (_haproxy_monitoring_cfg_content.content | b64decode)"
         fail_msg: >-
           Monitoring HAProxy config must be a conf.d fragment containing backend definitions.
+
+    - name: Assert monitoring HAProxy conf.d fragment ends with LF
+      ansible.builtin.assert:
+        that:
+          - "(_haproxy_monitoring_cfg_content.content | b64decode).endswith('\n')"
+        fail_msg: "horde-monitoring.cfg must end with a terminal LF"
+
+    - name: Validate HAProxy parses full conf.d stack
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/haproxy
+          - -c
+          - -f
+          - /etc/haproxy/haproxy.cfg
+          - -f
+          - /etc/haproxy/conf.d/
+      changed_when: false
 
     # Run the role a second time with a changed value so Ansible
     # overwrites the config and creates a backup file.

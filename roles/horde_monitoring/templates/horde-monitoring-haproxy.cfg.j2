@@ -101,3 +101,5 @@ frontend service_alerts_egress_front
     use_backend horde_monitoring_alertmanager_backend if path_alertmanager
     http-request deny deny_status 404 unless path_mimir or path_alertmanager
 {% endif %}
+
+# end of managed fragment

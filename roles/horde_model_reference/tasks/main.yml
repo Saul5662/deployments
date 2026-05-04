@@ -52,5 +52,6 @@
         owner: root
         group: root
         mode: "0644"
+        validate: "/usr/sbin/haproxy -c -f /etc/haproxy/haproxy.cfg -f %s"
       notify:
         - Restart HAProxy

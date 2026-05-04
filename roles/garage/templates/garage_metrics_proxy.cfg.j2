@@ -19,3 +19,5 @@ backend garage_metrics_back
     mode http
     http-request set-header Authorization "Bearer {{ garage_admin_token }}"
     server garage_admin_local 127.0.0.1:{{ garage_admin_port }} check
+
+# end of managed fragment

@@ -1,5 +1,6 @@
 ---
 # Test playbook: horde_model_reference role (config rendering only, no Docker)
+# risk-category: deploy-safety, operational
 #
 # Play 1: Positive — PRIMARY mode with defaults; assert compose + env correctness
 # Play 2: Negative — PRIMARY workers > 1 without redis_enabled must fail-fast
@@ -302,3 +303,58 @@
           - "'HORDE_MODEL_REFERENCE_REDIS__POOL_SIZE=10' in (_redis_env.content | b64decode)"
           - "'HORDE_MODEL_REFERENCE_REDIS__USE_PUBSUB=true' in (_redis_env.content | b64decode)"
         fail_msg: ".env must render Redis connection vars when redis_enabled=true"
+
+
+- name: Test horde_model_reference HAProxy conf.d fragment rendering
+  hosts: testhost
+  become: true
+  vars:
+    horde_model_reference_start_services: false
+    horde_model_reference_haproxy_enabled: true
+    horde_model_reference_haproxy_frontend_port: 18080
+    horde_model_reference_base_dir: /opt/horde-model-reference-haproxy-test
+  roles:
+    - horde_model_reference
+
+  post_tasks:
+    - name: Stat horde-model-reference HAProxy fragment
+      ansible.builtin.stat:
+        path: /etc/haproxy/conf.d/horde-model-reference.cfg
+      register: _model_reference_haproxy_frag
+
+    - name: Assert horde-model-reference HAProxy fragment exists
+      ansible.builtin.assert:
+        that:
+          - _model_reference_haproxy_frag.stat.exists
+          - _model_reference_haproxy_frag.stat.mode == "0644"
+        fail_msg: "horde-model-reference HAProxy conf.d fragment missing or wrong permissions"
+
+    - name: Read horde-model-reference HAProxy fragment
+      ansible.builtin.slurp:
+        src: /etc/haproxy/conf.d/horde-model-reference.cfg
+      register: _model_reference_haproxy_content
+
+    - name: Assert horde-model-reference HAProxy fragment contains frontend and backend
+      ansible.builtin.assert:
+        that:
+          - "'frontend horde_model_reference_front' in (_model_reference_haproxy_content.content | b64decode)"
+          - "'backend horde_model_reference' in (_model_reference_haproxy_content.content | b64decode)"
+          - "'127.0.0.1:' in (_model_reference_haproxy_content.content | b64decode)"
+        fail_msg: "horde-model-reference HAProxy fragment missing expected frontend/backend definitions"
+
+    - name: Assert horde-model-reference HAProxy fragment ends with LF
+      ansible.builtin.assert:
+        that:
+          - "(_model_reference_haproxy_content.content | b64decode).endswith('\n')"
+        fail_msg: "horde-model-reference HAProxy fragment must end with a terminal LF"
+
+    - name: Validate HAProxy parses with conf.d fragments
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/haproxy
+          - -c
+          - -f
+          - /etc/haproxy/haproxy.cfg
+          - -f
+          - /etc/haproxy/conf.d/
+      changed_when: false

@@ -32,3 +32,5 @@ backend horde_model_reference
     http-check send meth GET uri /api/heartbeat hdr Host localhost
     http-check expect status 200
     server model-reference 127.0.0.1:{{ horde_model_reference_port }} check observe layer7
+
+# end of managed fragment
