@@ -1,17 +1,15 @@
+---
 # CI for haidra.deployments collection
 # Runs linting and integration tests on PRs and pushes to protected branches.
 #
 # Division of responsibility (see also: role-tests.yml):
-#   - test.yml (this file): Collection-level lint, Ansible syntax-check,
-#     and Docker-in-Docker integration tests (push only). Covers all roles
-#     collectively.
-#   - role-tests.yml: Per-suite render checks, policy-contract enforcement,
-#     and per-role integration smoke tests. Owns the per-role test matrix.
+#   - test.yml (this file): Collection-level lint and safe Ansible syntax-check
+#     gates that run on every PR.
+#   - role-tests.yml: policy-contract enforcement, explicit render-only tests,
+#     daemon-backed runtime smoke tests, and manual live integration.
 #
 # Security model:
 #   - Lint and syntax-check jobs run on all triggers (no privileges needed).
-#   - Integration tests use --privileged Docker containers (systemd-in-Docker)
-#     and are restricted to push events only. Fork PRs cannot trigger them.
 #   - The render-check job (PRs) performs Ansible --syntax-check only — no
 #     Docker containers, no --privileged execution.
 #   - Enable "Require approval for all outside collaborators" in repo
@@ -28,7 +26,7 @@ on:
       - "galaxy.yml"
       - ".github/workflows/test.yml"
   push:
-    branches: [main, prom-changes]
+    branches: [main]
     paths:
       - "roles/**"
       - "tests/**"
@@ -56,61 +54,13 @@ jobs:
 
       - name: yamllint
         run: |
-          yamllint -d '{extends: default, rules: {line-length: {max: 200}, truthy: {check-keys: false}}}' \
-            $(find roles/ -name '*.yml' -not -path 'roles/geerlingguy.*/*') \
+          yamllint $(find roles/ -name '*.yml' -not -path 'roles/geerlingguy.*/*') \
             tests/**/*.yml examples/
 
       - name: ansible-lint
         run: |
           shopt -s globstar
           ansible-lint roles/ tests/**/test_*.yml examples/
-
-  integration:
-    name: Integration tests
-    # Only run on push (not fork PRs) — uses --privileged containers.
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Ansible
-        run: pip install ansible
-
-      - name: Install collection dependencies
-        run: ansible-galaxy collection install -r requirements.yml --force
-
-      - name: Log in to Docker Hub
-        if: vars.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Cache test Docker image
-        uses: actions/cache@v4
-        with:
-          path: /tmp/test-image.tar
-          key: test-image-${{ hashFiles('tests/Dockerfile.systemd') }}
-
-      - name: Load cached image (if available)
-        run: |
-          if [ -f /tmp/test-image.tar ]; then
-            docker load -i /tmp/test-image.tar
-          fi
-
-      - name: Run integration tests
-        run: bash tests/run_tests.sh
-
-      - name: Save test image for cache
-        if: always()
-        run: |
-          docker image inspect horde-test-systemd >/dev/null 2>&1 && \
-            docker save horde-test-systemd -o /tmp/test-image.tar || true
 
   render-check:
     name: Render check (PR)

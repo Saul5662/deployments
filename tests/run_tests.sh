@@ -78,6 +78,11 @@ is_localhost_only() {
   [ "$total_plays" -gt 0 ] && [ "$total_plays" -eq "$local_plays" ]
 }
 
+playbook_requires_docker_daemon() {
+  local playbook_path="$1"
+  head -5 "$playbook_path" | grep -qi '# requires: docker-daemon'
+}
+
 # Extract a one-line failure reason from an Ansible log file.
 # Handles both single-line fatal messages and multi-line JSON blocks.
 extract_failure_reason() {
@@ -142,6 +147,13 @@ record_result() {
   RESULT_STATUSES+=("$status")
   RESULT_REASONS+=("$reason")
   RESULT_LOGFILES+=("$logfile")
+}
+
+record_docker_daemon_skip() {
+  local label="$1"
+  local reason="Docker daemon tests disabled (re-run with --docker-daemon-tests)"
+  log "SKIP ${label}: requires a Docker daemon"
+  record_result "$label" "SKIP" "$reason" ""
 }
 
 # Print a structured summary table and write summary.txt.
@@ -330,15 +342,15 @@ run_playbook() {
   local playbook_name
   playbook_name="$(basename "$playbook_path")"
 
-  # Skip playbooks that require a running Docker daemon when none is
-  # available inside the test container (e.g. test_runtime_services
-  # — the container only ships the Docker CLI, not the daemon).
-  if [ "$is_local" != "true" ] && head -5 "$playbook_path" | grep -qi '# requires: docker-daemon'; then
-    if ! docker exec "$container_name" docker info >/dev/null 2>&1; then
+  # Docker-daemon tests are opt-in so the default suite path stays render-only.
+  if playbook_requires_docker_daemon "$playbook_path"; then
+    if [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
+      record_docker_daemon_skip "$pb_label"
+      return 0
+    fi
+
+    if [ "$is_local" != "true" ] && ! docker exec "$container_name" docker info >/dev/null 2>&1; then
       local skip_reason="Docker daemon unavailable in container"
-      if [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
-        skip_reason="${skip_reason} (re-run with --docker-daemon-tests)"
-      fi
       log "SKIP ${playbook_name}: requires a Docker daemon inside ${container_name}"
       record_result "$pb_label" "SKIP" "$skip_reason" ""
       return 0
@@ -626,10 +638,17 @@ main() {
       local pids=()
       local pid_labels=()
       local idx=0
+      local launched_container_tests=0
 
       for pb in "${container_playbooks[@]}"; do
         local pb_label
         pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
+
+        if playbook_requires_docker_daemon "$pb" && [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
+          record_docker_daemon_skip "$pb_label"
+          continue
+        fi
+
         local container_name="test-container-${idx}"
 
         # Wait for a slot to open if at max capacity
@@ -656,6 +675,7 @@ main() {
         pids+=($!)
         pid_labels+=("$pb_label")
         running_jobs=$((running_jobs + 1))
+        launched_container_tests=$((launched_container_tests + 1))
         idx=$((idx + 1))
       done
 
@@ -668,7 +688,7 @@ main() {
       collect_parallel_results || any_failed=1
 
       # Validate expected vs collected result count
-      local expected_count=${#container_playbooks[@]}
+      local expected_count=${launched_container_tests}
       local collected_count
       collected_count=$(( ${#RESULT_LABELS[@]} - ${#local_playbooks[@]} ))
       if [ "$collected_count" -ne "$expected_count" ]; then
@@ -680,6 +700,12 @@ main() {
       for pb in "${container_playbooks[@]}"; do
         local pb_label
         pb_label="$(realpath --relative-to="$SCRIPT_DIR" "$pb")"
+
+        if playbook_requires_docker_daemon "$pb" && [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
+          record_docker_daemon_skip "$pb_label"
+          continue
+        fi
+
         local container_name="test-container-0"
         # Each test gets a fresh container to avoid state leaking between runs
         start_container "$container_name"
