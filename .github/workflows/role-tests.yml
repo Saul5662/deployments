@@ -1,21 +1,16 @@
-# Per-suite role tests for haidra.deployments collection.
+# Role test workflow for haidra.deployments collection.
 #
 # Division of responsibility (see also: test.yml):
-#   - role-tests.yml (this file): Per-suite render checks, policy-contract
-#     enforcement, and per-role integration smoke tests. Owns the per-role
-#     test matrix and fork-safe PR gates.
-#   - test.yml: Collection-level lint, Ansible syntax-check, and Docker-in-Docker
-#     integration tests (push only).
+#   - role-tests.yml (this file): policy-contract enforcement, explicit
+#     render-only checks, and daemon-backed runtime smoke tests.
+#   - test.yml: Collection-level lint plus safe PR syntax-check gates.
 #
 # Security model:
-#   - policy-contract: always-on semantic policy checks (no Docker).
-#   - render-check (fork PRs): lightweight ansible-playbook --syntax-check only.
-#     No Docker, no --privileged.
-#   - render-pr-trusted (same-repo PRs): full run_tests.sh behavioral render
-#     checks.
-#   - render (push/dispatch): full run_tests.sh with --privileged systemd
-#     containers. Restricted to trusted events only.
-#   - integration-smoke: runs after whichever gate job succeeded.
+#   - policy-contract: always-on semantic checks (no Docker).
+#   - render-pr-trusted (same-repo PRs): render-only playbooks via run_tests.sh.
+#   - render (push/dispatch): same render-only playbooks on trusted events.
+#   - runtime-daemon: opt-in docker-daemon tests, restricted to trusted events.
+#   - integration-smoke: cross-role render smoke after render gates pass.
 #   - integration-live: manual workflow_dispatch only.
 #   - Enable "Require approval for all outside collaborators" in repo
 #     Settings → Actions for defense-in-depth.
@@ -29,54 +24,28 @@ on:
       - "tests/**"
       - ".github/workflows/role-tests.yml"
   push:
-    branches: [main, prom-changes]
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:
-  group: tests-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # Always-on fast semantic checks for reproducibility and example contracts.
   policy-contract:
-    name: policy-contract / ai_horde
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Ansible
-        run: pip install ansible
-
-      - name: Run AI-Horde policy/contract checks
-        env:
-          ANSIBLE_CONFIG: ${{ github.workspace }}/tests/ansible.cfg
-        run: ansible-playbook tests/ai_horde/test_ai_horde_policy_contracts.yml -i localhost, -c local
-
-  # Lightweight syntax-check for untrusted PRs — no Docker, no --privileged.
-  render-check:
-    name: "render-check / ${{ matrix.suite }}"
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name != github.repository
+    name: "policy-contract / ${{ matrix.suite }}"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
-        suite:
-          - monitoring
-          - ai_horde
-          - regen_worker
-          - artbot
-          - frontpage
-          - full_stack
+        include:
+          - suite: ai_horde
+            playbook: tests/ai_horde/test_ai_horde_policy_contracts.yml
+          - suite: model_reference
+            playbook: >-
+              tests/model_reference/test_model_reference_policy_contracts.yml
 
     steps:
       - uses: actions/checkout@v4
@@ -89,20 +58,12 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
-      - name: Install galaxy dependencies
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Syntax check test playbooks
+      - name: Run policy/contract checks
         env:
-          ANSIBLE_ROLES_PATH: ${{ github.workspace }}/roles
-          ANSIBLE_HOST_KEY_CHECKING: "False"
-        run: |
-          for pb in tests/${{ matrix.suite }}/test_*.yml; do
-            echo "--- Syntax-checking $pb ---"
-            ansible-playbook --syntax-check "$pb" -i tests/inventory_docker.ini
-          done
+          ANSIBLE_CONFIG: ${{ github.workspace }}/tests/ansible.cfg
+        run: ansible-playbook "${{ matrix.playbook }}" -i localhost, -c local
 
-  # Full behavioral render checks for trusted same-repo PRs.
+  # Render-only checks for trusted same-repo PRs.
   render-pr-trusted:
     name: "render-pr-trusted / ${{ matrix.suite }}"
     if: >-
@@ -115,17 +76,37 @@ jobs:
       matrix:
         include:
           - suite: monitoring
-            timeout_minutes: 15
+            target: monitoring
+            jobs: 3
+            timeout_minutes: 20
           - suite: ai_horde
-            timeout_minutes: 30
+            target: ai_horde/test_ai_horde_render
+            jobs: 1
+            timeout_minutes: 20
           - suite: regen_worker
-            timeout_minutes: 15
+            target: regen_worker/test_regen_worker_render
+            jobs: 1
+            timeout_minutes: 10
           - suite: artbot
-            timeout_minutes: 15
+            target: artbot/test_artbot_render
+            jobs: 1
+            timeout_minutes: 10
           - suite: frontpage
+            target: frontpage/test_frontpage_render
+            jobs: 1
             timeout_minutes: 10
           - suite: full_stack
+            target: full_stack/test_fullstack_render
+            jobs: 1
             timeout_minutes: 10
+          - suite: model_reference
+            target: model_reference/test_model_reference_render
+            jobs: 1
+            timeout_minutes: 15
+          - suite: service_alerts
+            target: service_alerts/test_service_alerts_render
+            jobs: 1
+            timeout_minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -149,11 +130,12 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Run render tests
-        run: ./tests/run_tests.sh "${{ matrix.suite }}"
+        run: >-
+          ./tests/run_tests.sh --jobs "${{ matrix.jobs }}"
+          "${{ matrix.target }}"
         timeout-minutes: ${{ matrix.timeout_minutes }}
 
-  # Full render via run_tests.sh (--privileged containers).
-  # Restricted to push/dispatch — fork PRs cannot trigger this.
+  # Render-only checks on trusted push/dispatch events.
   render:
     name: "render / ${{ matrix.suite }}"
     if: github.event_name != 'pull_request'
@@ -164,17 +146,33 @@ jobs:
       matrix:
         include:
           - suite: monitoring
-            timeout_minutes: 15
+            target: monitoring
+            jobs: 3
+            timeout_minutes: 20
           - suite: ai_horde
-            timeout_minutes: 30
+            target: ai_horde/test_ai_horde_render
+            jobs: 1
+            timeout_minutes: 20
           - suite: regen_worker
-            timeout_minutes: 15
+            target: regen_worker/test_regen_worker_render
+            jobs: 1
+            timeout_minutes: 10
           - suite: artbot
-            timeout_minutes: 15
+            target: artbot/test_artbot_render
+            jobs: 1
+            timeout_minutes: 10
           - suite: frontpage
+            target: frontpage/test_frontpage_render
+            jobs: 1
             timeout_minutes: 10
           - suite: full_stack
+            target: full_stack/test_fullstack_render
+            jobs: 1
             timeout_minutes: 10
+          - suite: model_reference
+            target: model_reference/test_model_reference_render
+            jobs: 1
+            timeout_minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -198,7 +196,59 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Run render tests
-        run: ./tests/run_tests.sh "${{ matrix.suite }}"
+        run: >-
+          ./tests/run_tests.sh --jobs "${{ matrix.jobs }}"
+          "${{ matrix.target }}"
+        timeout-minutes: ${{ matrix.timeout_minutes }}
+
+  runtime-daemon:
+    name: "runtime-daemon / ${{ matrix.suite }}"
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: ai_horde
+            target: ai_horde/test_ai_horde_integration
+            timeout_minutes: 25
+          - suite: monitoring-systemd
+            target: monitoring/test_runtime_services
+            timeout_minutes: 25
+          - suite: monitoring-external-s3
+            target: monitoring/test_s3_external_runtime_garage
+            timeout_minutes: 20
+          - suite: model_reference
+            target: model_reference/test_model_reference_integration
+            timeout_minutes: 20
+          - suite: service_alerts
+            target: service_alerts/test_service_alerts_integration
+            timeout_minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install galaxy dependencies
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Run daemon-backed runtime tests
+        run: ./tests/run_tests.sh --docker-daemon-tests "${{ matrix.target }}"
         timeout-minutes: ${{ matrix.timeout_minutes }}
 
   integration-smoke:
@@ -231,8 +281,8 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Run integration smoke test
-        run: ./tests/run_tests.sh integration
-        timeout-minutes: 20
+        run: ./tests/run_tests.sh integration/test_integration_smoke
+        timeout-minutes: 15
 
   integration-live:
     name: integration / live

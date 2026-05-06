@@ -49,6 +49,11 @@
               timeout connect 5s
               timeout client 50s
               timeout server 50s
+          frontend ci_stub_front
+              bind 127.0.0.1:18081
+              default_backend ci_stub_backend
+          backend ci_stub_backend
+              server ci_stub_server 127.0.0.1:18082
         mode: "0644"
 
   roles:
@@ -578,6 +583,11 @@
               timeout connect 5s
               timeout client 50s
               timeout server 50s
+          frontend ci_stub_front
+              bind 127.0.0.1:18081
+              default_backend ci_stub_backend
+          backend ci_stub_backend
+              server ci_stub_server 127.0.0.1:18082
         mode: "0644"
 
   roles:
