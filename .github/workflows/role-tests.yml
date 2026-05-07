@@ -173,6 +173,10 @@ jobs:
             target: model_reference/test_model_reference_render
             jobs: 1
             timeout_minutes: 15
+          - suite: service_alerts
+            target: service_alerts/test_service_alerts_render
+            jobs: 1
+            timeout_minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -222,9 +226,6 @@ jobs:
           - suite: model_reference
             target: model_reference/test_model_reference_integration
             timeout_minutes: 20
-          - suite: service_alerts
-            target: service_alerts/test_service_alerts_integration
-            timeout_minutes: 15
 
     steps:
       - uses: actions/checkout@v4
