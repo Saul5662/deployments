@@ -639,6 +639,7 @@ main() {
       local pid_labels=()
       local idx=0
       local launched_container_tests=0
+      local daemon_skipped_in_parallel=0
 
       for pb in "${container_playbooks[@]}"; do
         local pb_label
@@ -646,6 +647,7 @@ main() {
 
         if playbook_requires_docker_daemon "$pb" && [ "$ENABLE_DOCKER_DAEMON_TESTS" -ne 1 ]; then
           record_docker_daemon_skip "$pb_label"
+          daemon_skipped_in_parallel=$((daemon_skipped_in_parallel + 1))
           continue
         fi
 
@@ -688,7 +690,7 @@ main() {
       collect_parallel_results || any_failed=1
 
       # Validate expected vs collected result count
-      local expected_count=${launched_container_tests}
+      local expected_count=$(( launched_container_tests + daemon_skipped_in_parallel ))
       local collected_count
       collected_count=$(( ${#RESULT_LABELS[@]} - ${#local_playbooks[@]} ))
       if [ "$collected_count" -ne "$expected_count" ]; then
