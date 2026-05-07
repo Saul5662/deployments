@@ -55,7 +55,7 @@
   post_tasks:
     - name: Verify S3 storage health endpoint
       ansible.builtin.uri:
-        url: "http://127.0.0.1:9000/health"
+        url: "http://127.0.0.1:{{ horde_monitoring_s3_admin_port | default(3903) }}/health"
         method: GET
         status_code: 200
       register: horde_monitoring_s3_health
