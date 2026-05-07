@@ -1,3 +1,5 @@
-# Internal micro-roles intentionally use leading underscores.
+# This file contains ignores rule violations for ansible-lint
+.yamllint.yml yaml[empty-lines]
+galaxy.yml galaxy[no-changelog]
+roles/_haproxy_confd_bootstrap role-name
 roles/_uv_bootstrap role-name
-roles/_haproxy_confd_bootstrap_ role-name

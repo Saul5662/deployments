@@ -1,6 +1,23 @@
+# Edited to comply with the following warnings:
+# WARNING  Found incompatible custom yamllint configuration (.yamllint.yml), please either remove the file or edit it to comply with:
+#   - comments.min-spaces-from-content must be 1
+#   - comments-indentation must be false
+#   - braces.max-spaces-inside must be 1
+#   - octal-values.forbid-implicit-octal must be true
+#   - octal-values.forbid-explicit-octal must be true.
 extends: default
 rules:
   line-length:
     max: 200
   truthy:
     check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  document-start: disable
+  braces:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+

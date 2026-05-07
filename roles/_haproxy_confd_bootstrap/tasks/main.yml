@@ -5,10 +5,6 @@
     name: haproxy
     state: present
     update_cache: true
-  register: _haproxy_confd_bootstrap_install_result
-  retries: 3
-  delay: 5
-  until: _haproxy_confd_bootstrap_install_result is succeeded
   become: true
   when: haproxy_confd_install | default(true) | bool
 
