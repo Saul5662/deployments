@@ -683,17 +683,6 @@ cmd_up() {
   }
   echo ""
 
-  # Tier 2c: Service Alerts (ai-horde-service-alerts)
-  log "═══ Tier 2c: ai-horde-service-alerts ═══"
-  log "Starting ai-horde-service-alerts ..."
-  dc_service_alerts up -d
-  wait_for_url "http://127.0.0.1:8088/healthz" "ai-horde-service-alerts" 60 || {
-    err "ai-horde-service-alerts did not start. Dumping logs:"
-    dc_service_alerts logs --tail=50
-    return 1
-  }
-  echo ""
-
   # Tier 3: Monitoring (optional)
   if [ "$WITH_MONITORING" = true ]; then
     log "═══ Tier 3: Monitoring Stack ═══"
