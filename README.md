@@ -255,6 +255,10 @@ the unified edge router. Monitoring and the GPU worker are optional tiers.
 # With Artbot on a separate port (8080):
 ./tests/full_stack/local_deploy.sh up --with-artbot
 
+# Build Artbot from a local working tree instead of cloning (implies --with-artbot):
+./tests/full_stack/local_deploy.sh up --local-artbot ../artbot
+# or point at a different remote: ARTBOT_REPO=https://github.com/you/artbot.git ARTBOT_REF=my-branch
+
 # Everything:
 ./tests/full_stack/local_deploy.sh up --all
 

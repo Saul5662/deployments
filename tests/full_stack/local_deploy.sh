@@ -15,6 +15,7 @@
 #   ./tests/full_stack/local_deploy.sh up --all               # everything
 #   ./tests/full_stack/local_deploy.sh up --local-ai-horde ../AI-Horde  # sync a local checkout; must support telemetry-profiling
 #   ./tests/full_stack/local_deploy.sh up --with-monitoring --local-horde-exporters ../horde-exporters  # provision dashboards from a local checkout
+#   ./tests/full_stack/local_deploy.sh up --local-artbot ../artbot   # build artbot from a local working tree
 #   ./tests/full_stack/local_deploy.sh down
 #   ./tests/full_stack/local_deploy.sh reup service-alerts --latest  # recreate one tier, repulling its image
 #   ./tests/full_stack/local_deploy.sh status
@@ -61,6 +62,13 @@ else
   AI_HORDE_REPO="$AI_HORDE_REPO"
 fi
 
+ARTBOT_REPO_DEFAULT="https://github.com/Haidra-Org/artbot.git"
+if [ -z "${ARTBOT_REPO+x}" ]; then
+  ARTBOT_REPO="$ARTBOT_REPO_DEFAULT"
+else
+  ARTBOT_REPO="$ARTBOT_REPO"
+fi
+
 AI_HORDE_REF_DEFAULT="f40ae696acd0f23f6484db7f3d2408884185e960"
 FRONTPAGE_REF_DEFAULT="1e2b1bac7e0a410e54e560895dd13b437e9940aa"
 ARTBOT_REF_DEFAULT="main"
@@ -96,6 +104,7 @@ fi
 # Override via env or the --local-ai-horde / --local-frontpage flags.
 AI_HORDE_LOCAL_SRC="${AI_HORDE_LOCAL_SRC:-}"
 FRONTPAGE_LOCAL_SRC="${FRONTPAGE_LOCAL_SRC:-}"
+ARTBOT_LOCAL_SRC="${ARTBOT_LOCAL_SRC:-}"
 # When set (via --local-horde-exporters PATH), Grafana dashboards are
 # provisioned from this local horde-exporters checkout instead of the pinned
 # public git clone, so in-progress dashboard JSONs appear in the local rig.
@@ -426,10 +435,14 @@ clone_sources() {
 
   # Artbot source (only when --with-artbot)
   if [ "$WITH_ARTBOT" = true ]; then
-    clone_or_update_source \
-      "https://github.com/Haidra-Org/artbot.git" \
-      "$LOCAL_ROOT/artbot/src" \
-      "$artbot_ref"
+    if [ -n "$ARTBOT_LOCAL_SRC" ]; then
+      sync_local_source "$ARTBOT_LOCAL_SRC" "$LOCAL_ROOT/artbot/src" "Artbot"
+    else
+      clone_or_update_source \
+        "$ARTBOT_REPO" \
+        "$LOCAL_ROOT/artbot/src" \
+        "$artbot_ref"
+    fi
   fi
 }
 
@@ -1329,6 +1342,16 @@ main() {
         if [ "$#" -eq 0 ]; then err "Missing PATH for --local-horde-exporters."; exit 1; fi
         HORDE_EXPORTERS_LOCAL_SRC="$1"
         ;;
+      --local-artbot=*)
+        ARTBOT_LOCAL_SRC="${1#--local-artbot=}"
+        WITH_ARTBOT=true
+        ;;
+      --local-artbot)
+        shift
+        if [ "$#" -eq 0 ]; then err "Missing PATH for --local-artbot."; exit 1; fi
+        ARTBOT_LOCAL_SRC="$1"
+        WITH_ARTBOT=true
+        ;;
       -e|--extra-var|--extra-vars)
         shift
         if [ "$#" -eq 0 ]; then
@@ -1367,11 +1390,12 @@ main() {
       cmd_logs "${positional[0]:-}"
       ;;
     *)
-      echo "Usage: $0 {up|down|reup|status|logs|seed} [--with-monitoring] [--with-worker] [--with-artbot] [--latest] [--all] [--loadtest] [-n N | --instances=N] [--local-ai-horde PATH] [--local-frontpage PATH] [--local-horde-exporters PATH] [-e key=value]"
+      echo "Usage: $0 {up|down|reup|status|logs|seed} [--with-monitoring] [--with-worker] [--with-artbot] [--latest] [--all] [--loadtest] [-n N | --instances=N] [--local-ai-horde PATH] [--local-frontpage PATH] [--local-artbot PATH] [--local-horde-exporters PATH] [-e key=value]"
       echo "       $0 up --loadtest [-n 4]   # production-shaped multi-instance rig (forces monitoring; adds quorum instance, prod edge, tuned postgres, postgres_exporter)"
       echo "       $0 seed [--images N] [--text N]   # bulk-load gen-stats rows to activate the stats-compile load (run after 'up --loadtest')"
       echo "       $0 reup <backend|frontpage|model-reference|service-alerts|haproxy|monitoring|artbot> [more...] [--latest]"
       echo "       --local-ai-horde PATH must point at a checkout whose Dockerfile supports AI_HORDE_DEPENDENCY_GROUPS and telemetry-profiling."
+      echo "       --local-artbot PATH builds the artbot tier from a local working tree (implies --with-artbot)."
       exit 1
       ;;
   esac
