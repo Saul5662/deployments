@@ -280,6 +280,55 @@ EOF
 
   log "Recreating AI-Horde containers to load Garage env ..."
   dc_backend up -d --no-deps --force-recreate --scale aihorde="$INSTANCES" aihorde >/dev/null
+
+  configure_garage_cors
+}
+
+
+# configure_garage_cors — allow browsers to read generated images out of the
+# embedded Garage bucket.
+#
+# The horde hands clients a presigned S3 URL, so a browser-based front end (Artbot)
+# fetches the image cross-origin. Garage serves it happily but sends no
+# Access-Control-Allow-Origin, so the browser blocks reading the body and the image
+# never appears — with no server-side error to notice.
+#
+# LOCAL RIG ONLY. This whole file is the local test harness; a production deploy uses
+# Cloudflare R2, whose CORS policy is managed on the Cloudflare side and is untouched
+# by anything here. Origins are wide open because the rig is loopback-only.
+#
+# Runs through the aihorde image (which already ships boto3 and the right network and
+# credentials) rather than pulling an S3 CLI just for this. Non-fatal: a rig without
+# browser access is still a working rig.
+configure_garage_cors() {
+  log "Allowing browser reads from the Garage bucket (CORS) ..."
+  if ! dc_backend exec -T aihorde python - <<'PYEOF'
+import os
+
+import boto3
+
+endpoint = os.environ["R2_TRANSIENT_ACCOUNT"]
+bucket = os.environ["R2_TRANSIENT_BUCKET"]
+s3 = boto3.client("s3", endpoint_url=endpoint, region_name=os.environ.get("AWS_DEFAULT_REGION", "garage"))
+s3.put_bucket_cors(
+    Bucket=bucket,
+    CORSConfiguration={
+        "CORSRules": [
+            {
+                "AllowedHeaders": ["*"],
+                "AllowedMethods": ["GET", "HEAD"],
+                "AllowedOrigins": ["*"],
+                "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
+                "MaxAgeSeconds": 3000,
+            },
+        ],
+    },
+)
+print(f"CORS applied to {bucket}")
+PYEOF
+  then
+    warn "Could not set Garage bucket CORS; browser clients will not be able to load generated images."
+  fi
 }
 
 
